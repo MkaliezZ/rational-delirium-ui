@@ -1,0 +1,109 @@
+{
+  "tests": [
+    "keeps nullable reverse identity and raw Context labels (supported_by)",
+    "keeps nullable reverse identity and raw Context labels (contradicted_by)",
+    "keeps E and F as distinct unresolved production relations and DOM rows (supported_by)",
+    "keeps E and F as distinct unresolved production relations and DOM rows (contradicted_by)",
+    "deduplicates E and E with both assertions through production Context (supported_by)",
+    "deduplicates E and E with both assertions through production Context (contradicted_by)",
+    "preserves symmetric A related B and B related A in the production index",
+    "rejects stale source cursor before index refresh through production navigation",
+    "validates unchanged source before positioning its current declaration",
+    "uses the current editor buffer when newer than the source file read",
+    "opens source without a guessed cursor when current declaration is removed",
+    "opens source without a guessed cursor when current declaration is ambiguous",
+    "opens source without a guessed cursor when current declaration is read-failure",
+    "preserves decorated link through ContextView and production navigation ('B')",
+    "preserves decorated link through ContextView and production navigation ('B|Alias')",
+    "preserves decorated link through ContextView and production navigation ('B#Heading')",
+    "preserves decorated link through ContextView and production navigation ('B^block')",
+    "preserves decorated link through ContextView and production navigation ('B#Heading|Alias')",
+    "preserves production file/tab/split/frontmatter navigation ('.rdc-rel')",
+    "preserves production file/tab/split/frontmatter navigation ('.rdc-act-tab')",
+    "preserves production file/tab/split/frontmatter navigation ('.rdc-act-split')",
+    "preserves production file/tab/split/frontmatter navigation ('.rdc-src')",
+    "refuses deterministic target navigation without creating files (BROKEN)",
+    "refuses deterministic target navigation without creating files (AMBIGUOUS)",
+    "refuses deterministic target navigation without creating files (DELETED)"
+  ],
+  "verification": {
+    "run1": {
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=.tmp/run1.json"
+      ],
+      "exit_code": 0,
+      "files_passed": 16,
+      "files_failed": 0,
+      "suites_failed": 0,
+      "cases_passed": 208,
+      "cases_failed": 0,
+      "cases_pending": 0,
+      "success": true
+    },
+    "build": {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit_code": 0
+    },
+    "artifacts": {
+      "command": [
+        "npm",
+        "run",
+        "check-artifacts"
+      ],
+      "exit_code": 0
+    },
+    "run2": {
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=.tmp/run2.json"
+      ],
+      "exit_code": 0,
+      "files_passed": 16,
+      "files_failed": 0,
+      "suites_failed": 0,
+      "cases_passed": 208,
+      "cases_failed": 0,
+      "cases_pending": 0,
+      "success": true
+    },
+    "run3": {
+      "command": [
+        "npm",
+        "test",
+        "--",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile=.tmp/run3.json"
+      ],
+      "exit_code": 0,
+      "files_passed": 16,
+      "files_failed": 0,
+      "suites_failed": 0,
+      "cases_passed": 208,
+      "cases_failed": 0,
+      "cases_pending": 0,
+      "success": true
+    }
+  },
+  "dist": {
+    "main.js": "418e33a26f255b0b553ef4cc58b342c4e1dbc69af84adc2d26e4d10c7dbfd9aa",
+    "manifest.json": "37dea176eb6f75df113bed2eb71242d7f98565098b62dfe5cad0bae75fe57438",
+    "styles.css": "ebb085018390182b89f780db9c8be8d73c16742a341c54cff34b3a64e6c8a17b"
+  },
+  "input_zip_sha256": "6bc90c7447273c61435b9010be318cec878d63b04e42c626e7d451769fa31ee2",
+  "npm_ci_exit_code": 0,
+  "typecheck_exit_code": 0
+}

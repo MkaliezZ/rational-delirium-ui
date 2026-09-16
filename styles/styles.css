@@ -1,0 +1,329 @@
+/* Rational Delirium plugin styles - everything scoped under .rd-context.
+   Palette: RD-DESIGN-v0.1 tokens (type != epistemic status). */
+
+.rd-context {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #D4D0C8;
+  background: #11110F;
+}
+
+.rd-context .rdc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rd-context .rdc-id {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  color: #A19C92;
+}
+
+.rd-context .rdc-title {
+  font-family: var(--font-text);
+  font-size: 14px;
+  margin: 2px 0 8px;
+  color: #D4D0C8;
+}
+
+.rd-context .rdc-badge {
+  display: inline-block;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #A19C92;
+  background: #171714;
+}
+
+.rd-context .rdc-badge[data-kind="proof"],
+.rd-context .rdc-badge[data-kind="demo"] {
+  color: #B7A56A;
+  border-color: #292824;
+}
+
+.rd-context .rdc-badge[data-state="RESOLVED"] { color: #76908D; }
+.rd-context .rdc-badge[data-state="BROKEN"],
+.rd-context .rdc-badge[data-state="AMBIGUOUS"],
+.rd-context .rdc-badge[data-state="OUT_OF_SCOPE"] { color: #8B3A3A; }
+.rd-context .rdc-badge[data-state="PENDING"] { color: #77736B; }
+
+.rd-context .rdc-section {
+  margin: 10px 0 0;
+  border-top: 1px solid #292824;
+  padding-top: 6px;
+}
+
+.rd-context .rdc-section-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77736B;
+  margin: 0 0 4px;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.rd-context .rdc-section-title:focus-visible,
+.rd-context .rdc-rel:focus-visible,
+.rd-context .rdc-pin:focus-visible {
+  outline: 2px solid #76908D;
+  outline-offset: 1px;
+}
+
+.rd-context .rdc-rel {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #D4D0C8;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.rd-context .rdc-rel:hover { background: #1D1C19; }
+
+.rd-context .rdc-rel .rdc-pred {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: #A19C92;
+}
+
+.rd-context .rdc-meta {
+  color: #77736B;
+  font-size: 11px;
+}
+
+.rd-context .rdc-pin {
+  margin-left: auto;
+  background: #171714;
+  border: 1px solid #34322D;
+  color: #A19C92;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.rd-context .rdc-pin[aria-pressed="true"] {
+  color: #76908D;
+  border-color: #76908D;
+}
+
+.rd-context .rdc-state {
+  color: #77736B;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.rd-context .rdc-error { color: #8B3A3A; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-context * { transition: none !important; animation: none !important; }
+}
+
+/* v0.4.2 Investigation Dashboard — everything scoped under
+   .rd-investigation. Same RD design language as .rd-context:
+   deep charcoal, warm gray text, thin borders, mono metadata.
+   No global selectors. */
+
+.rd-investigation {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #D4D0C8;
+  background: #11110F;
+}
+
+.rd-investigation .rdi-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.rd-investigation .rdi-title {
+  font-family: var(--font-text);
+  font-size: 16px;
+  color: #D4D0C8;
+}
+
+.rd-investigation .rdi-filters {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.rd-investigation .rdi-filter {
+  background: #171714;
+  border: 1px solid #34322D;
+  color: #A19C92;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-family: var(--font-monospace);
+}
+
+.rd-investigation .rdi-filter[aria-pressed="true"] {
+  color: #76908D;
+  border-color: #76908D;
+}
+
+.rd-investigation .rdi-section {
+  margin: 12px 0 0;
+  border-top: 1px solid #292824;
+  padding-top: 8px;
+}
+
+.rd-investigation .rdi-section-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77736B;
+  margin: 0 0 6px;
+  font-weight: normal;
+}
+
+.rd-investigation .rdi-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.rd-investigation .rdi-count {
+  border: 1px solid #292824;
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: #141412;
+}
+
+.rd-investigation .rdi-count-value {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 16px;
+  color: #D4D0C8;
+}
+
+.rd-investigation .rdi-count-label {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #77736B;
+  margin-top: 2px;
+}
+
+.rd-investigation .rdi-case,
+.rd-investigation .rdi-recent {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #D4D0C8;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.rd-investigation .rdi-case:hover,
+.rd-investigation .rdi-recent:hover { background: #1D1C19; }
+
+.rd-investigation .rdi-case-title {
+  font-family: var(--font-text);
+  font-size: 13px;
+}
+
+.rd-investigation .rdi-meta {
+  display: block;
+  color: #77736B;
+  font-size: 11px;
+  font-family: var(--font-monospace);
+}
+
+.rd-investigation .rdi-att {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #D4D0C8;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.rd-investigation button.rdi-att { cursor: pointer; }
+.rd-investigation button.rdi-att:hover { background: #1D1C19; }
+.rd-investigation .rdi-att[aria-disabled="true"] { cursor: default; color: #A19C92; }
+
+.rd-investigation .rdi-att-line {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+}
+
+.rd-investigation .rdi-badge {
+  display: inline-block;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #A19C92;
+  background: #171714;
+}
+
+.rd-investigation .rdi-badge[data-kind="BROKEN"],
+.rd-investigation .rdi-badge[data-kind="AMBIGUOUS"] {
+  color: #8B3A3A;
+  border-color: #3A2A2A;
+}
+
+.rd-investigation .rdi-badge[data-kind="CONTRADICTION"] {
+  color: #B7A56A;
+  border-color: #292824;
+}
+
+.rd-investigation .rdi-recent-line {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: #D4D0C8;
+}
+
+.rd-investigation .rdi-state {
+  color: #77736B;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.rd-investigation .rdi-error { color: #8B3A3A; }
+
+.rd-investigation .rdi-filter:focus-visible,
+.rd-investigation .rdi-case:focus-visible,
+.rd-investigation .rdi-recent:focus-visible,
+.rd-investigation button.rdi-att:focus-visible {
+  outline: 2px solid #76908D;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-investigation * { transition: none !important; animation: none !important; }
+}
