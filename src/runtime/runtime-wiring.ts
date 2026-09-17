@@ -33,6 +33,7 @@ export class RuntimeWiring {
   private readonly workspace: WorkspaceLike;
   private readonly vault: VaultLike;
   private readonly navigation: NavigationPort;
+  private readonly activeFileListeners = new Set<(path: string | null) => void>();
 
   constructor(
     adapter: ReadAdapter,
@@ -94,6 +95,20 @@ export class RuntimeWiring {
     return this.index.subscribe(listener);
   }
 
+  /** v0.4.3 §17: active-file stream for the LOOP Workspace. Fired
+   * from the ONE existing workspace file-open registration — this is
+   * another listener on the same event, not a second watcher. */
+  onActiveFile(listener: (path: string | null) => void): () => void {
+    this.activeFileListeners.add(listener);
+    return () => { this.activeFileListeners.delete(listener); };
+  }
+
+  private notifyActiveFile(path: string | null): void {
+    for (const listener of [...this.activeFileListeners]) {
+      try { listener(path); } catch { /* never break the wiring */ }
+    }
+  }
+
   private registerListeners(): void {
     this.vault.on("create", (file) => {
       if (isCandidatePath(file.path)) this.onPathEvent(file.path, "create");
@@ -105,6 +120,7 @@ export class RuntimeWiring {
     this.vault.on("delete", (file) => void this.applyDelete(file.path));
     this.workspace.on("file-open", (file) => {
       if (file !== null) void this.controller.onFileOpen(file.path);
+      this.notifyActiveFile(file !== null ? file.path : null);
     });
     this.workspace.on("active-leaf-change", () => {
       void this.controller.onActiveLeafChange(false);

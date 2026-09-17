@@ -327,3 +327,116 @@
 @media (prefers-reduced-motion: reduce) {
   .rd-investigation * { transition: none !important; animation: none !important; }
 }
+
+/* v0.4.3 LOOP Workspace — everything scoped under .rd-loop.
+   Same RD design language: archival charcoal, serif headings,
+   mono metadata, thin borders. No global selectors. */
+
+.rd-loop {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #D4D0C8;
+  background: #11110F;
+}
+
+.rd-loop .rdl-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.rd-loop .rdl-title {
+  font-family: var(--font-text);
+  font-size: 16px;
+  color: #D4D0C8;
+}
+
+.rd-loop .rdl-section {
+  margin: 12px 0 0;
+  border-top: 1px solid #292824;
+  padding-top: 8px;
+}
+
+.rd-loop .rdl-section-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77736B;
+  margin: 0 0 6px;
+  font-weight: normal;
+}
+
+.rd-loop .rdl-identity-title {
+  font-family: var(--font-text);
+  font-size: 14px;
+}
+
+.rd-loop .rdl-meta {
+  display: block;
+  color: #77736B;
+  font-size: 11px;
+  font-family: var(--font-monospace);
+}
+
+.rd-loop .rdl-loop-pick,
+.rd-loop .rdl-rel {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #D4D0C8;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.rd-loop button.rdl-loop-pick,
+.rd-loop button.rdl-rel { cursor: pointer; }
+.rd-loop button.rdl-loop-pick:hover,
+.rd-loop button.rdl-rel:hover { background: #1D1C19; }
+.rd-loop .rdl-rel[aria-disabled="true"] { cursor: default; color: #A19C92; }
+
+.rd-loop .rdl-rel-line,
+.rd-loop .rdl-loop-pick-title {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+}
+
+.rd-loop .rdl-badge {
+  display: inline-block;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #A19C92;
+  background: #171714;
+}
+
+.rd-loop .rdl-badge[data-state="RESOLVED"] { color: #76908D; }
+.rd-loop .rdl-badge[data-state="BROKEN"],
+.rd-loop .rdl-badge[data-state="AMBIGUOUS"],
+.rd-loop .rdl-badge[data-state="OUT_OF_SCOPE"] { color: #8B3A3A; }
+.rd-loop .rdl-badge[data-state="PENDING"] { color: #77736B; }
+
+.rd-loop .rdl-state {
+  color: #77736B;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.rd-loop .rdl-error { color: #8B3A3A; }
+
+.rd-loop button.rdl-loop-pick:focus-visible,
+.rd-loop button.rdl-rel:focus-visible {
+  outline: 2px solid #76908D;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-loop * { transition: none !important; animation: none !important; }
+}

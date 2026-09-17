@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => RationalDeliriumPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/views/context-view.ts
 var import_obsidian = require("obsidian");
@@ -607,6 +607,235 @@ var RDInvestigationView = class extends import_obsidian2.ItemView {
   }
 };
 
+// src/views/loop-view.ts
+var import_obsidian3 = require("obsidian");
+
+// src/loop/loop-projection.ts
+var RECURRENCE_PREDICATES = /* @__PURE__ */ new Set([
+  "repeats_in",
+  "observed_in"
+]);
+function endpointLabel2(objectId, raw) {
+  return objectId !== null && objectId.length > 0 ? objectId : raw;
+}
+function otherSide(relation, loopPath) {
+  const loopIsSource = relation.source.path === loopPath;
+  const loopIsTarget = relation.target.path === loopPath;
+  if (!loopIsSource && !loopIsTarget) return null;
+  if (loopIsSource && relation.target.path === loopPath && relation.source.path === loopPath) {
+    return { other: relation.target, direction: "outgoing" };
+  }
+  return loopIsSource ? { other: relation.target, direction: "outgoing" } : { other: relation.source, direction: "incoming" };
+}
+function buildLoopProjection(index2, selectedLoopPath) {
+  const { objects } = index2.snapshot();
+  const loops = objects.filter((o) => o.type === "loop").sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, title: o.title }));
+  const data = {
+    indexState: index2.state,
+    phase: "NO_LOOP_SELECTED",
+    selectedLoop: null,
+    loops,
+    recurrences: [],
+    evidence: [],
+    hypotheses: [],
+    cases: []
+  };
+  if (selectedLoopPath === null) return data;
+  const selected = objects.find((o) => o.path === selectedLoopPath) ?? null;
+  if (selected === null || selected.type !== "loop") {
+    data.phase = "NO_SUCH_LOOP";
+    return data;
+  }
+  data.phase = "READY";
+  data.selectedLoop = {
+    path: selected.path,
+    id: selected.id,
+    title: selected.title,
+    status: selected.status,
+    lastVerified: selected.lastVerified
+  };
+  const typeByPath = /* @__PURE__ */ new Map();
+  for (const o of objects) typeByPath.set(o.path, o);
+  const rows = [];
+  for (const relation of index2.relations) {
+    const side = otherSide(relation, selected.path);
+    if (side === null) continue;
+    const otherPath = side.other.path;
+    rows.push({
+      key: relation.key,
+      predicate: relation.predicate,
+      direction: side.direction,
+      otherLabel: endpointLabel2(side.other.objectId, side.other.raw),
+      otherPath,
+      otherType: otherPath !== null ? typeByPath.get(otherPath)?.type ?? null : null,
+      resolution: side.other.resolution
+    });
+  }
+  rows.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  data.recurrences = rows.filter((r) => RECURRENCE_PREDICATES.has(r.predicate));
+  data.evidence = rows.filter((r) => r.otherType === "evidence");
+  data.hypotheses = rows.filter((r) => r.otherType === "hypothesis");
+  data.cases = rows.filter((r) => r.otherType === "case");
+  return data;
+}
+
+// src/views/loop-view.ts
+var RD_LOOP_VIEW_TYPE = "rd-loop-workspace";
+var RDLoopView = class extends import_obsidian3.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    this.container = null;
+    /** §4/§17: memory-only selected LOOP path. */
+    this.selectedLoopPath = null;
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_LOOP_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Loop Workspace";
+  }
+  getIcon() {
+    return "iteration-ccw";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    this.container = createChild(this.contentEl, "div", { cls: "rd-loop" });
+    this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
+    this.unsubscribeActive = this.deps.onActiveFile((path) => this.onActiveFileChanged(path));
+    this.syncFromActiveFile(this.currentActivePath());
+    this.render();
+  }
+  async onClose() {
+    this.unsubscribeIndex?.();
+    this.unsubscribeActive?.();
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    emptyEl(this.contentEl);
+  }
+  /** Test/programmatic selection; memory-only. */
+  selectLoop(path) {
+    this.selectedLoopPath = path;
+    this.render();
+  }
+  get selectedLoop() {
+    return this.selectedLoopPath;
+  }
+  currentActivePath() {
+    return this.deps.activeFileProvider !== void 0 ? this.deps.activeFileProvider() : null;
+  }
+  onActiveFileChanged(path) {
+    if (this.syncFromActiveFile(path)) this.render();
+  }
+  /** §17: follow the active LOOP; retain the current selection when
+   * the active file is not a LOOP. Returns whether state changed. */
+  syncFromActiveFile(path) {
+    if (path === null) return false;
+    const object = this.deps.index.objectAt(path);
+    if (object !== null && object.type === "loop") {
+      if (this.selectedLoopPath === path) return false;
+      this.selectedLoopPath = path;
+      return true;
+    }
+    return false;
+  }
+  onIndexChanged() {
+    if (this.selectedLoopPath !== null) {
+      const object = this.deps.index.objectAt(this.selectedLoopPath);
+      if (object === null || object.type !== "loop") {
+        this.selectedLoopPath = null;
+      }
+    }
+    this.render();
+  }
+  render() {
+    const shell = this.container;
+    if (shell === null) return;
+    emptyEl(shell);
+    const data = buildLoopProjection(this.deps.index, this.selectedLoopPath);
+    const head = createChild(shell, "div", { cls: "rdl-head" });
+    createChild(head, "div", { cls: "rdl-title", text: "Loop" });
+    if (data.indexState === "INDEXING") {
+      createChild(shell, "div", { cls: "rdl-state", text: "Indexing archive\u2026" });
+      return;
+    }
+    if (data.indexState === "ERROR") {
+      createChild(shell, "div", { cls: "rdl-state rdl-error", text: "Index unavailable." });
+      return;
+    }
+    if (data.phase === "NO_LOOP_SELECTED" || data.phase === "NO_SUCH_LOOP") {
+      const section = this.section(shell, "Loops");
+      if (data.loops.length === 0) {
+        createChild(shell, "div", { cls: "rdl-state", text: "No LOOP selected." });
+        return;
+      }
+      for (const entry of data.loops) {
+        const btn = createChild(section, "button", { cls: "rdl-loop-pick" });
+        btn.setAttribute("aria-label", `Select loop ${entry.title}`);
+        createChild(btn, "span", { cls: "rdl-loop-pick-title", text: entry.title });
+        const meta = createChild(btn, "span", { cls: "rdl-meta" });
+        meta.textContent = entry.id ?? "(no id)";
+        btn.addEventListener("click", () => {
+          this.selectedLoopPath = entry.path;
+          this.render();
+        });
+      }
+      return;
+    }
+    this.renderIdentity(shell, data);
+    this.renderRows(shell, "Recurrences", data.recurrences, "No recurrences recorded.");
+    this.renderRows(shell, "Evidence", data.evidence, "No connected evidence.");
+    this.renderRows(shell, "Hypotheses", data.hypotheses, "No connected hypotheses.");
+    this.renderRows(shell, "Related Cases", data.cases, "No related cases.");
+  }
+  /** §6: canonical LOOP fields only. */
+  renderIdentity(shell, data) {
+    const identity = data.selectedLoop;
+    if (identity === null) return;
+    const section = this.section(shell, "Identity");
+    const idEl = createChild(section, "div", { cls: "rdl-identity" });
+    createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
+    const meta = createChild(idEl, "span", { cls: "rdl-meta" });
+    const bits = [identity.id ?? "(no id)", identity.status || "(no status)"];
+    if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
+    meta.textContent = bits.join(" \xB7 ");
+  }
+  renderRows(shell, title, rows, emptyText) {
+    const section = this.section(shell, title);
+    if (rows.length === 0) {
+      createChild(section, "div", { cls: "rdl-state", text: emptyText });
+      return;
+    }
+    for (const row of rows) {
+      this.renderRow(section, row);
+    }
+  }
+  renderRow(section, row) {
+    const navigable = row.otherPath !== null && row.resolution === "RESOLVED";
+    const el = createChild(section, navigable ? "button" : "div", { cls: "rdl-rel" });
+    if (!navigable) el.setAttribute("aria-disabled", "true");
+    const line = createChild(el, "span", { cls: "rdl-rel-line" });
+    line.textContent = `${row.direction === "outgoing" ? "\u2192" : "\u2190"} ${row.predicate} ${row.otherLabel}`;
+    const badge = createChild(el, "span", { cls: "rdl-badge" });
+    badge.textContent = row.resolution;
+    badge.setAttribute("data-state", row.resolution);
+    if (navigable && row.otherPath !== null) {
+      const path = row.otherPath;
+      el.setAttribute("aria-label", `Open ${row.otherLabel}`);
+      el.addEventListener("click", () => {
+        void this.deps.navigation.open({ path }, "normal");
+      });
+    }
+  }
+  section(shell, title) {
+    const section = createChild(shell, "section", { cls: "rdl-section" });
+    createChild(section, "h3", { cls: "rdl-section-title", text: title });
+    return section;
+  }
+};
+
 // src/scope.ts
 var KNOWLEDGE_ROOTS = [
   "CASES",
@@ -640,7 +869,7 @@ function isForbiddenDataSource(path) {
 }
 
 // src/platform/obsidian-navigation.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/model.ts
 var RD_OBJECT_TYPES = [
@@ -12268,13 +12497,13 @@ var ObsidianNavigationPort = class {
   }
   async open(target, mode) {
     const file = this.app.vault.getAbstractFileByPath(target.path);
-    if (!(file instanceof import_obsidian3.TFile)) return;
+    if (!(file instanceof import_obsidian4.TFile)) return;
     const leaf = this.pickLeaf(mode);
     if (leaf === null) return;
     try {
       await leaf.openFile(file);
       const view = leaf.view;
-      if (!(view instanceof import_obsidian3.MarkdownView) || view.file?.path !== file.path) return;
+      if (!(view instanceof import_obsidian4.MarkdownView) || view.file?.path !== file.path) return;
       if (mode === "source") {
         if (target.sourceRevision === void 0 || target.sourceLocator === void 0) return;
         const current = await this.app.vault.read(file);
@@ -12296,7 +12525,7 @@ var ObsidianNavigationPort = class {
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache === null) return;
         const subpath = target.subpath.startsWith("^") ? "#" + target.subpath : target.subpath;
-        const resolved = (0, import_obsidian3.resolveSubpath)(cache, subpath);
+        const resolved = (0, import_obsidian4.resolveSubpath)(cache, subpath);
         if (resolved !== null) {
           view.editor.setCursor({ line: resolved.start.line, ch: resolved.start.col });
         }
@@ -13266,6 +13495,7 @@ var RuntimeWiring = class {
     this.buildPhase = "BUILDING";
     this.pendingPaths = /* @__PURE__ */ new Set();
     this.disposed = false;
+    this.activeFileListeners = /* @__PURE__ */ new Set();
     this.index = new RDIndex(adapter);
     this.controller = new ContextController(this.index);
     this.workspace = workspace;
@@ -13316,6 +13546,23 @@ var RuntimeWiring = class {
   onIndexCommit(listener) {
     return this.index.subscribe(listener);
   }
+  /** v0.4.3 §17: active-file stream for the LOOP Workspace. Fired
+   * from the ONE existing workspace file-open registration — this is
+   * another listener on the same event, not a second watcher. */
+  onActiveFile(listener) {
+    this.activeFileListeners.add(listener);
+    return () => {
+      this.activeFileListeners.delete(listener);
+    };
+  }
+  notifyActiveFile(path) {
+    for (const listener of [...this.activeFileListeners]) {
+      try {
+        listener(path);
+      } catch {
+      }
+    }
+  }
   registerListeners() {
     this.vault.on("create", (file) => {
       if (isCandidatePath(file.path)) this.onPathEvent(file.path, "create");
@@ -13327,6 +13574,7 @@ var RuntimeWiring = class {
     this.vault.on("delete", (file) => void this.applyDelete(file.path));
     this.workspace.on("file-open", (file) => {
       if (file !== null) void this.controller.onFileOpen(file.path);
+      this.notifyActiveFile(file !== null ? file.path : null);
     });
     this.workspace.on("active-leaf-change", () => {
       void this.controller.onActiveLeafChange(false);
@@ -13384,7 +13632,7 @@ var ObsidianReadAdapterImpl = class {
   }
   mtime(path) {
     const file = this.plugin.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian4.TFile ? file.stat.mtime : 0;
+    return file instanceof import_obsidian5.TFile ? file.stat.mtime : 0;
   }
 };
 var ObsidianWorkspaceBridge = class {
@@ -13401,7 +13649,7 @@ var ObsidianWorkspaceBridge = class {
   }
   getActiveFile() {
     const f = this.plugin.app.workspace.getActiveFile();
-    return f instanceof import_obsidian4.TFile ? { path: f.path } : null;
+    return f instanceof import_obsidian5.TFile ? { path: f.path } : null;
   }
 };
 var ObsidianVaultBridge = class {
@@ -13414,7 +13662,7 @@ var ObsidianVaultBridge = class {
     );
   }
 };
-var RationalDeliriumPlugin = class extends import_obsidian4.Plugin {
+var RationalDeliriumPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     this.wiring = null;
@@ -13459,6 +13707,29 @@ var RationalDeliriumPlugin = class extends import_obsidian4.Plugin {
         await this.activateInvestigationView();
       }
     });
+    this.registerView(
+      RD_LOOP_VIEW_TYPE,
+      (leaf) => new RDLoopView(leaf, {
+        index: this.wiring.index,
+        onIndexCommit: (cb) => this.wiring.onIndexCommit(cb),
+        onActiveFile: (cb) => this.wiring.onActiveFile(cb),
+        activeFileProvider: () => {
+          const f = this.app.workspace.getActiveFile();
+          return f !== null ? f.path : null;
+        },
+        navigation
+      })
+    );
+    this.addRibbonIcon("iteration-ccw", "Open RD Loop Workspace", async () => {
+      await this.activateLoopView();
+    });
+    this.addCommand({
+      id: "open-rd-loop-workspace",
+      name: "Open RD Loop Workspace",
+      callback: async () => {
+        await this.activateLoopView();
+      }
+    });
     await this.wiring.start();
   }
   onunload() {
@@ -13478,6 +13749,13 @@ var RationalDeliriumPlugin = class extends import_obsidian4.Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_INVESTIGATION_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_INVESTIGATION_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+  /** v0.4.3 §3: Loop Workspace opens as a main-area tab. */
+  async activateLoopView() {
+    const existing = this.app.workspace.getLeavesOfType(RD_LOOP_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_LOOP_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 };

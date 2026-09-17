@@ -1,6 +1,7 @@
 import { Plugin, TFile, type WorkspaceLeaf } from "obsidian";
 import { RDContextView, RD_CONTEXT_VIEW_TYPE } from "./views/context-view";
 import { RDInvestigationView, RD_INVESTIGATION_VIEW_TYPE } from "./views/investigation-view";
+import { RDLoopView, RD_LOOP_VIEW_TYPE } from "./views/loop-view";
 import { ContextController } from "./context/context-controller";
 import { isCandidatePath } from "./scope";
 import { ObsidianNavigationPort } from "./platform/obsidian-navigation";
@@ -93,6 +94,30 @@ export default class RationalDeliriumPlugin extends Plugin {
       callback: async () => { await this.activateInvestigationView(); },
     });
 
+    this.registerView(
+      RD_LOOP_VIEW_TYPE,
+      (leaf: WorkspaceLeaf) =>
+        new RDLoopView(leaf, {
+          index: (this.wiring as RuntimeWiring).index,
+          onIndexCommit: (cb: () => void) =>
+            (this.wiring as RuntimeWiring).onIndexCommit(cb),
+          onActiveFile: (cb: (path: string | null) => void) =>
+            (this.wiring as RuntimeWiring).onActiveFile(cb),
+          activeFileProvider: () => {
+            const f = this.app.workspace.getActiveFile();
+            return f !== null ? f.path : null;
+          },
+          navigation,
+        }),
+    );
+    this.addRibbonIcon("iteration-ccw", "Open RD Loop Workspace", async () => {
+      await this.activateLoopView();
+    });
+    this.addCommand({
+      id: "open-rd-loop-workspace", name: "Open RD Loop Workspace",
+      callback: async () => { await this.activateLoopView(); },
+    });
+
     await this.wiring.start();
   }
 
@@ -115,6 +140,14 @@ export default class RationalDeliriumPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_INVESTIGATION_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_INVESTIGATION_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** v0.4.3 §3: Loop Workspace opens as a main-area tab. */
+  private async activateLoopView(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(RD_LOOP_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_LOOP_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 }

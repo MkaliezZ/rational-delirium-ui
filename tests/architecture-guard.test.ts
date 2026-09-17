@@ -93,8 +93,31 @@ describe("v0.4.2 investigation dashboard narrow guard (§29)", () => {
   });
 });
 
+describe("v0.4.3 loop workspace narrow guard", () => {
+  const loopSources = [
+    "src/loop/loop-projection.ts",
+    "src/views/loop-view.ts",
+  ].map((rel) => readFileSync(join(root, rel), "utf-8"));
+
+  it("loop modules never instantiate their own RDIndex", () => {
+    for (const src of loopSources) {
+      expect(src).not.toMatch(/new RDIndex/);
+    }
+  });
+
+  it("loop modules never scan the Vault, watch, or persist", () => {
+    for (const src of loopSources) {
+      expect(src).not.toMatch(/getMarkdownFiles/);
+      expect(src).not.toMatch(/\.on\(["'](create|modify|rename|delete|file-open)/);
+      expect(src).not.toMatch(/Vault\.create|Vault\.modify|Vault\.delete|Vault\.rename/);
+      expect(src).not.toMatch(/processFrontMatter/);
+      expect(src).not.toMatch(/saveData|localStorage|IndexedDB|data\.json/);
+    }
+  });
+});
+
 describe("v0.4.2 CSS scope isolation (§30)", () => {
-  it("every stylesheet selector is scoped under .rd-context or .rd-investigation", () => {
+  it("every stylesheet selector is scoped under .rd-context, .rd-investigation or .rd-loop", () => {
     const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
     // Strip comments, then collect selector text preceding every '{'.
     const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -112,7 +135,7 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
         const s = part.trim();
         if (s === "") continue;
         expect(
-          s.startsWith(".rd-context") || s.startsWith(".rd-investigation"),
+          s.startsWith(".rd-context") || s.startsWith(".rd-investigation") || s.startsWith(".rd-loop"),
           `unscoped selector: ${s}`,
         ).toBe(true);
       }

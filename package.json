@@ -1,6 +1,6 @@
 {
   "name": "rational-delirium-ui",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "type": "module",
   "description": "Rational Delirium read-only Obsidian plugin candidate (CASE workspace)",
