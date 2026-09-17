@@ -1,5 +1,6 @@
 import { App, MarkdownView, TFile, WorkspaceLeaf, resolveSubpath } from "obsidian";
 import type { NavigationPort, NavigationTarget, OpenMode } from "./navigation-core";
+import { NATIVE_LOCAL_GRAPH_COMMAND_ID } from "./navigation-core";
 import { parseObject } from "../parsers/object-parser";
 
 /** RD-10/RR-03: production navigation adapter. Primary action opens
@@ -54,6 +55,30 @@ export class ObsidianNavigationPort implements NavigationPort {
     } catch {
       // File disappearance or an unavailable current read must never reuse
       // the old cursor, nor create/repair a file.
+    }
+  }
+
+  /** v0.4.4 §17: restrained native Local Graph handoff. The only
+   * structural cast (command registry lookup) lives HERE, runtime
+   * shape-guarded, never exposed to projections/views. Steps: verify
+   * the path is a real Markdown file, make it the active editor
+   * anchor, then invoke Obsidian's built-in local-graph command and
+   * leave all graph rendering to Obsidian. No renderer internals. */
+  async openLocalGraph(path: string): Promise<"OPENED" | "UNAVAILABLE"> {
+    const commands = (this.app as {
+      commands?: { executeCommandById?: (id: string) => unknown };
+    }).commands;
+    if (commands === undefined || typeof commands.executeCommandById !== "function") {
+      return "UNAVAILABLE";
+    }
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return "UNAVAILABLE";
+    try {
+      await this.app.workspace.openLinkText(path, "", false);
+      await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      return "OPENED";
+    } catch {
+      return "UNAVAILABLE";
     }
   }
 

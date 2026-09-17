@@ -440,3 +440,138 @@
 @media (prefers-reduced-motion: reduce) {
   .rd-loop * { transition: none !important; animation: none !important; }
 }
+
+/* v0.4.4 Graph Intelligence — everything scoped under .rd-graph.
+   Same RD design language: archival charcoal, serif headings, mono
+   metadata, thin borders. No graph canvas, no neon. */
+
+.rd-graph {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #D4D0C8;
+  background: #11110F;
+}
+
+.rd-graph .rdg-head { margin-bottom: 10px; }
+.rd-graph .rdg-title {
+  font-family: var(--font-text);
+  font-size: 16px;
+  color: #D4D0C8;
+}
+
+.rd-graph .rdg-section {
+  margin: 12px 0 0;
+  border-top: 1px solid #292824;
+  padding-top: 8px;
+}
+
+.rd-graph .rdg-section-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77736B;
+  margin: 0 0 6px;
+  font-weight: normal;
+}
+
+.rd-graph .rdg-identity-title {
+  font-family: var(--font-text);
+  font-size: 14px;
+}
+
+.rd-graph .rdg-meta {
+  display: block;
+  color: #77736B;
+  font-size: 11px;
+  font-family: var(--font-monospace);
+}
+
+.rd-graph .rdg-pick,
+.rd-graph .rdg-rel,
+.rd-graph .rdg-src,
+.rd-graph .rdg-native,
+.rd-graph .rdg-hop-toggle {
+  background: none;
+  border: none;
+  color: #D4D0C8;
+  text-align: left;
+  border-radius: 4px;
+}
+
+.rd-graph button.rdg-pick,
+.rd-graph button.rdg-rel { display: block; width: 100%; padding: 3px 4px; cursor: pointer; }
+.rd-graph button.rdg-pick:hover,
+.rd-graph button.rdg-rel:hover { background: #1D1C19; }
+.rd-graph .rdg-rel[aria-disabled="true"] { cursor: default; color: #A19C92; }
+
+.rd-graph .rdg-rel-line,
+.rd-graph .rdg-pick-title {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+}
+
+.rd-graph .rdg-badge {
+  display: inline-block;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #A19C92;
+  background: #171714;
+}
+
+.rd-graph .rdg-badge[data-state="RESOLVED"] { color: #76908D; }
+.rd-graph .rdg-badge[data-state="BROKEN"],
+.rd-graph .rdg-badge[data-state="AMBIGUOUS"],
+.rd-graph .rdg-badge[data-state="OUT_OF_SCOPE"] { color: #8B3A3A; }
+.rd-graph .rdg-badge[data-state="PENDING"] { color: #77736B; }
+
+.rd-graph .rdg-hop-toggle,
+.rd-graph .rdg-src,
+.rd-graph .rdg-native {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: #A19C92;
+  border: 1px solid #34322D;
+  background: #171714;
+  padding: 0 6px;
+  margin-left: 6px;
+  cursor: pointer;
+}
+
+.rd-graph .rdg-prov { margin: 1px 0 8px 14px; }
+.rd-graph .rdg-prov-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.rd-graph .rdg-prov-line {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: #77736B;
+}
+
+.rd-graph .rdg-branch { margin: 6px 0 0 10px; }
+.rd-graph .rdg-branch-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: #A19C92;
+  margin: 4px 0 2px;
+}
+
+.rd-graph .rdg-state {
+  color: #77736B;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  margin: 6px 0;
+}
+
+.rd-graph .rdg-error { color: #8B3A3A; }
+
+.rd-graph button:focus-visible {
+  outline: 2px solid #76908D;
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-graph * { transition: none !important; animation: none !important; }
+}

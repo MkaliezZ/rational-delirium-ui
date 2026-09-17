@@ -2,6 +2,7 @@ import { Plugin, TFile, type WorkspaceLeaf } from "obsidian";
 import { RDContextView, RD_CONTEXT_VIEW_TYPE } from "./views/context-view";
 import { RDInvestigationView, RD_INVESTIGATION_VIEW_TYPE } from "./views/investigation-view";
 import { RDLoopView, RD_LOOP_VIEW_TYPE } from "./views/loop-view";
+import { RDGraphIntelligenceView, RD_GRAPH_VIEW_TYPE } from "./views/graph-intelligence-view";
 import { ContextController } from "./context/context-controller";
 import { isCandidatePath } from "./scope";
 import { ObsidianNavigationPort } from "./platform/obsidian-navigation";
@@ -118,6 +119,30 @@ export default class RationalDeliriumPlugin extends Plugin {
       callback: async () => { await this.activateLoopView(); },
     });
 
+    this.registerView(
+      RD_GRAPH_VIEW_TYPE,
+      (leaf: WorkspaceLeaf) =>
+        new RDGraphIntelligenceView(leaf, {
+          index: (this.wiring as RuntimeWiring).index,
+          onIndexCommit: (cb: () => void) =>
+            (this.wiring as RuntimeWiring).onIndexCommit(cb),
+          onActiveFile: (cb: (path: string | null) => void) =>
+            (this.wiring as RuntimeWiring).onActiveFile(cb),
+          activeFileProvider: () => {
+            const f = this.app.workspace.getActiveFile();
+            return f !== null ? f.path : null;
+          },
+          navigation,
+        }),
+    );
+    this.addRibbonIcon("git-fork", "Open RD Graph Intelligence", async () => {
+      await this.activateGraphView();
+    });
+    this.addCommand({
+      id: "open-rd-graph-intelligence", name: "Open RD Graph Intelligence",
+      callback: async () => { await this.activateGraphView(); },
+    });
+
     await this.wiring.start();
   }
 
@@ -148,6 +173,14 @@ export default class RationalDeliriumPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_LOOP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_LOOP_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** v0.4.4 §3: Graph Intelligence opens as a main-area tab. */
+  private async activateGraphView(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(RD_GRAPH_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_GRAPH_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 }

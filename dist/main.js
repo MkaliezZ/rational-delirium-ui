@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => RationalDeliriumPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/views/context-view.ts
 var import_obsidian = require("obsidian");
@@ -849,6 +849,345 @@ var RDLoopView = class extends import_obsidian3.ItemView {
   }
 };
 
+// src/views/graph-intelligence-view.ts
+var import_obsidian4 = require("obsidian");
+
+// src/graph/graph-projection.ts
+function edgesFor(index2, subjectPath, typeByPath, excludeKeys, rootPath) {
+  const rows = [];
+  for (const relation of index2.relations) {
+    if (excludeKeys.has(relation.key)) continue;
+    const subjectIsSource = relation.source.path === subjectPath;
+    const subjectIsTarget = relation.target.path === subjectPath;
+    if (!subjectIsSource && !subjectIsTarget) continue;
+    const other = subjectIsSource ? relation.target : relation.source;
+    if (rootPath !== null && other.path === rootPath) continue;
+    rows.push({
+      key: relation.key,
+      predicate: relation.predicate,
+      direction: subjectIsSource ? "outgoing" : "incoming",
+      otherLabel: other.objectId !== null && other.objectId.length > 0 ? other.objectId : other.raw,
+      otherPath: other.path,
+      otherType: other.path !== null ? typeByPath.get(other.path)?.type ?? null : null,
+      resolution: other.resolution,
+      provenance: provenanceOf(relation)
+    });
+  }
+  rows.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  return rows;
+}
+function provenanceOf(relation) {
+  return [...relation.assertions].map((a) => ({
+    declaredPredicate: a.predicate,
+    sourcePath: a.location.path,
+    kind: a.location.kind,
+    field: a.location.field ?? null,
+    line: a.location.line ?? null,
+    rawLink: a.link.raw,
+    sourceRevision: a.location.sourceRevision,
+    sortLine: a.location.line ?? a.location.range?.start ?? 0
+  })).sort((x, y) => {
+    if (x.sourcePath !== y.sourcePath) return x.sourcePath < y.sourcePath ? -1 : 1;
+    if (x.sortLine !== y.sortLine) return x.sortLine - y.sortLine;
+    if (x.declaredPredicate !== y.declaredPredicate) return x.declaredPredicate < y.declaredPredicate ? -1 : 1;
+    return x.rawLink < y.rawLink ? -1 : x.rawLink > y.rawLink ? 1 : 0;
+  }).map(({ declaredPredicate, sourcePath, kind, field, line, rawLink, sourceRevision }) => ({
+    declaredPredicate,
+    sourcePath,
+    kind,
+    field,
+    line,
+    rawLink,
+    sourceRevision
+  }));
+}
+function buildGraphProjection(index2, selectedPath) {
+  const { objects } = index2.snapshot();
+  const typeByPath = /* @__PURE__ */ new Map();
+  for (const o of objects) typeByPath.set(o.path, o);
+  const selectable = objects.filter((o) => o.type === "case" || o.type === "evidence" || o.type === "hypothesis" || o.type === "loop").sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, type: o.type, title: o.title }));
+  const data = {
+    indexState: index2.state,
+    phase: "NO_OBJECT_SELECTED",
+    selectedObject: null,
+    selectableObjects: selectable,
+    firstHop: []
+  };
+  if (selectedPath === null) return data;
+  const selected = typeByPath.get(selectedPath) ?? null;
+  if (selected === null) {
+    data.phase = "NO_SUCH_OBJECT";
+    return data;
+  }
+  data.phase = "READY";
+  data.selectedObject = {
+    path: selected.path,
+    id: selected.id,
+    title: selected.title,
+    type: selected.type,
+    status: selected.status,
+    lastVerified: selected.lastVerified
+  };
+  data.firstHop = edgesFor(index2, selected.path, typeByPath, /* @__PURE__ */ new Set(), null);
+  return data;
+}
+function buildSecondHop(index2, neighborPath, rootPath) {
+  const { objects } = index2.snapshot();
+  const typeByPath = /* @__PURE__ */ new Map();
+  for (const o of objects) typeByPath.set(o.path, o);
+  const excludeKeys = /* @__PURE__ */ new Set();
+  for (const relation of index2.relations) {
+    const touchesRoot = relation.source.path === rootPath || relation.target.path === rootPath;
+    const touchesNeighbor = relation.source.path === neighborPath || relation.target.path === neighborPath;
+    if (touchesRoot && touchesNeighbor) excludeKeys.add(relation.key);
+  }
+  return edgesFor(index2, neighborPath, typeByPath, excludeKeys, rootPath);
+}
+
+// src/views/graph-intelligence-view.ts
+var RD_GRAPH_VIEW_TYPE = "rd-graph-intelligence";
+var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    this.container = null;
+    /** §4: memory-only selection. */
+    this.selectedPath = null;
+    /** §15: memory-only expanded second-hop neighbors (resolved paths). */
+    this.expandedNeighbors = /* @__PURE__ */ new Set();
+    this.nativeGraphState = null;
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_GRAPH_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Graph Intelligence";
+  }
+  getIcon() {
+    return "git-fork";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    this.container = createChild(this.contentEl, "div", { cls: "rd-graph" });
+    this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
+    this.unsubscribeActive = this.deps.onActiveFile((path) => this.onActiveFileChanged(path));
+    this.syncFromActiveFile(
+      this.deps.activeFileProvider !== void 0 ? this.deps.activeFileProvider() : null
+    );
+    this.render();
+  }
+  async onClose() {
+    this.unsubscribeIndex?.();
+    this.unsubscribeActive?.();
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    emptyEl(this.contentEl);
+  }
+  selectObject(path) {
+    if (path !== this.selectedPath) {
+      this.expandedNeighbors.clear();
+    }
+    this.selectedPath = path;
+    this.render();
+  }
+  get selected() {
+    return this.selectedPath;
+  }
+  get expandedSecondHops() {
+    return [...this.expandedNeighbors];
+  }
+  onActiveFileChanged(path) {
+    if (this.syncFromActiveFile(path)) this.render();
+  }
+  /** §4: follow the active RD object; RETAIN the selection when the
+   * active file is not an indexed RD object. */
+  syncFromActiveFile(path) {
+    if (path === null) return false;
+    if (path === this.selectedPath) return false;
+    const object = this.deps.index.objectAt(path);
+    if (object === null) return false;
+    this.expandedNeighbors.clear();
+    this.selectedPath = path;
+    return true;
+  }
+  onIndexChanged() {
+    if (this.selectedPath !== null) {
+      const object = this.deps.index.objectAt(this.selectedPath);
+      if (object === null) {
+        this.selectedPath = null;
+        this.expandedNeighbors.clear();
+      }
+    }
+    for (const path of [...this.expandedNeighbors]) {
+      const object = this.deps.index.objectAt(path);
+      if (object === null) this.expandedNeighbors.delete(path);
+    }
+    this.render();
+  }
+  render() {
+    const shell = this.container;
+    if (shell === null) return;
+    emptyEl(shell);
+    const data = buildGraphProjection(this.deps.index, this.selectedPath);
+    const head = createChild(shell, "div", { cls: "rdg-head" });
+    createChild(head, "div", { cls: "rdg-title", text: "Graph Intelligence" });
+    if (data.indexState === "INDEXING") {
+      createChild(shell, "div", { cls: "rdg-state", text: "Indexing archive\u2026" });
+      return;
+    }
+    if (data.indexState === "ERROR") {
+      createChild(shell, "div", { cls: "rdg-state rdg-error", text: "Index unavailable." });
+      return;
+    }
+    if (data.phase !== "READY" || data.selectedObject === null) {
+      const section = this.section(shell, "RD Objects");
+      if (data.selectableObjects.length === 0) {
+        createChild(shell, "div", { cls: "rdg-state", text: "No RD object selected." });
+        return;
+      }
+      for (const entry of data.selectableObjects) {
+        const btn = createChild(section, "button", { cls: "rdg-pick" });
+        btn.setAttribute("aria-label", `Select ${entry.type} ${entry.title}`);
+        const line = createChild(btn, "span", { cls: "rdg-pick-title" });
+        line.textContent = `${entry.type} \xB7 ${entry.title}`;
+        const meta = createChild(btn, "span", { cls: "rdg-meta" });
+        meta.textContent = entry.id ?? "(no id)";
+        btn.addEventListener("click", () => this.selectObject(entry.path));
+      }
+      return;
+    }
+    this.renderIdentity(shell, data.selectedObject);
+    this.renderFirstHop(shell, data);
+    if (this.expandedNeighbors.size > 0) {
+      this.renderSecondHop(shell, data.selectedObject.path);
+    }
+    this.renderNativeGraph(shell, data.selectedObject.path);
+  }
+  /** §6: canonical identity fields only. */
+  renderIdentity(shell, identity) {
+    const section = this.section(shell, "Identity");
+    const idEl = createChild(section, "div", { cls: "rdg-identity" });
+    createChild(idEl, "span", { cls: "rdg-identity-title", text: identity.title });
+    const meta = createChild(idEl, "span", { cls: "rdg-meta" });
+    const bits = [
+      identity.id ?? "(no id)",
+      identity.type,
+      identity.status || "(no status)",
+      identity.path
+    ];
+    if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
+    meta.textContent = bits.join(" \xB7 ");
+  }
+  renderFirstHop(shell, data) {
+    const section = this.section(shell, "Semantic Relations");
+    if (data.firstHop.length === 0) {
+      createChild(section, "div", { cls: "rdg-state", text: "No semantic relations recorded." });
+      return;
+    }
+    for (const edge of data.firstHop) {
+      this.renderEdge(section, edge, true);
+    }
+  }
+  /** §12: second-hop branch, direction relative to the NEIGHBOR. */
+  renderSecondHop(shell, rootPath) {
+    const section = this.section(shell, "Second Hop");
+    for (const neighbor of [...this.expandedNeighbors].sort()) {
+      const rows = buildSecondHop(this.deps.index, neighbor, rootPath);
+      const branch = createChild(section, "div", { cls: "rdg-branch" });
+      const branchTitle = createChild(branch, "div", { cls: "rdg-branch-title" });
+      branchTitle.textContent = `Second hop via ${neighbor}`;
+      if (rows.length === 0) {
+        createChild(branch, "div", { cls: "rdg-state", text: "No semantic relations recorded." });
+      }
+      for (const edge of rows) {
+        this.renderEdge(branch, edge, false);
+      }
+    }
+  }
+  renderEdge(container, edge, expandable) {
+    const navigable = edge.otherPath !== null && edge.resolution === "RESOLVED";
+    const el = createChild(container, navigable ? "button" : "div", { cls: "rdg-rel" });
+    if (!navigable) el.setAttribute("aria-disabled", "true");
+    const line = createChild(el, "span", { cls: "rdg-rel-line" });
+    const typeTag = edge.otherType !== null ? ` [${edge.otherType}]` : "";
+    line.textContent = `${edge.direction === "outgoing" ? "\u2192" : "\u2190"} ${edge.predicate} ${edge.otherLabel}${typeTag}`;
+    const badge = createChild(el, "span", { cls: "rdg-badge" });
+    badge.textContent = edge.resolution;
+    badge.setAttribute("data-state", edge.resolution);
+    if (navigable && edge.otherPath !== null) {
+      const otherPath = edge.otherPath;
+      el.setAttribute("aria-label", `Open ${edge.otherLabel}`);
+      el.addEventListener("click", () => {
+        void this.deps.navigation.open({ path: otherPath }, "normal");
+      });
+      if (expandable) {
+        const toggle = createChild(el, "button", { cls: "rdg-hop-toggle" });
+        const expanded = this.expandedNeighbors.has(otherPath);
+        toggle.textContent = expanded ? "\u2212 second hop" : "+ second hop";
+        toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+        toggle.setAttribute("aria-label", `Toggle second hop via ${edge.otherLabel}`);
+        toggle.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (this.expandedNeighbors.has(otherPath)) this.expandedNeighbors.delete(otherPath);
+          else this.expandedNeighbors.add(otherPath);
+          this.render();
+        });
+      }
+    }
+    const prov = createChild(container, "div", { cls: "rdg-prov" });
+    for (const p of edge.provenance) {
+      this.renderProvenance(prov, p);
+    }
+  }
+  renderProvenance(container, p) {
+    const row = createChild(container, "div", { cls: "rdg-prov-row" });
+    const line = createChild(row, "span", { cls: "rdg-prov-line" });
+    const location = p.kind === "frontmatter" ? `frontmatter \xB7 ${p.field ?? p.declaredPredicate}` : `body${p.line !== null ? " \xB7 line " + p.line : ""}`;
+    line.textContent = `${p.declaredPredicate} @ ${p.sourcePath} (${location}) raw [[${p.rawLink}]]`;
+    const btn = createChild(row, "button", { cls: "rdg-src" });
+    btn.textContent = "Open source";
+    btn.setAttribute("aria-label", `Open source ${p.sourcePath}`);
+    const target = p.kind === "body" && p.line !== null ? {
+      path: p.sourcePath,
+      line: p.line,
+      sourceRevision: p.sourceRevision,
+      sourceLocator: { predicate: p.declaredPredicate, raw: p.rawLink }
+    } : { path: p.sourcePath };
+    btn.addEventListener("click", () => {
+      void this.deps.navigation.open(target, target.line !== void 0 ? "source" : "normal");
+    });
+  }
+  /** §17: restrained native handoff through the ONE NavigationPort. */
+  renderNativeGraph(shell, path) {
+    const section = this.section(shell, "Native Graph");
+    const btn = createChild(section, "button", { cls: "rdg-native" });
+    btn.textContent = "Open Native Local Graph";
+    btn.setAttribute("aria-label", "Open Obsidian local graph for the selected object");
+    btn.addEventListener("click", () => {
+      const opener = this.deps.navigation.openLocalGraph;
+      if (opener === void 0) {
+        this.nativeGraphState = "UNAVAILABLE";
+        this.render();
+        return;
+      }
+      void opener.call(this.deps.navigation, path).then((result) => {
+        this.nativeGraphState = result;
+        this.render();
+      });
+    });
+    if (this.nativeGraphState === "UNAVAILABLE") {
+      createChild(section, "div", { cls: "rdg-state", text: "Native Local Graph unavailable." });
+    }
+  }
+  section(shell, title) {
+    const section = createChild(shell, "section", { cls: "rdg-section" });
+    createChild(section, "h3", { cls: "rdg-section-title", text: title });
+    return section;
+  }
+};
+
 // src/scope.ts
 var KNOWLEDGE_ROOTS = [
   "CASES",
@@ -882,7 +1221,10 @@ function isForbiddenDataSource(path) {
 }
 
 // src/platform/obsidian-navigation.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
+
+// src/platform/navigation-core.ts
+var NATIVE_LOCAL_GRAPH_COMMAND_ID = "graph:open-local";
 
 // src/model.ts
 var RD_OBJECT_TYPES = [
@@ -12510,13 +12852,13 @@ var ObsidianNavigationPort = class {
   }
   async open(target, mode) {
     const file = this.app.vault.getAbstractFileByPath(target.path);
-    if (!(file instanceof import_obsidian4.TFile)) return;
+    if (!(file instanceof import_obsidian5.TFile)) return;
     const leaf = this.pickLeaf(mode);
     if (leaf === null) return;
     try {
       await leaf.openFile(file);
       const view = leaf.view;
-      if (!(view instanceof import_obsidian4.MarkdownView) || view.file?.path !== file.path) return;
+      if (!(view instanceof import_obsidian5.MarkdownView) || view.file?.path !== file.path) return;
       if (mode === "source") {
         if (target.sourceRevision === void 0 || target.sourceLocator === void 0) return;
         const current = await this.app.vault.read(file);
@@ -12538,12 +12880,33 @@ var ObsidianNavigationPort = class {
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache === null) return;
         const subpath = target.subpath.startsWith("^") ? "#" + target.subpath : target.subpath;
-        const resolved = (0, import_obsidian4.resolveSubpath)(cache, subpath);
+        const resolved = (0, import_obsidian5.resolveSubpath)(cache, subpath);
         if (resolved !== null) {
           view.editor.setCursor({ line: resolved.start.line, ch: resolved.start.col });
         }
       }
     } catch {
+    }
+  }
+  /** v0.4.4 §17: restrained native Local Graph handoff. The only
+   * structural cast (command registry lookup) lives HERE, runtime
+   * shape-guarded, never exposed to projections/views. Steps: verify
+   * the path is a real Markdown file, make it the active editor
+   * anchor, then invoke Obsidian's built-in local-graph command and
+   * leave all graph rendering to Obsidian. No renderer internals. */
+  async openLocalGraph(path) {
+    const commands = this.app.commands;
+    if (commands === void 0 || typeof commands.executeCommandById !== "function") {
+      return "UNAVAILABLE";
+    }
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof import_obsidian5.TFile)) return "UNAVAILABLE";
+    try {
+      await this.app.workspace.openLinkText(path, "", false);
+      await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      return "OPENED";
+    } catch {
+      return "UNAVAILABLE";
     }
   }
   pickLeaf(mode) {
@@ -13645,7 +14008,7 @@ var ObsidianReadAdapterImpl = class {
   }
   mtime(path) {
     const file = this.plugin.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian5.TFile ? file.stat.mtime : 0;
+    return file instanceof import_obsidian6.TFile ? file.stat.mtime : 0;
   }
 };
 var ObsidianWorkspaceBridge = class {
@@ -13662,7 +14025,7 @@ var ObsidianWorkspaceBridge = class {
   }
   getActiveFile() {
     const f = this.plugin.app.workspace.getActiveFile();
-    return f instanceof import_obsidian5.TFile ? { path: f.path } : null;
+    return f instanceof import_obsidian6.TFile ? { path: f.path } : null;
   }
 };
 var ObsidianVaultBridge = class {
@@ -13675,7 +14038,7 @@ var ObsidianVaultBridge = class {
     );
   }
 };
-var RationalDeliriumPlugin = class extends import_obsidian5.Plugin {
+var RationalDeliriumPlugin = class extends import_obsidian6.Plugin {
   constructor() {
     super(...arguments);
     this.wiring = null;
@@ -13743,6 +14106,29 @@ var RationalDeliriumPlugin = class extends import_obsidian5.Plugin {
         await this.activateLoopView();
       }
     });
+    this.registerView(
+      RD_GRAPH_VIEW_TYPE,
+      (leaf) => new RDGraphIntelligenceView(leaf, {
+        index: this.wiring.index,
+        onIndexCommit: (cb) => this.wiring.onIndexCommit(cb),
+        onActiveFile: (cb) => this.wiring.onActiveFile(cb),
+        activeFileProvider: () => {
+          const f = this.app.workspace.getActiveFile();
+          return f !== null ? f.path : null;
+        },
+        navigation
+      })
+    );
+    this.addRibbonIcon("git-fork", "Open RD Graph Intelligence", async () => {
+      await this.activateGraphView();
+    });
+    this.addCommand({
+      id: "open-rd-graph-intelligence",
+      name: "Open RD Graph Intelligence",
+      callback: async () => {
+        await this.activateGraphView();
+      }
+    });
     await this.wiring.start();
   }
   onunload() {
@@ -13769,6 +14155,13 @@ var RationalDeliriumPlugin = class extends import_obsidian5.Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_LOOP_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_LOOP_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+  /** v0.4.4 §3: Graph Intelligence opens as a main-area tab. */
+  async activateGraphView() {
+    const existing = this.app.workspace.getLeavesOfType(RD_GRAPH_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_GRAPH_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 };

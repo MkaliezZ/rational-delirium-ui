@@ -116,8 +116,47 @@ describe("v0.4.3 loop workspace narrow guard", () => {
   });
 });
 
+describe("v0.4.4 graph intelligence narrow guard", () => {
+  const graphSources = [
+    "src/graph/graph-projection.ts",
+    "src/views/graph-intelligence-view.ts",
+  ].map((rel) => readFileSync(join(root, rel), "utf-8"));
+
+  it("graph modules never instantiate their own RDIndex or scan the Vault", () => {
+    for (const src of graphSources) {
+      expect(src).not.toMatch(/new RDIndex/);
+      expect(src).not.toMatch(/getMarkdownFiles/);
+      expect(src).not.toMatch(/\.on\(["'](create|modify|rename|delete|file-open)/);
+      expect(src).not.toMatch(/setInterval/);
+      expect(src).not.toMatch(/saveData|localStorage|IndexedDB|data\.json/);
+    }
+  });
+
+  it("graph modules contain no renderer/canvas/graph-DOM internals (§18)", () => {
+    for (const src of graphSources) {
+      expect(src).not.toMatch(/GraphView|canvas|d3|cytoscape|MutationObserver/);
+      expect(src).not.toMatch(/workspace-leaf|graph-view|\.graph-canvas/);
+    }
+  });
+
+  it("ordinary backlink APIs never enter graph modules (§23)", () => {
+    for (const src of graphSources) {
+      expect(src).not.toMatch(/ordinaryLinksOf|ordinaryBacklinksOf/);
+    }
+  });
+
+  it("exactly ONE NavigationPort command constant exists and no second port", () => {
+    const navSrc = readFileSync(join(root, "src", "platform", "navigation-core.ts"), "utf-8");
+    expect(navSrc.match(/NATIVE_LOCAL_GRAPH_COMMAND_ID/g)).toHaveLength(1);
+    expect(navSrc).toContain('"graph:open-local"');
+    for (const src of graphSources) {
+      expect(src).not.toMatch(/class \w+Navigation|new ObsidianNavigationPort/);
+    }
+  });
+});
+
 describe("v0.4.2 CSS scope isolation (§30)", () => {
-  it("every stylesheet selector is scoped under .rd-context, .rd-investigation or .rd-loop", () => {
+  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop or .rd-graph", () => {
     const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
     // Strip comments, then collect selector text preceding every '{'.
     const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -135,7 +174,8 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
         const s = part.trim();
         if (s === "") continue;
         expect(
-          s.startsWith(".rd-context") || s.startsWith(".rd-investigation") || s.startsWith(".rd-loop"),
+          s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
+            || s.startsWith(".rd-loop") || s.startsWith(".rd-graph"),
           `unscoped selector: ${s}`,
         ).toBe(true);
       }
