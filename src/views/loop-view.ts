@@ -150,7 +150,8 @@ export class RDLoopView extends ItemView {
     this.renderRows(shell, "Related Cases", data.cases, "No related cases.");
   }
 
-  /** §6: canonical LOOP fields only. */
+  /** §6 + LOOP-02: canonical LOOP fields only — title, id, status,
+   * path, lastVerified — as read-only safe text. */
   private renderIdentity(shell: HTMLElement, data: LoopProjectionData): void {
     const identity = data.selectedLoop;
     if (identity === null) return;
@@ -158,7 +159,11 @@ export class RDLoopView extends ItemView {
     const idEl = createChild(section, "div", { cls: "rdl-identity" });
     createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
     const meta = createChild(idEl, "span", { cls: "rdl-meta" });
-    const bits = [identity.id ?? "(no id)", identity.status || "(no status)"];
+    const bits = [
+      identity.id ?? "(no id)",
+      identity.status || "(no status)",
+      identity.path,
+    ];
     if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
     meta.textContent = bits.join(" · ");
   }

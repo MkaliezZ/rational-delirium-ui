@@ -171,3 +171,74 @@ describe("loop projection — purity (§11)", () => {
     expect(JSON.stringify({ relations: index.relations, snapshot: index.snapshot() })).toBe(before);
   });
 });
+
+describe("LOOP-01: deterministic single-owner presentation", () => {
+  it("3 normalized relations → 3 owned rows; every key appears exactly once", async () => {
+    const index = await indexWith([
+      [L, note("loop", "LOOP-1", ['related: "[[H]]"'], ["repeats_in: [[A]]", "observed_in: [[B]]"])],
+      [A, note("case", "CASE-1")],
+      [B, note("evidence", "EV-1")],
+      [H, note("hypothesis", "HYP-1")],
+    ]);
+    expect(index.relations).toHaveLength(3);
+    const p = buildLoopProjection(index, L);
+    const all = [...p.recurrences, ...p.evidence, ...p.hypotheses, ...p.cases];
+    expect(all).toHaveLength(3);
+    const keys = all.map((r) => r.key);
+    expect(new Set(keys).size).toBe(3); // 0 duplicates
+    // recurrence predicates own Recurrences even when typed targets exist
+    expect(p.recurrences.map((r) => r.predicate).sort()).toEqual(["observed_in", "repeats_in"]);
+    expect(p.hypotheses.map((r) => r.predicate)).toEqual(["related"]);
+    expect(p.evidence).toHaveLength(0); // observed_in EVIDENCE is owned by Recurrences
+    expect(p.cases).toHaveLength(0); // repeats_in CASE is owned by Recurrences
+  });
+
+  it("non-recurrence relation to an unresolved endpoint is NOT dropped", async () => {
+    const index = await indexWith([
+      [L, note("loop", "LOOP-1", ['related: "[[E]]"'])],
+    ]);
+    const p = buildLoopProjection(index, L);
+    const all = [...p.recurrences, ...p.evidence, ...p.hypotheses, ...p.cases];
+    expect(all).toHaveLength(1);
+    expect(all[0].otherLabel).toBe("E");
+    expect(all[0].resolution).toBe("BROKEN");
+    expect(all[0].section).toBe("recurrences");
+  });
+
+  it("same target with different predicates stays distinct (one row each)", async () => {
+    const index = await indexWith([
+      [L, note("loop", "LOOP-1", ['related: "[[A]]"', 'supports: "[[A]]"'], ["repeats_in: [[A]]"])],
+      [A, note("case", "CASE-1")],
+    ]);
+    const p = buildLoopProjection(index, L);
+    expect(index.relations).toHaveLength(3);
+    const all = [...p.recurrences, ...p.evidence, ...p.hypotheses, ...p.cases];
+    expect(all).toHaveLength(3);
+    expect(new Set(all.map((r) => r.key)).size).toBe(3);
+    // repeats_in owned by Recurrences; related+supports owned by Cases
+    expect(p.recurrences.map((r) => r.predicate)).toEqual(["repeats_in"]);
+    expect(p.cases.map((r) => r.predicate).sort()).toEqual(["related", "supports"]);
+  });
+
+  it("incoming/outgoing/reverse directions each keep single ownership", async () => {
+    const index = await indexWith([
+      [L, note("loop", "LOOP-1", [], ["repeats_in: [[A]]"])],
+      [L2, note("loop", "LOOP-2", [], ["observed_in: [[L]]"])],
+      [A, note("case", "CASE-1", [], ["observed_in: [[L]]"])],
+      [B, note("evidence", "EV-1", ['supported_by: "[[L]]"'])],
+    ]);
+    const p = buildLoopProjection(index, L);
+    expect(index.relations).toHaveLength(4);
+    const all = [...p.recurrences, ...p.evidence, ...p.hypotheses, ...p.cases];
+    expect(all).toHaveLength(4);
+    expect(new Set(all.map((r) => r.key)).size).toBe(4);
+    const lines = all.map((r) => `${r.direction} ${r.predicate} ${r.otherLabel}`);
+    expect(lines).toContain("outgoing repeats_in CASE-1");
+    expect(lines).toContain("incoming observed_in LOOP-2");
+    expect(lines).toContain("incoming observed_in CASE-1");
+    expect(lines).toContain("outgoing supports EV-1"); // swapped supported_by
+    // every recurrence-predicate row owned once, everywhere else once
+    expect(all.filter((r) => r.section === "recurrences")).toHaveLength(3);
+    expect(all.filter((r) => r.section === "evidence")).toHaveLength(1);
+  });
+});

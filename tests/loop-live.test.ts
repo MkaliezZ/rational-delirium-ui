@@ -88,10 +88,10 @@ describe("loop workspace live updates through the shared index path (§25, §18)
 
     expect(view.contentEl.querySelector(".rdl-badge")?.textContent).toBe("RESOLVED");
     expect(recurrenceLines(view)).toEqual(["→ repeats_in EV-1"]);
-    // typed section picks the new evidence object up
-    const evidenceSection = [...view.contentEl.querySelectorAll(".rdl-section")]
-      .find((s) => s.querySelector(".rdl-section-title")?.textContent === "Evidence");
-    expect(evidenceSection?.querySelector(".rdl-rel-line")?.textContent).toBe("→ repeats_in EV-1");
+    // LOOP-01 single-owner: recurrence predicates stay in Recurrences;
+    // the Evidence section remains truthfully empty for this fixture.
+    const evidenceLines = sectionLines(view, "Evidence");
+    expect(evidenceLines).toEqual([]);
   });
 
   it("DELETE: removing the related object degrades the row safely", async () => {

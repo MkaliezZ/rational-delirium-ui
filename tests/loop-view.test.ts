@@ -52,7 +52,7 @@ afterEach(async () => {
 describe("real RDLoopView in tests (§21)", () => {
   it("instantiates the ACTUAL view; active LOOP renders all five areas", async () => {
     const { view } = await loopWorkspace([
-      [L, note(L, "LOOP-1", [], ["repeats_in: [[A]]", "observed_in: [[B]]"])],
+      [L, note(L, "LOOP-1", ["status: open", "last_verified: 2026-09-01"], ["repeats_in: [[A]]", "observed_in: [[B]]"])],
       [A, note(A, "CASE-1")],
       [B, note(B, "EV-1")],
     ], L);
@@ -64,6 +64,12 @@ describe("real RDLoopView in tests (§21)", () => {
     ]);
     expect(view.contentEl.querySelector(".rdl-identity-title")?.textContent)
       .toBe("LOOP-1 — fixture");
+    // LOOP-02: canonical fields incl. path visibly rendered
+    const meta = view.contentEl.querySelector(".rdl-identity .rdl-meta")?.textContent ?? "";
+    expect(meta).toContain("LOOP-1");
+    expect(meta).toContain("open");
+    expect(meta).toContain(L);
+    expect(meta).toContain("verified 2026-09-01");
   });
 
   it("non-LOOP active file shows the restrained LOOP selector", async () => {
@@ -130,18 +136,29 @@ describe("loop workspace navigation safety (§15, §23)", () => {
       [B, note(B, "EV-1")],
       [H, note(H, "HYP-1")],
     ], L);
+    // LOOP-01: 3 normalized relations -> exactly 3 visible rows
+    expect(host.wiring.index.relations).toHaveLength(3);
     const rows = [...view.contentEl.querySelectorAll<HTMLButtonElement>(".rdl-rel")];
-    expect(rows).toHaveLength(5); // 2 recurrences + evidence + hypothesis + case
+    expect(rows).toHaveLength(3);
     for (const row of rows) {
       expect(row.tagName).toBe("BUTTON");
       row.click();
     }
     await Promise.all(host.openSpy.mock.results.map((r) => r.value));
-    // rows are key-sorted (observed_in < repeats_in) within Recurrences,
-    // then typed sections Evidence / Hypotheses / Related Cases.
+    // single-owner: observed_in/repeats_in live in Recurrences (key-sorted),
+    // related H lives in Hypotheses; Evidence/Cases are truthfully empty.
     const paths = host.openSpy.mock.calls.map((c) => c[0]).map((t) => t.path);
-    expect(paths).toEqual([B, A, B, H, A]);
+    expect(paths).toEqual([B, A, H]);
     expect(host.vault.writeCalls).toEqual([]);
+    const sectionRows = (title: string) => {
+      const sec = [...view.contentEl.querySelectorAll(".rdl-section")]
+        .find((x) => x.querySelector(".rdl-section-title")?.textContent === title);
+      return sec?.querySelectorAll(".rdl-rel").length ?? 0;
+    };
+    expect(sectionRows("Recurrences")).toBe(2);
+    expect(sectionRows("Evidence")).toBe(0);
+    expect(sectionRows("Hypotheses")).toBe(1);
+    expect(sectionRows("Related Cases")).toBe(0);
   });
 
   it("BROKEN and AMBIGUOUS rows are inert; E/F stay distinct with raw labels (§14)", async () => {
@@ -207,5 +224,48 @@ describe("loop workspace accessibility smoke (§29)", () => {
     }
     const badge = view.contentEl.querySelector(".rdl-badge");
     expect(badge?.textContent).toBe("RESOLVED"); // visible text, not color-only
+  });
+});
+
+describe("LOOP-02: Identity path rendering (real view)", () => {
+  const identityMeta = (view: RDLoopView): string =>
+    view.contentEl.querySelector(".rdl-identity .rdl-meta")?.textContent ?? "";
+
+  it("identity shows id, status, path; lastVerified only when available", async () => {
+    const { view } = await loopWorkspace([
+      [L, note(L, "LOOP-1", ["status: open"])],
+    ], L);
+    const meta = identityMeta(view);
+    expect(meta).toContain("LOOP-1");
+    expect(meta).toContain("open");
+    expect(meta).toContain(L);
+    expect(meta).not.toContain("verified");
+  });
+
+  it("select/follow LOOP A → LOOP B updates the visible path (same title, different path)", async () => {
+    const { host, view } = await loopWorkspace([
+      [L, note(L, "Twin Loop", ["status: open"])],
+      [L2, note(L2, "Twin Loop", ["status: open"])],
+    ], L);
+    expect(view.contentEl.querySelector(".rdl-identity-title")?.textContent).toBe("Twin Loop — fixture");
+    expect(identityMeta(view)).toContain(L);
+    expect(identityMeta(view)).not.toContain(L2);
+
+    host.workspace.fireFileOpen(L2);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(view.contentEl.querySelector(".rdl-identity-title")?.textContent).toBe("Twin Loop — fixture");
+    expect(identityMeta(view)).toContain(L2);
+    expect(identityMeta(view)).not.toContain(L);
+  });
+
+  it("selector click also updates the visible path", async () => {
+    const { view } = await loopWorkspace([
+      [L, note(L, "LOOP-1")],
+      [L2, note(L2, "LOOP-2")],
+    ], A);
+    expect(identityMeta(view)).toBe(""); // selector mode: no identity yet
+    const picks = [...view.contentEl.querySelectorAll<HTMLButtonElement>(".rdl-loop-pick")];
+    picks[1].click();
+    expect(identityMeta(view)).toContain(L2);
   });
 });

@@ -35,6 +35,8 @@ export interface LoopIdentity {
   lastVerified: string | null;
 }
 
+export type LoopRowSection = "recurrences" | "evidence" | "hypotheses" | "cases";
+
 export interface LoopRelationRow {
   key: string;
   predicate: string;
@@ -45,6 +47,32 @@ export interface LoopRelationRow {
   otherPath: string | null;
   otherType: RDObjectType | null;
   resolution: ResolutionState;
+  /** LOOP-01: the ONE presentation section that owns this row.
+   * Deterministic single-owner rule (below) — every normalized
+   * relation.key renders exactly once across the whole workspace. */
+  section: LoopRowSection;
+}
+
+/** LOOP-01 deterministic single-owner presentation rule, based ONLY
+ * on existing normalized semantics:
+ *
+ *   1. recurrence predicates (repeats_in / observed_in) are owned by
+ *      Recurrences regardless of what the other endpoint resolves to;
+ *   2. otherwise a resolved evidence / hypothesis / case endpoint
+ *      owns the row in its typed section;
+ *   3. anything else (unresolved endpoint of a non-recurrence
+ *      predicate, or a resolved loop-to-loop endpoint) is owned by
+ *      Recurrences so that NO connected relation is silently
+ *      dropped — the row shows its actual predicate text.
+ *
+ * The rule never merges keys and never drops a relation: exactly one
+ * owner per relation.key. */
+function ownerSection(row: Omit<LoopRelationRow, "section">): LoopRowSection {
+  if (RECURRENCE_PREDICATES.has(row.predicate)) return "recurrences";
+  if (row.otherType === "evidence") return "evidence";
+  if (row.otherType === "hypothesis") return "hypotheses";
+  if (row.otherType === "case") return "cases";
+  return "recurrences";
 }
 
 export interface LoopSelectorEntry {
@@ -133,7 +161,7 @@ export function buildLoopProjection(
     const side = otherSide(relation, selected.path);
     if (side === null) continue;
     const otherPath = side.other.path;
-    rows.push({
+    const partial = {
       key: relation.key,
       predicate: relation.predicate,
       direction: side.direction,
@@ -141,14 +169,17 @@ export function buildLoopProjection(
       otherPath,
       otherType: otherPath !== null ? typeByPath.get(otherPath)?.type ?? null : null,
       resolution: side.other.resolution,
-    });
+    };
+    rows.push({ ...partial, section: ownerSection(partial) });
   }
   // Deterministic order independent of relation insertion order.
   rows.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
-  data.recurrences = rows.filter((r) => RECURRENCE_PREDICATES.has(r.predicate));
-  data.evidence = rows.filter((r) => r.otherType === "evidence");
-  data.hypotheses = rows.filter((r) => r.otherType === "hypothesis");
-  data.cases = rows.filter((r) => r.otherType === "case");
+  // LOOP-01: single-owner sections — every row lands in exactly one
+  // section, so each normalized relation.key renders exactly once.
+  data.recurrences = rows.filter((r) => r.section === "recurrences");
+  data.evidence = rows.filter((r) => r.section === "evidence");
+  data.hypotheses = rows.filter((r) => r.section === "hypotheses");
+  data.cases = rows.filter((r) => r.section === "cases");
   return data;
 }

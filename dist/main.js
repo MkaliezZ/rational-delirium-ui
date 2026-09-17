@@ -615,6 +615,13 @@ var RECURRENCE_PREDICATES = /* @__PURE__ */ new Set([
   "repeats_in",
   "observed_in"
 ]);
+function ownerSection(row) {
+  if (RECURRENCE_PREDICATES.has(row.predicate)) return "recurrences";
+  if (row.otherType === "evidence") return "evidence";
+  if (row.otherType === "hypothesis") return "hypotheses";
+  if (row.otherType === "case") return "cases";
+  return "recurrences";
+}
 function endpointLabel2(objectId, raw) {
   return objectId !== null && objectId.length > 0 ? objectId : raw;
 }
@@ -661,7 +668,7 @@ function buildLoopProjection(index2, selectedLoopPath) {
     const side = otherSide(relation, selected.path);
     if (side === null) continue;
     const otherPath = side.other.path;
-    rows.push({
+    const partial = {
       key: relation.key,
       predicate: relation.predicate,
       direction: side.direction,
@@ -669,13 +676,14 @@ function buildLoopProjection(index2, selectedLoopPath) {
       otherPath,
       otherType: otherPath !== null ? typeByPath.get(otherPath)?.type ?? null : null,
       resolution: side.other.resolution
-    });
+    };
+    rows.push({ ...partial, section: ownerSection(partial) });
   }
   rows.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-  data.recurrences = rows.filter((r) => RECURRENCE_PREDICATES.has(r.predicate));
-  data.evidence = rows.filter((r) => r.otherType === "evidence");
-  data.hypotheses = rows.filter((r) => r.otherType === "hypothesis");
-  data.cases = rows.filter((r) => r.otherType === "case");
+  data.recurrences = rows.filter((r) => r.section === "recurrences");
+  data.evidence = rows.filter((r) => r.section === "evidence");
+  data.hypotheses = rows.filter((r) => r.section === "hypotheses");
+  data.cases = rows.filter((r) => r.section === "cases");
   return data;
 }
 
@@ -790,7 +798,8 @@ var RDLoopView = class extends import_obsidian3.ItemView {
     this.renderRows(shell, "Hypotheses", data.hypotheses, "No connected hypotheses.");
     this.renderRows(shell, "Related Cases", data.cases, "No related cases.");
   }
-  /** §6: canonical LOOP fields only. */
+  /** §6 + LOOP-02: canonical LOOP fields only — title, id, status,
+   * path, lastVerified — as read-only safe text. */
   renderIdentity(shell, data) {
     const identity = data.selectedLoop;
     if (identity === null) return;
@@ -798,7 +807,11 @@ var RDLoopView = class extends import_obsidian3.ItemView {
     const idEl = createChild(section, "div", { cls: "rdl-identity" });
     createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
     const meta = createChild(idEl, "span", { cls: "rdl-meta" });
-    const bits = [identity.id ?? "(no id)", identity.status || "(no status)"];
+    const bits = [
+      identity.id ?? "(no id)",
+      identity.status || "(no status)",
+      identity.path
+    ];
     if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
     meta.textContent = bits.join(" \xB7 ");
   }
