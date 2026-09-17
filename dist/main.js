@@ -314,12 +314,17 @@ var import_obsidian2 = require("obsidian");
 
 // src/investigation/investigation-projection.ts
 var RECENT_LIMIT = 12;
-function relationKind(relation) {
-  if (relation.predicate === "contradicts") return "CONTRADICTION";
+function endpointNeedsAttention(resolution) {
+  return resolution === "BROKEN" || resolution === "AMBIGUOUS";
+}
+function relationResolution(relation) {
   const states = [relation.source.resolution, relation.target.resolution];
   if (states.includes("AMBIGUOUS")) return "AMBIGUOUS";
   if (states.includes("BROKEN")) return "BROKEN";
-  return null;
+  return "RESOLVED";
+}
+function needsAttention(relation) {
+  return relation.predicate === "contradicts" || endpointNeedsAttention(relationResolution(relation));
 }
 function endpointLabel(objectId, raw) {
   return objectId !== null && objectId.length > 0 ? objectId : raw;
@@ -359,9 +364,13 @@ function buildInvestigationProjection(index2) {
     return entry;
   };
   for (const relation of relations) {
-    const bucket = relation.predicate === "contradicts" ? "contradiction" : relationKind(relation) !== null ? "unresolved" : "resolved";
+    const isContradiction = relation.predicate === "contradicts";
+    const unresolved = endpointNeedsAttention(relationResolution(relation));
     for (const endpoint of [relation.source, relation.target]) {
-      if (endpoint.path !== null) summaryOf(endpoint.path)[bucket] += 1;
+      if (endpoint.path === null) continue;
+      if (isContradiction) summaryOf(endpoint.path).contradiction += 1;
+      if (unresolved) summaryOf(endpoint.path).unresolved += 1;
+      if (!isContradiction && !unresolved) summaryOf(endpoint.path).resolved += 1;
     }
   }
   const cases = objects.filter((object) => object.type === "case").sort(compareByMtimeDescPathAsc).map((object) => ({
@@ -372,9 +381,10 @@ function buildInvestigationProjection(index2) {
     mtime: object.mtime,
     relations: relationSummary.get(object.path) ?? { resolved: 0, unresolved: 0, contradiction: 0 }
   }));
-  const attention2 = relations.filter((relation) => relationKind(relation) !== null).map((relation) => ({
+  const attention2 = relations.filter((relation) => needsAttention(relation)).map((relation) => ({
     key: relation.key,
-    kind: relationKind(relation),
+    isContradiction: relation.predicate === "contradicts",
+    resolution: relationResolution(relation),
     sourceLabel: endpointLabel(relation.source.objectId, relation.source.raw),
     sourcePath: relation.source.path,
     predicate: relation.predicate,
@@ -527,12 +537,18 @@ var RDInvestigationView = class extends import_obsidian2.ItemView {
       });
     }
   }
-  /** §9: logical relations needing attention. §22 invariants: E != F,
-   * raw labels visible, logical dedup already done by the index. */
+  /** §9/INV-01: logical relations needing attention on EITHER
+   * dimension — contradiction classification or unresolved endpoint.
+   * §22 invariants: E != F, raw labels visible, logical dedup already
+   * done by the index. */
   renderAttention(shell, data) {
     const section = this.section(shell, "Attention");
-    const kinds = this.filter === "unresolved" ? ["BROKEN", "AMBIGUOUS"] : this.filter === "contradictions" ? ["CONTRADICTION"] : ["BROKEN", "AMBIGUOUS", "CONTRADICTION"];
-    const items = data.attention.filter((item) => kinds.includes(item.kind));
+    const items = data.attention.filter((item) => {
+      const unresolved = item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS";
+      if (this.filter === "unresolved") return unresolved;
+      if (this.filter === "contradictions") return item.isContradiction;
+      return true;
+    });
     if (items.length === 0) {
       createChild(section, "div", { cls: "rdi-state", text: "Nothing requires attention." });
       return;
@@ -547,9 +563,16 @@ var RDInvestigationView = class extends import_obsidian2.ItemView {
     if (!navigable) row.setAttribute("aria-disabled", "true");
     const line = createChild(row, "span", { cls: "rdi-att-line" });
     line.textContent = `${item.sourceLabel} ${item.predicate} ${item.targetLabel}`;
-    const badge = createChild(row, "span", { cls: "rdi-badge" });
-    badge.textContent = item.kind;
-    badge.setAttribute("data-kind", item.kind);
+    if (item.isContradiction) {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = "CONTRADICTION";
+      badge.setAttribute("data-kind", "CONTRADICTION");
+    }
+    if (item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS") {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = item.resolution;
+      badge.setAttribute("data-kind", item.resolution);
+    }
     if (navigable && item.targetPath !== null) {
       const path = item.targetPath;
       row.setAttribute("aria-label", `Open ${item.targetLabel}`);

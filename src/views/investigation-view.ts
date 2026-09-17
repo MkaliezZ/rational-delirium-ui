@@ -166,15 +166,21 @@ export class RDInvestigationView extends ItemView {
     }
   }
 
-  /** §9: logical relations needing attention. §22 invariants: E != F,
-   * raw labels visible, logical dedup already done by the index. */
+  /** §9/INV-01: logical relations needing attention on EITHER
+   * dimension — contradiction classification or unresolved endpoint.
+   * §22 invariants: E != F, raw labels visible, logical dedup already
+   * done by the index. */
   private renderAttention(shell: HTMLElement, data: InvestigationProjectionData): void {
     const section = this.section(shell, "Attention");
-    const kinds =
-      this.filter === "unresolved" ? ["BROKEN", "AMBIGUOUS"]
-        : this.filter === "contradictions" ? ["CONTRADICTION"]
-          : ["BROKEN", "AMBIGUOUS", "CONTRADICTION"];
-    const items = data.attention.filter((item) => kinds.includes(item.kind));
+    // INV-01 §6/§7: filter membership derives from the ACTUAL
+    // dimension, not a primary kind — an unresolved contradiction
+    // appears under BOTH Unresolved and Contradictions.
+    const items = data.attention.filter((item) => {
+      const unresolved = item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS";
+      if (this.filter === "unresolved") return unresolved;
+      if (this.filter === "contradictions") return item.isContradiction;
+      return true;
+    });
     if (items.length === 0) {
       createChild(section, "div", { cls: "rdi-state", text: "Nothing requires attention." });
       return;
@@ -185,18 +191,28 @@ export class RDInvestigationView extends ItemView {
   }
 
   private renderAttentionRow(section: HTMLElement, item: AttentionItem): void {
-    // §10: only a RESOLVED target on an existing path may navigate.
-    // BROKEN/AMBIGUOUS rows are inert — no file creation, no guess,
-    // no arbitrary candidate open.
+    // §10/INV-01 §9: only a RESOLVED target on an existing path may
+    // navigate. BROKEN/AMBIGUOUS rows are inert — no file creation,
+    // no guess, no arbitrary candidate open. An unresolved
+    // contradiction stays inert even though the opposite normalized
+    // endpoint is known.
     const navigable = item.targetPath !== null && item.targetResolution === "RESOLVED";
     const row = createChild(section, navigable ? "button" : "div", { cls: "rdi-att" });
     if (!navigable) row.setAttribute("aria-disabled", "true");
     const line = createChild(row, "span", { cls: "rdi-att-line" });
     line.textContent = `${item.sourceLabel} ${item.predicate} ${item.targetLabel}`;
-    // §31: visible text semantics, never color-only status.
-    const badge = createChild(row, "span", { cls: "rdi-badge" });
-    badge.textContent = item.kind;
-    badge.setAttribute("data-kind", item.kind);
+    // INV-01 §8: BOTH facts visible as text when they overlap
+    // (CONTRADICTION + BROKEN/AMBIGUOUS). Never color-only.
+    if (item.isContradiction) {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = "CONTRADICTION";
+      badge.setAttribute("data-kind", "CONTRADICTION");
+    }
+    if (item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS") {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = item.resolution;
+      badge.setAttribute("data-kind", item.resolution);
+    }
     if (navigable && item.targetPath !== null) {
       const path = item.targetPath;
       row.setAttribute("aria-label", `Open ${item.targetLabel}`);

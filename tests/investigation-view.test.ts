@@ -6,6 +6,7 @@ import {
 } from "../src/views/investigation-view";
 import { ProductionAcceptanceHost } from "./support/production-acceptance-host";
 import { fixtureNote } from "./support/fake-adapter";
+import { buildInvestigationProjection } from "../src/investigation/investigation-projection";
 
 const A = "CASES/A.md", B = "EVIDENCE/B.md", Amb = "CASES/Amb.md";
 const C1 = "EVIDENCE/C.md", C2 = "ARCHIVE/C.md";
@@ -43,6 +44,9 @@ afterEach(async () => {
 
 const sections = (view: RDInvestigationView): string[] =>
   [...view.contentEl.querySelectorAll(".rdi-section-title")].map((el) => el.textContent);
+
+const countText = (view: RDInvestigationView): string[] =>
+  [...view.contentEl.querySelectorAll(".rdi-count")].map((el) => el.textContent);
 
 async function clickEl(view: RDInvestigationView, selector: string): Promise<void> {
   const el = view.contentEl.querySelector<HTMLElement>(selector);
@@ -220,5 +224,104 @@ describe("accessibility smoke (§31)", () => {
     }
     const caseBtn = view.contentEl.querySelector<HTMLButtonElement>(".rdi-case");
     expect(caseBtn?.getAttribute("aria-label")).toContain("Open case");
+  });
+});
+
+describe("INV-01 overlap regressions — real RDInvestigationView (§11, §12)", () => {
+  const E1 = "EVIDENCE/E.md", E2 = "ARCHIVE/E.md";
+
+  type Direction = "contradicts" | "contradicted_by";
+  type Resolution = "BROKEN" | "AMBIGUOUS";
+
+  async function overlapCase(direction: Direction, resolution: Resolution) {
+    const extra = [`${direction}: "[[E]]"`];
+    const entries: Array<[string, string]> = [[A, note(A, "ACTUAL-A", extra)]];
+    if (resolution === "AMBIGUOUS") {
+      entries.push([E1, note(E1, "ACTUAL-E")]);
+      entries.push([E2, note(E2, "OTHER-E")]);
+    }
+    return await dashboard(entries);
+  }
+
+  function run(direction: Direction, resolution: Resolution) {
+    it(`${direction} + ${resolution}: one logical row in every relevant view, both states visible, inert navigation`, async () => {
+      const { host, view } = await overlapCase(direction, resolution);
+
+      // one logical relation only (no duplication introduced for the second dimension)
+      const projection = buildInvestigationProjection(host.wiring.index);
+      expect(projection.attention).toHaveLength(1);
+      const item = projection.attention[0];
+      expect(item.isContradiction).toBe(true);
+      expect(item.resolution).toBe(resolution);
+
+      // Knowledge State: contradiction AND unresolved both counted
+      const counts = countText(view);
+      expect(counts).toContain("1CONTRADICTION");
+      expect(counts).toContain(`1${resolution}`);
+
+      // CASE summary: contradiction=1, unresolved=1 (independent dimensions)
+      expect(projection.cases[0].relations).toEqual({
+        resolved: 0, unresolved: 1, contradiction: 1,
+      });
+
+      // All: exactly one logical row, both facts visible as text
+      const rowInAll = view.contentEl.querySelector(".rdi-att")!;
+      expect(view.contentEl.querySelectorAll(".rdi-att")).toHaveLength(1);
+      const badgesInAll = [...rowInAll.querySelectorAll(".rdi-badge")].map(
+        (b) => b.textContent,
+      );
+      expect(badgesInAll).toEqual(["CONTRADICTION", resolution]);
+
+      // Contradictions filter: same logical row
+      view.setFilter("contradictions");
+      expect(view.contentEl.querySelectorAll(".rdi-att")).toHaveLength(1);
+      expect(
+        [...view.contentEl.querySelectorAll(".rdi-badge")].map((b) => b.textContent),
+      ).toEqual(["CONTRADICTION", resolution]);
+
+      // Unresolved filter: the SAME relation MUST appear here too
+      view.setFilter("unresolved");
+      const rows = view.contentEl.querySelectorAll(".rdi-att");
+      expect(rows).toHaveLength(1);
+      expect(
+        [...rows[0].querySelectorAll(".rdi-badge")].map((b) => b.textContent),
+      ).toEqual(["CONTRADICTION", resolution]);
+
+      // navigation inert + zero knowledge writes (§9)
+      for (const row of [rowInAll, rows[0]]) {
+        expect(row.tagName).toBe("DIV");
+        expect(row.getAttribute("aria-disabled")).toBe("true");
+        row.dispatchEvent(new Event("click", { bubbles: true }));
+      }
+      await Promise.all(host.openSpy.mock.results.map((r) => r.value));
+      expect(host.openSpy).not.toHaveBeenCalled();
+      expect(host.workspace.opens).toEqual([]);
+      expect(host.vault.writeCalls).toEqual([]);
+      view.setFilter("all");
+    });
+  }
+
+  run("contradicts", "BROKEN");
+  run("contradicts", "AMBIGUOUS");
+  run("contradicted_by", "BROKEN");
+  run("contradicted_by", "AMBIGUOUS");
+});
+
+describe("view unsubscribe on close (INV-01 §13)", () => {
+  it("closed view does not render on later index commits", async () => {
+    const { host, view } = await dashboard([
+      [A, note(A, "ACTUAL-A")],
+      [B, note(B, "ACTUAL-B")],
+    ]);
+    await view.onClose();
+    expect(view.contentEl.children.length).toBe(0);
+
+    host.vault.setCurrent(A, note(A, "ACTUAL-A", ['supported_by: "[[F]]"']));
+    host.vault.fireModify(A);
+    host.wiring.scheduler?.flush();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(view.contentEl.children.length).toBe(0);
   });
 });

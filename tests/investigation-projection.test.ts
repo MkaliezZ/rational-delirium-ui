@@ -88,8 +88,11 @@ describe("investigation projection — attention (§21, §22, §23)", () => {
     expect(p.counts.broken).toBe(1);
     expect(p.counts.ambiguous).toBe(1);
     expect(p.counts.contradiction).toBe(1);
-    const kinds = p.attention.map((i) => i.kind).sort();
-    expect(kinds).toEqual(["AMBIGUOUS", "BROKEN", "CONTRADICTION"]);
+    const signature = (i: { isContradiction: boolean; resolution: string }) =>
+      (i.isContradiction ? "CONTRADICTION+" : "+") + i.resolution;
+    expect(p.attention.map(signature).sort()).toEqual([
+      "+AMBIGUOUS", "+BROKEN", "CONTRADICTION+RESOLVED",
+    ]);
   });
 
   it("contradiction attention shows even when both endpoints are RESOLVED", async () => {
@@ -100,8 +103,9 @@ describe("investigation projection — attention (§21, §22, §23)", () => {
     const p = buildInvestigationProjection(index);
     expect(p.counts.contradiction).toBe(1);
     expect(p.counts.broken).toBe(0);
-    const item = p.attention.find((i) => i.kind === "CONTRADICTION");
+    const item = p.attention.find((i) => i.isContradiction);
     expect(item).toBeDefined();
+    expect(item?.resolution).toBe("RESOLVED");
     // contradicted_by swaps endpoints: the declarer (case A) is the
     // logical target of the normalized contradicts relation.
     expect(item).toMatchObject({
@@ -117,7 +121,9 @@ describe("investigation projection — attention (§21, §22, §23)", () => {
       [A, reverseNote("supported_by", ["E", "F"])],
     ]);
     const p = buildInvestigationProjection(index);
-    const broken = p.attention.filter((i) => i.kind === "BROKEN");
+    const broken = p.attention.filter(
+      (i) => !i.isContradiction && i.resolution === "BROKEN",
+    );
     expect(broken).toHaveLength(2);
     const labels = broken.map((i) => `${i.sourceLabel} ${i.predicate} ${i.targetLabel}`);
     expect(labels).toContain("E supports ACTUAL-A");

@@ -17,9 +17,25 @@ import type {
   ResolutionState,
 } from "../model";
 
-/** §11: contradiction IS a logical predicate that already exists in
- * the normalized model. No new inference engine, no keyword match. */
-export type AttentionKind = "BROKEN" | "AMBIGUOUS" | "CONTRADICTION";
+/** §11 (INV-01): contradiction classification and endpoint-resolution
+ * classification are INDEPENDENT dimensions. One logical relation may
+ * be a contradiction AND BROKEN/AMBIGUOUS at the same time; both
+ * facts stay visible and both drive filter membership. */
+export interface AttentionItem {
+  key: string;
+  /** Logical predicate is `contradicts` (normalized). */
+  isContradiction: boolean;
+  /** Worst endpoint resolution; RESOLVED when both endpoints resolve. */
+  resolution: ResolutionState;
+  /** Real object ID when known; raw text otherwise (§9: raw
+   * unresolved label stays visible, E != F). */
+  sourceLabel: string;
+  sourcePath: string | null;
+  predicate: string;
+  targetLabel: string;
+  targetPath: string | null;
+  targetResolution: ResolutionState;
+}
 
 export interface InvestigationCounts {
   case: number;
@@ -41,19 +57,6 @@ export interface InvestigationCaseRow {
   relations: { resolved: number; unresolved: number; contradiction: number };
 }
 
-export interface AttentionItem {
-  key: string;
-  kind: AttentionKind;
-  /** Real object ID when known; raw text otherwise (§9: raw
-   * unresolved label stays visible, E != F). */
-  sourceLabel: string;
-  sourcePath: string | null;
-  predicate: string;
-  targetLabel: string;
-  targetPath: string | null;
-  targetResolution: ResolutionState;
-}
-
 export interface RecentObjectRow {
   path: string;
   type: RDObjectType;
@@ -73,12 +76,25 @@ export interface InvestigationProjectionData {
 /** §12: Recent is a view over CURRENT filesystem metadata only. */
 export const RECENT_LIMIT = 12;
 
-function relationKind(relation: RDRelation): AttentionKind | null {
-  if (relation.predicate === "contradicts") return "CONTRADICTION";
+function endpointNeedsAttention(resolution: ResolutionState): boolean {
+  return resolution === "BROKEN" || resolution === "AMBIGUOUS";
+}
+
+/** INV-01 §3: resolution dimension is independent of contradiction
+ * classification. Worst-state wins (AMBIGUOUS over BROKEN); RESOLVED
+ * only when every endpoint resolves. */
+function relationResolution(relation: RDRelation): ResolutionState {
   const states = [relation.source.resolution, relation.target.resolution];
   if (states.includes("AMBIGUOUS")) return "AMBIGUOUS";
   if (states.includes("BROKEN")) return "BROKEN";
-  return null;
+  return "RESOLVED";
+}
+
+/** INV-01: an item needs attention when it is a contradiction OR has
+ * an unresolved endpoint (either dimension alone is sufficient). */
+function needsAttention(relation: RDRelation): boolean {
+  return relation.predicate === "contradicts"
+    || endpointNeedsAttention(relationResolution(relation));
 }
 
 function endpointLabel(
@@ -133,15 +149,16 @@ export function buildInvestigationProjection(
     return entry;
   };
   for (const relation of relations) {
-    // Classify the LOGICAL relation as a whole (§9: not raw
-    // provenance): contradiction first, then unresolved, else
-    // resolved; attributed to every endpoint that actually exists.
-    const bucket: "resolved" | "unresolved" | "contradiction" =
-      relation.predicate === "contradicts" ? "contradiction"
-        : relationKind(relation) !== null ? "unresolved"
-          : "resolved";
+    // INV-01 §10: contradiction and unresolved are independent,
+    // additive contributions — no mutual exclusion. `resolved` keeps
+    // its pre-existing meaning (fully resolved, non-contradiction).
+    const isContradiction = relation.predicate === "contradicts";
+    const unresolved = endpointNeedsAttention(relationResolution(relation));
     for (const endpoint of [relation.source, relation.target]) {
-      if (endpoint.path !== null) summaryOf(endpoint.path)[bucket] += 1;
+      if (endpoint.path === null) continue;
+      if (isContradiction) summaryOf(endpoint.path).contradiction += 1;
+      if (unresolved) summaryOf(endpoint.path).unresolved += 1;
+      if (!isContradiction && !unresolved) summaryOf(endpoint.path).resolved += 1;
     }
   }
 
@@ -159,10 +176,11 @@ export function buildInvestigationProjection(
     }));
 
   const attention: AttentionItem[] = relations
-    .filter((relation) => relationKind(relation) !== null)
+    .filter((relation) => needsAttention(relation))
     .map((relation) => ({
       key: relation.key,
-      kind: relationKind(relation) as AttentionKind,
+      isContradiction: relation.predicate === "contradicts",
+      resolution: relationResolution(relation),
       sourceLabel: endpointLabel(relation.source.objectId, relation.source.raw),
       sourcePath: relation.source.path,
       predicate: relation.predicate,
