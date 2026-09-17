@@ -37,7 +37,14 @@ export class RDGraphIntelligenceView extends ItemView {
   private selectedPath: string | null = null;
   /** §15: memory-only expanded second-hop neighbors (resolved paths). */
   private expandedNeighbors = new Set<string>();
+  /** GI-04: native graph result is ROOT-SPECIFIC; null until known
+   * for the CURRENT root, reset on every root change, and guarded by
+   * a generation token so stale async results cannot leak across. */
   private nativeGraphState: "OPENED" | "UNAVAILABLE" | null = null;
+  private nativeGraphRoot: string | null = null;
+  private nativeGraphGeneration = 0;
+  /** GI-02: focus restoration key after a disclosure redraw. */
+  private focusRestoreNeighbor: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, deps: GraphDeps) {
     super(leaf);
@@ -71,6 +78,8 @@ export class RDGraphIntelligenceView extends ItemView {
     if (path !== this.selectedPath) {
       // §4: changing the root resets all second-hop expansion state.
       this.expandedNeighbors.clear();
+      // GI-04: native graph state belongs to the previous root.
+      this.resetNativeGraphState();
     }
     this.selectedPath = path;
     this.render();
@@ -91,8 +100,17 @@ export class RDGraphIntelligenceView extends ItemView {
     const object = this.deps.index.objectAt(path);
     if (object === null) return false;
     this.expandedNeighbors.clear();
+    this.resetNativeGraphState();
     this.selectedPath = path;
     return true;
+  }
+
+  /** GI-04: root-bound native state; stale async results are also
+   * generation-guarded at completion time. */
+  private resetNativeGraphState(): void {
+    this.nativeGraphState = null;
+    this.nativeGraphRoot = null;
+    this.nativeGraphGeneration += 1;
   }
 
   private onIndexChanged(): void {
@@ -101,6 +119,7 @@ export class RDGraphIntelligenceView extends ItemView {
       if (object === null) {
         this.selectedPath = null;
         this.expandedNeighbors.clear();
+        this.resetNativeGraphState();
       }
     }
     // §15: safely drop expansions for vanished/declassified neighbors.
@@ -117,6 +136,23 @@ export class RDGraphIntelligenceView extends ItemView {
     emptyEl(shell);
 
     const data = buildGraphProjection(this.deps.index, this.selectedPath);
+
+    // GI-02: after a disclosure redraw, restore focus to the toggle
+    // that caused it (matched by data-attribute property comparison).
+    const restoreFocus = this.focusRestoreNeighbor;
+    this.focusRestoreNeighbor = null;
+    if (restoreFocus !== null) {
+      window.setTimeout(() => {
+        for (const toggle of this.container?.querySelectorAll<HTMLButtonElement>(
+          ".rdg-hop-toggle",
+        ) ?? []) {
+          if (toggle.dataset.neighborPath === restoreFocus) {
+            toggle.focus();
+            return;
+          }
+        }
+      }, 0);
+    }
 
     const head = createChild(shell, "div", { cls: "rdg-head" });
     createChild(head, "div", { cls: "rdg-title", text: "Graph Intelligence" });
@@ -209,34 +245,44 @@ export class RDGraphIntelligenceView extends ItemView {
     edge: GraphEdgeRow,
     expandable: boolean,
   ): void {
+    // GI-02: the row is a NON-interactive container; endpoint
+    // navigation and second-hop disclosure are SEPARATE sibling
+    // controls. Unresolved rows stay fully inert (no fake buttons).
     const navigable = edge.otherPath !== null && edge.resolution === "RESOLVED";
-    const el = createChild(container, navigable ? "button" : "div", { cls: "rdg-rel" });
-    if (!navigable) el.setAttribute("aria-disabled", "true");
-    const line = createChild(el, "span", { cls: "rdg-rel-line" });
+    const row = createChild(container, "div", { cls: "rdg-rel" });
+    if (!navigable) row.setAttribute("aria-disabled", "true");
+    const line = createChild(row, "span", { cls: "rdg-rel-line" });
     const typeTag = edge.otherType !== null ? ` [${edge.otherType}]` : "";
     line.textContent =
       `${edge.direction === "outgoing" ? "→" : "←"} ${edge.predicate} ${edge.otherLabel}${typeTag}`;
-    const badge = createChild(el, "span", { cls: "rdg-badge" });
+    const badge = createChild(row, "span", { cls: "rdg-badge" });
     badge.textContent = edge.resolution;
     badge.setAttribute("data-state", edge.resolution);
 
     if (navigable && edge.otherPath !== null) {
       const otherPath = edge.otherPath;
-      el.setAttribute("aria-label", `Open ${edge.otherLabel}`);
-      el.addEventListener("click", () => {
+      const endpoint = createChild(row, "button", { cls: "rdg-endpoint" });
+      endpoint.textContent = "open";
+      endpoint.setAttribute("aria-label", `Open ${edge.otherLabel}`);
+      endpoint.addEventListener("click", () => {
         void this.deps.navigation.open({ path: otherPath }, "normal");
       });
       // §12: only RESOLVED first-hop endpoints expose expansion.
       if (expandable) {
-        const toggle = createChild(el, "button", { cls: "rdg-hop-toggle" });
+        const toggle = createChild(row, "button", { cls: "rdg-hop-toggle" });
         const expanded = this.expandedNeighbors.has(otherPath);
         toggle.textContent = expanded ? "− second hop" : "+ second hop";
         toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
         toggle.setAttribute("aria-label", `Toggle second hop via ${edge.otherLabel}`);
+        // GI-02: path kept as a data attribute and matched by PROPERTY
+        // comparison (never CSS selector interpolation — arbitrary
+        // Markdown paths may contain # " [ ]).
+        toggle.setAttribute("data-neighbor-path", otherPath);
         toggle.addEventListener("click", (e) => {
           e.stopPropagation();
           if (this.expandedNeighbors.has(otherPath)) this.expandedNeighbors.delete(otherPath);
           else this.expandedNeighbors.add(otherPath);
+          this.focusRestoreNeighbor = otherPath;
           this.render();
         });
       }
@@ -277,7 +323,10 @@ export class RDGraphIntelligenceView extends ItemView {
     });
   }
 
-  /** §17: restrained native handoff through the ONE NavigationPort. */
+  /** §17 + GI-04: restrained native handoff through the ONE
+   * NavigationPort. The pending result is bound to the CURRENT root
+   * and a generation token; a root switch invalidates both, so a
+   * stale async completion can never overwrite the new root's UI. */
   private renderNativeGraph(shell: HTMLElement, path: string): void {
     const section = this.section(shell, "Native Graph");
     const btn = createChild(section, "button", { cls: "rdg-native" });
@@ -285,17 +334,25 @@ export class RDGraphIntelligenceView extends ItemView {
     btn.setAttribute("aria-label", "Open Obsidian local graph for the selected object");
     btn.addEventListener("click", () => {
       const opener = this.deps.navigation.openLocalGraph;
+      const generation = this.nativeGraphGeneration;
+      const rootAtClick = this.selectedPath;
       if (opener === undefined) {
+        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
         this.nativeGraphState = "UNAVAILABLE";
+        this.nativeGraphRoot = rootAtClick;
         this.render();
         return;
       }
       void opener.call(this.deps.navigation, path).then((result) => {
+        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
+          return; // stale: root changed while the request was in flight
+        }
         this.nativeGraphState = result;
+        this.nativeGraphRoot = rootAtClick;
         this.render();
       });
     });
-    if (this.nativeGraphState === "UNAVAILABLE") {
+    if (this.nativeGraphState === "UNAVAILABLE" && this.nativeGraphRoot === path) {
       createChild(section, "div", { cls: "rdg-state", text: "Native Local Graph unavailable." });
     }
   }

@@ -58,12 +58,13 @@ export class ObsidianNavigationPort implements NavigationPort {
     }
   }
 
-  /** v0.4.4 §17: restrained native Local Graph handoff. The only
-   * structural cast (command registry lookup) lives HERE, runtime
-   * shape-guarded, never exposed to projections/views. Steps: verify
-   * the path is a real Markdown file, make it the active editor
-   * anchor, then invoke Obsidian's built-in local-graph command and
-   * leave all graph rendering to Obsidian. No renderer internals. */
+  /** v0.4.4 §17 + GI-01/GI-03 repair: restrained native Local Graph
+   * handoff. The only structural cast (command registry lookup) lives
+   * HERE, runtime shape-guarded, never exposed to projections/views.
+   * The requested path is opened as the EXACT TFile via leaf/file
+   * APIs — never as linktext, so filesystem paths containing `#`
+   * cannot be reinterpreted and no note can ever be created. The
+   * command dispatch result must be an explicit success. */
   async openLocalGraph(path: string): Promise<"OPENED" | "UNAVAILABLE"> {
     const commands = (this.app as {
       commands?: { executeCommandById?: (id: string) => unknown };
@@ -74,8 +75,18 @@ export class ObsidianNavigationPort implements NavigationPort {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) return "UNAVAILABLE";
     try {
-      await this.app.workspace.openLinkText(path, "", false);
-      await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      // GI-01: exact-TFile anchoring via leaf/file APIs only.
+      const leaf = this.app.workspace.getLeaf(false);
+      if (leaf === null) return "UNAVAILABLE";
+      await leaf.openFile(file);
+      this.app.workspace.revealLeaf(leaf);
+      // GI-01: verify the active markdown path is EXACTLY the request
+      // before dispatching; any race/deletion/mismatch degrades.
+      const active = this.app.workspace.getActiveFile();
+      if (active === null || active.path !== path) return "UNAVAILABLE";
+      // GI-03: read the dispatch result; only explicit success opens.
+      const result = await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      if (result !== true) return "UNAVAILABLE";
       return "OPENED";
     } catch {
       return "UNAVAILABLE";

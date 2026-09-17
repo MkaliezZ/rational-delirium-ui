@@ -956,7 +956,14 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     this.selectedPath = null;
     /** §15: memory-only expanded second-hop neighbors (resolved paths). */
     this.expandedNeighbors = /* @__PURE__ */ new Set();
+    /** GI-04: native graph result is ROOT-SPECIFIC; null until known
+     * for the CURRENT root, reset on every root change, and guarded by
+     * a generation token so stale async results cannot leak across. */
     this.nativeGraphState = null;
+    this.nativeGraphRoot = null;
+    this.nativeGraphGeneration = 0;
+    /** GI-02: focus restoration key after a disclosure redraw. */
+    this.focusRestoreNeighbor = null;
     this.deps = deps;
   }
   getViewType() {
@@ -988,6 +995,7 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
   selectObject(path) {
     if (path !== this.selectedPath) {
       this.expandedNeighbors.clear();
+      this.resetNativeGraphState();
     }
     this.selectedPath = path;
     this.render();
@@ -1009,8 +1017,16 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     const object = this.deps.index.objectAt(path);
     if (object === null) return false;
     this.expandedNeighbors.clear();
+    this.resetNativeGraphState();
     this.selectedPath = path;
     return true;
+  }
+  /** GI-04: root-bound native state; stale async results are also
+   * generation-guarded at completion time. */
+  resetNativeGraphState() {
+    this.nativeGraphState = null;
+    this.nativeGraphRoot = null;
+    this.nativeGraphGeneration += 1;
   }
   onIndexChanged() {
     if (this.selectedPath !== null) {
@@ -1018,6 +1034,7 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
       if (object === null) {
         this.selectedPath = null;
         this.expandedNeighbors.clear();
+        this.resetNativeGraphState();
       }
     }
     for (const path of [...this.expandedNeighbors]) {
@@ -1031,6 +1048,20 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     if (shell === null) return;
     emptyEl(shell);
     const data = buildGraphProjection(this.deps.index, this.selectedPath);
+    const restoreFocus = this.focusRestoreNeighbor;
+    this.focusRestoreNeighbor = null;
+    if (restoreFocus !== null) {
+      window.setTimeout(() => {
+        for (const toggle of this.container?.querySelectorAll(
+          ".rdg-hop-toggle"
+        ) ?? []) {
+          if (toggle.dataset.neighborPath === restoreFocus) {
+            toggle.focus();
+            return;
+          }
+        }
+      }, 0);
+    }
     const head = createChild(shell, "div", { cls: "rdg-head" });
     createChild(head, "div", { cls: "rdg-title", text: "Graph Intelligence" });
     if (data.indexState === "INDEXING") {
@@ -1108,30 +1139,34 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
   }
   renderEdge(container, edge, expandable) {
     const navigable = edge.otherPath !== null && edge.resolution === "RESOLVED";
-    const el = createChild(container, navigable ? "button" : "div", { cls: "rdg-rel" });
-    if (!navigable) el.setAttribute("aria-disabled", "true");
-    const line = createChild(el, "span", { cls: "rdg-rel-line" });
+    const row = createChild(container, "div", { cls: "rdg-rel" });
+    if (!navigable) row.setAttribute("aria-disabled", "true");
+    const line = createChild(row, "span", { cls: "rdg-rel-line" });
     const typeTag = edge.otherType !== null ? ` [${edge.otherType}]` : "";
     line.textContent = `${edge.direction === "outgoing" ? "\u2192" : "\u2190"} ${edge.predicate} ${edge.otherLabel}${typeTag}`;
-    const badge = createChild(el, "span", { cls: "rdg-badge" });
+    const badge = createChild(row, "span", { cls: "rdg-badge" });
     badge.textContent = edge.resolution;
     badge.setAttribute("data-state", edge.resolution);
     if (navigable && edge.otherPath !== null) {
       const otherPath = edge.otherPath;
-      el.setAttribute("aria-label", `Open ${edge.otherLabel}`);
-      el.addEventListener("click", () => {
+      const endpoint = createChild(row, "button", { cls: "rdg-endpoint" });
+      endpoint.textContent = "open";
+      endpoint.setAttribute("aria-label", `Open ${edge.otherLabel}`);
+      endpoint.addEventListener("click", () => {
         void this.deps.navigation.open({ path: otherPath }, "normal");
       });
       if (expandable) {
-        const toggle = createChild(el, "button", { cls: "rdg-hop-toggle" });
+        const toggle = createChild(row, "button", { cls: "rdg-hop-toggle" });
         const expanded = this.expandedNeighbors.has(otherPath);
         toggle.textContent = expanded ? "\u2212 second hop" : "+ second hop";
         toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
         toggle.setAttribute("aria-label", `Toggle second hop via ${edge.otherLabel}`);
+        toggle.setAttribute("data-neighbor-path", otherPath);
         toggle.addEventListener("click", (e) => {
           e.stopPropagation();
           if (this.expandedNeighbors.has(otherPath)) this.expandedNeighbors.delete(otherPath);
           else this.expandedNeighbors.add(otherPath);
+          this.focusRestoreNeighbor = otherPath;
           this.render();
         });
       }
@@ -1159,7 +1194,10 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
       void this.deps.navigation.open(target, target.line !== void 0 ? "source" : "normal");
     });
   }
-  /** §17: restrained native handoff through the ONE NavigationPort. */
+  /** §17 + GI-04: restrained native handoff through the ONE
+   * NavigationPort. The pending result is bound to the CURRENT root
+   * and a generation token; a root switch invalidates both, so a
+   * stale async completion can never overwrite the new root's UI. */
   renderNativeGraph(shell, path) {
     const section = this.section(shell, "Native Graph");
     const btn = createChild(section, "button", { cls: "rdg-native" });
@@ -1167,17 +1205,25 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     btn.setAttribute("aria-label", "Open Obsidian local graph for the selected object");
     btn.addEventListener("click", () => {
       const opener = this.deps.navigation.openLocalGraph;
+      const generation = this.nativeGraphGeneration;
+      const rootAtClick = this.selectedPath;
       if (opener === void 0) {
+        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
         this.nativeGraphState = "UNAVAILABLE";
+        this.nativeGraphRoot = rootAtClick;
         this.render();
         return;
       }
       void opener.call(this.deps.navigation, path).then((result) => {
+        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
+          return;
+        }
         this.nativeGraphState = result;
+        this.nativeGraphRoot = rootAtClick;
         this.render();
       });
     });
-    if (this.nativeGraphState === "UNAVAILABLE") {
+    if (this.nativeGraphState === "UNAVAILABLE" && this.nativeGraphRoot === path) {
       createChild(section, "div", { cls: "rdg-state", text: "Native Local Graph unavailable." });
     }
   }
@@ -12888,12 +12934,13 @@ var ObsidianNavigationPort = class {
     } catch {
     }
   }
-  /** v0.4.4 §17: restrained native Local Graph handoff. The only
-   * structural cast (command registry lookup) lives HERE, runtime
-   * shape-guarded, never exposed to projections/views. Steps: verify
-   * the path is a real Markdown file, make it the active editor
-   * anchor, then invoke Obsidian's built-in local-graph command and
-   * leave all graph rendering to Obsidian. No renderer internals. */
+  /** v0.4.4 §17 + GI-01/GI-03 repair: restrained native Local Graph
+   * handoff. The only structural cast (command registry lookup) lives
+   * HERE, runtime shape-guarded, never exposed to projections/views.
+   * The requested path is opened as the EXACT TFile via leaf/file
+   * APIs — never as linktext, so filesystem paths containing `#`
+   * cannot be reinterpreted and no note can ever be created. The
+   * command dispatch result must be an explicit success. */
   async openLocalGraph(path) {
     const commands = this.app.commands;
     if (commands === void 0 || typeof commands.executeCommandById !== "function") {
@@ -12902,8 +12949,14 @@ var ObsidianNavigationPort = class {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof import_obsidian5.TFile)) return "UNAVAILABLE";
     try {
-      await this.app.workspace.openLinkText(path, "", false);
-      await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      const leaf = this.app.workspace.getLeaf(false);
+      if (leaf === null) return "UNAVAILABLE";
+      await leaf.openFile(file);
+      this.app.workspace.revealLeaf(leaf);
+      const active = this.app.workspace.getActiveFile();
+      if (active === null || active.path !== path) return "UNAVAILABLE";
+      const result = await commands.executeCommandById(NATIVE_LOCAL_GRAPH_COMMAND_ID);
+      if (result !== true) return "UNAVAILABLE";
       return "OPENED";
     } catch {
       return "UNAVAILABLE";

@@ -151,9 +151,11 @@ describe("first-hop edges, provenance and navigation (§27, §29, §11)", () => 
       [B, note(B, "EV-B")],
       [C, note(C, "CASE-C")],
     ]);
-    const rows = [...view.contentEl.querySelectorAll<HTMLButtonElement>(".rdg-rel")];
+    const rows = view.contentEl.querySelectorAll(".rdg-rel");
     expect(rows).toHaveLength(2);
-    for (const row of rows) row.click();
+    const endpoints = [...view.contentEl.querySelectorAll<HTMLButtonElement>(".rdg-endpoint")];
+    expect(endpoints).toHaveLength(2);
+    for (const endpoint of endpoints) endpoint.click();
     await Promise.all(host.openSpy.mock.results.map((r) => r.value));
     const paths = host.openSpy.mock.calls.map((c) => c[0]).map((t) => t.path);
     expect(paths.sort()).toEqual([C, B]);
