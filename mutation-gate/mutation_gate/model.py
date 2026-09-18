@@ -58,6 +58,17 @@ class Proposal:
     base_sha256: str
     proposal_digest: str = field(default="")
 
+    def __post_init__(self) -> None:
+        # MG-03: snapshot the payload into immutable bytes at the
+        # trust boundary. A caller-owned mutable buffer (bytearray /
+        # memoryview) can never change under the approved digest or
+        # between approval validation and execution.
+        if isinstance(self.payload, bytes):
+            return
+        if not isinstance(self.payload, (bytearray, memoryview)):
+            raise TypeError("payload must be bytes-like")
+        object.__setattr__(self, "payload", bytes(self.payload))
+
     def content_for_digest(self) -> Dict[str, Any]:
         """Digest covers every semantic field except the digest itself;
         the payload participates as base64 so bytes are unambiguous."""

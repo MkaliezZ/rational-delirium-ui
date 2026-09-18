@@ -66,3 +66,15 @@ class AuditLog:
         return {
             r["permit_id"] for r in self.records() if r.get("result") == "APPLIED"
         }
+
+    def blocked_permit_ids(self) -> set:
+        """Permits that must never enter the append stage again:
+        successfully APPLIED, or with an EXECUTION_UNCERTAIN outcome
+        (the file may already have changed; retry is unsafe)."""
+        blocked = set()
+        for r in self.records():
+            result = str(r.get("result", ""))
+            head = result.split(":", 1)[0]
+            if head in ("APPLIED", "EXECUTION_UNCERTAIN"):
+                blocked.add(r["permit_id"])
+        return blocked

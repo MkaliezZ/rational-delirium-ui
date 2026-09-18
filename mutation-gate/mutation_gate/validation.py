@@ -55,6 +55,8 @@ def validate_proposal(proposal: Proposal) -> None:
         raise Rejection(f"proposal missing field: {missing}")
     if proposal.operation not in SUPPORTED_OPERATIONS:
         raise Rejection(f"invalid operation: {proposal.operation}")
+    if proposal.payload == b"":
+        raise Rejection("empty mutation payload")
     if not _valid_target(proposal.target):
         raise Rejection(f"invalid target: {proposal.target!r}")
     expected = proposal.compute_digest()
