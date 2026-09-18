@@ -119,13 +119,21 @@ def _identity(st: os.stat_result) -> Tuple[object, object]:
 
 
 # ----------------------------------------------------------------------
-# MG-02: cross-process permit admission locks. Identity = shared
-# mutation state (audit log location) + permit_id. Two layers:
-#   1. an in-process shared threading lock (fast path, also makes
-#      same-process multi-Executor races impossible);
-#   2. an OS-level advisory FILE lock (msvcrt/fcntl) in a lock
-#      directory beside the audit log — this serializes DIFFERENT
-#      PROCESSES over the same state+permit.
+# MG-02: cross-process permit admission locks. Identity = CANONICAL
+# shared mutation state identity + permit_id.
+#
+# LOCK IDENTITY vs WRITE-TARGET IDENTITY are deliberately separate:
+# the lock key canonicalizes the state path (symlinks / reparse
+# points / 8.3 short names / case aliases / POSIX path aliases such
+# as /tmp vs /private/tmp all resolve to ONE key) so equivalent paths
+# to the SAME audit state cannot fork the lock. This canonicalization
+# is used ONLY for lock identity — it is NOT a substitute for the
+# MG-01 write-safety model (identity sandwich), which is unchanged.
+# Two layers serialize admission:
+#   1. an in-process shared threading lock (fast path);
+#   2. an OS-level advisory FILE lock (msvcrt/fcntl) beside the audit
+#      log — this serializes DIFFERENT PROCESSES over the same
+#      state+permit.
 # The lock covers duplicate check, admission, mutation execution and
 # audit persistence (the whole _execute_locked critical section).
 # ----------------------------------------------------------------------
@@ -133,8 +141,23 @@ _SHARED_PERMIT_LOCKS: "Dict[Tuple[str, str], threading.Lock]" = {}
 _SHARED_LOCKS_GUARD = threading.Lock()
 
 
+def canonical_state_identity(state_path: str) -> str:
+    """Canonical lock identity of the shared mutation state.
+
+    os.path.realpath resolves symlinks/reparse points, expands 8.3
+    short names and (via the OS final-path API) canonicalizes case
+    for existing files; normcase normalizes separators/case on
+    Windows. Stable before execution (the audit directory exists by
+    AuditLog construction; a not-yet-existing tail keeps the
+    canonicalized prefix)."""
+    resolved = os.path.realpath(state_path)
+    if hasattr(os.path, "normcase"):
+        resolved = os.path.normcase(resolved)
+    return resolved
+
+
 def shared_permit_lock(state_key: str, permit_id: str) -> threading.Lock:
-    key = (os.path.abspath(state_key), permit_id)
+    key = (canonical_state_identity(state_key), permit_id)
     with _SHARED_LOCKS_GUARD:
         return _SHARED_PERMIT_LOCKS.setdefault(key, threading.Lock())
 
@@ -151,7 +174,7 @@ class CrossProcessPermitLock:
         )
         os.makedirs(lock_dir, exist_ok=True)
         key = hashlib.sha256(
-            (os.path.abspath(state_path) + chr(0) + permit_id).encode("utf-8")
+            (canonical_state_identity(state_path) + chr(0) + permit_id).encode("utf-8")
         ).hexdigest()[:40]
         self._path = os.path.join(lock_dir, key + ".lock")
         self._fd: Optional[int] = None
@@ -186,7 +209,8 @@ class Executor:
         state_path = getattr(self.audit, "state_path", None)
         if not isinstance(state_path, str) or not state_path:
             raise TypeError("audit log must expose a stable state_path")
-        self._state_key = state_path  # shared-mutation-state identity
+        # Canonical lock identity — path aliases converge to one key.
+        self._state_key = canonical_state_identity(state_path)
 
     # ------------------------------------------------------------------
     # MG-01: secure resolution returning ONE open fd proven to be the

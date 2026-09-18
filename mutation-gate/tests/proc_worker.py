@@ -1,9 +1,10 @@
 """Cross-process MG-02 regression worker (not discovered by unittest).
 
-Usage: python proc_worker.py <tmp_root>
+Usage: python proc_worker.py <vault_root> <audit_path>
+The audit path may be a PATH ALIAS (case variant / 8.3 short name /
+symlink) of the shared state file — the lock identity must converge.
 Deterministically rebuilds the SAME proposal + permit in this fresh
-process and executes it once against the shared state/vault, printing
-the execution status to stdout.
+process, executes it once, and prints the execution status.
 """
 
 from __future__ import annotations
@@ -23,9 +24,8 @@ BASE = b"---\ntype: case\n---\n\noriginal body\n"
 PAYLOAD = b"\nCROSS-PROCESS APPEND\n"
 
 
-def main(tmp_root: str) -> int:
-    vault = os.path.join(tmp_root, "vault")
-    note = os.path.join(vault, "CASES", "A.md")
+def main(vault_root: str, audit_path: str) -> int:
+    note = os.path.join(vault_root, "CASES", "A.md")
     os.makedirs(os.path.dirname(note), exist_ok=True)
     if not os.path.exists(note):
         with open(note, "wb") as fh:
@@ -33,8 +33,8 @@ def main(tmp_root: str) -> int:
 
     signer = MockSigner("approver-alpha", SECRET)
     approver = VerifyingParty(signer)
-    audit = AuditLog(os.path.join(tmp_root, "state", "audit.jsonl"))
-    executor = Executor("executor-1", vault, audit, approver)
+    audit = AuditLog(audit_path)
+    executor = Executor("executor-1", vault_root, audit, approver)
 
     raw = Proposal(
         "p-xproc", "agent-x", "CASES/A.md", "APPEND_EXISTING_NOTE",
@@ -61,4 +61,4 @@ def main(tmp_root: str) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1]))
+    raise SystemExit(main(sys.argv[1], sys.argv[2]))
