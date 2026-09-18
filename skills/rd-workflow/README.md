@@ -65,13 +65,29 @@ invents permission or an alternate write path.
 | `templates/proposal-template.md` | Guidance fields for preparing a proposal |
 | `templates/review-template.md` | Guidance fields for an independent review |
 | `templates/approval-request-template.md` | The single decision package for the Human |
+| `templates/handoff-template.md` | The vendor-neutral Agent-to-Agent handoff record (v0.7) |
+| `templates/workflow-run-record-template.md` | One complete multi-Agent run record (v0.7) |
 | `review-guides/review-checklist.md` | Concrete review checks |
 | `examples/proposal-example.md` | Fictional proposal walkthrough |
 | `examples/review-example.md` | Fictional review walkthrough |
 | `examples/execution-handoff-example.md` | Fictional handoff + outcome walkthrough |
+| `examples/multi-agent-workflow-example.md` | Fictional multi-Agent loop: dissent → synthesis → review → approval → execution (v0.7) |
 
 Templates are **guidance only**. They contain no approval fields and
 no pre-issued authorization. Examples are **entirely fictional**.
+
+## Multi-Agent workflow (v0.7)
+
+This package also supports multi-Agent collaboration per
+[docs/RD_V0_7_MULTI_AGENT_WORKFLOW_MVP_DESIGN.md](../../docs/RD_V0_7_MULTI_AGENT_WORKFLOW_MVP_DESIGN.md):
+multiple Agents (any vendors) exchange **work results — never
+permissions** — via the handoff record; a Synthesis Agent may merge
+research threads into one draft; disagreement is preserved verbatim
+to the Human. The authority model is unchanged: reasoning is
+multi-Agent, approval is Human, admission is Bridge, mutation is
+Gate. The Skill remains guidance only — not a security boundary, not
+an execution engine, and it gains no orchestration power from these
+additions.
 
 ## Known limitations
 
