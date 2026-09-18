@@ -8,12 +8,14 @@ from .adapter import (
     BridgeCheckPort,
     BridgeMutationAdapter,
     LeaseRegistryValidator,
+    parse_expiry,
     scan_sync_hazard,
+    utc_now,
     SUPPORTED_OPERATION,
 )
 
 __all__ = [
     "AdapterContext", "AdapterResult", "BridgeDecision", "BridgeCheckPort",
-    "BridgeMutationAdapter", "LeaseRegistryValidator", "scan_sync_hazard",
-    "SUPPORTED_OPERATION",
+    "BridgeMutationAdapter", "LeaseRegistryValidator", "parse_expiry",
+    "scan_sync_hazard", "utc_now", "SUPPORTED_OPERATION",
 ]

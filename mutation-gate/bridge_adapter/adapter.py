@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List, Optional, Protocol
 
 from mutation_gate import (
@@ -93,17 +94,52 @@ class LeaseRegistryValidator:
         if writer_identity not in self._writers:
             return BridgeDecision(False, "WRITER_NOT_ALLOWED")
         note = target[:-3] if target.endswith(".md") else target
-        has_lease = any(
-            lease.get("note") == note
-            and lease.get("writer") == writer_identity
-            and lease.get("active") is True
-            for lease in self._load_leases()
-        )
-        if not has_lease:
+        now = utc_now()
+        valid_lease = False
+        expired = False
+        for lease in self._load_leases():
+            if (
+                lease.get("note") == note
+                and lease.get("writer") == writer_identity
+                and lease.get("active") is True
+            ):
+                # BA-01: a lease is valid only when it has an expiry
+                # that is still in the future (UTC). Expired or
+                # unparsable expiry → LEASE_EXPIRED, never valid.
+                expires = parse_expiry(lease.get("expires"))
+                if expires is None:
+                    expired = True  # missing/unparsable expiry is invalid
+                    continue
+                if expires <= now:
+                    expired = True
+                    continue
+                valid_lease = True
+        if expired and not valid_lease:
+            return BridgeDecision(False, "LEASE_EXPIRED")
+        if not valid_lease:
             # NO automatic takeover; NO force ownership — human action
             # required, same permit may rerun afterwards.
             return BridgeDecision(False, "NO_ACTIVE_LEASE")
         return BridgeDecision(True)
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def parse_expiry(value: object) -> Optional[datetime]:
+    """Parse an ISO-8601 expiry string into an aware UTC datetime.
+    None for missing/malformed values — treated as an INVALID lease
+    (BA-01), never as 'no expiry = forever'."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def scan_sync_hazard(vault_root: str, target: str) -> bool:
@@ -121,12 +157,21 @@ def scan_sync_hazard(vault_root: str, target: str) -> bool:
 @dataclass(frozen=True)
 class AdapterContext:
     """Execution context — actual executor identity comes ONLY from
-    here, never from proposal fields."""
+    here, never from proposal fields.
+
+    BA-02: sync_hazard_root is REQUIRED (a trusted vault root for
+    conflict validation); None is never silently skipped — the
+    adapter rejects with SYNC_ROOT_UNAVAILABLE.
+    BA-03: `verified_executor_id` is the platform-verified ACTUAL
+    execution identity (e.g. derived from trusted runtime platform
+    detection). It must equal `executor_id`, otherwise the adapter
+    rejects with EXECUTOR_IDENTITY_MISMATCH before the Gate runs."""
 
     executor_id: str
     writer_identity: str  # platform-detected Bridge writer identity
     bridge: BridgeCheckPort
-    sync_hazard_root: Optional[str] = None  # vault root for conflict scan
+    sync_hazard_root: str
+    verified_executor_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +202,24 @@ class BridgeMutationAdapter:
             approval_identity=permit.approval_identity,
         )
 
+        # BA-03: executor identity binding — the audit truth must come
+        # from verified platform identity, not from caller-set fields.
+        # When a verified identity is supplied it MUST match the
+        # context executor id; mismatch never reaches the Gate.
+        if (
+            context.verified_executor_id is not None
+            and context.verified_executor_id != context.executor_id
+        ):
+            return AdapterResult(
+                status="REJECTED:EXECUTOR_IDENTITY_MISMATCH",
+                reason=(
+                    f"context executor {context.executor_id!r} != verified "
+                    f"actual executor {context.verified_executor_id!r}"
+                ),
+                gate_result=None,
+                **identity,
+            )
+
         # 1. operation whitelist — before ANY Bridge call
         if proposal.operation != SUPPORTED_OPERATION:
             return AdapterResult(
@@ -176,10 +239,17 @@ class BridgeMutationAdapter:
                 **identity,
             )
 
-        # sync hazard is a Bridge-domain safety observation
-        if context.sync_hazard_root and scan_sync_hazard(
-            context.sync_hazard_root, proposal.target
-        ):
+        # BA-02: sync hazard validation REQUIRES a trusted root —
+        # missing root is never silently skipped.
+        if not context.sync_hazard_root:
+            return AdapterResult(
+                status="REJECTED:SYNC_ROOT_UNAVAILABLE",
+                reason="sync hazard validation requires a trusted vault root",
+                gate_result=None,
+                **identity,
+            )
+
+        if scan_sync_hazard(context.sync_hazard_root, proposal.target):
             return AdapterResult(
                 status="REJECTED:SYNC_HAZARD",
                 reason="sync conflict present next to target",

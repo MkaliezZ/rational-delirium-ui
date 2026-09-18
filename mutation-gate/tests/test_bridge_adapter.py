@@ -19,6 +19,7 @@ from bridge_adapter import (
     AdapterContext, BridgeDecision, BridgeMutationAdapter,
     LeaseRegistryValidator, scan_sync_hazard,
 )
+from datetime import datetime, timedelta, timezone
 
 BASE = b"---\ntype: case\n---\n\noriginal body\n"
 PAYLOAD = b"\nHUMAN-APPROVED APPEND\n"
@@ -48,7 +49,8 @@ class AdapterHarness:
         leases = []
         if with_lease:
             leases.append(
-                {"note": "CASES/A", "writer": WRITER, "active": True, "expires": None}
+                {"note": "CASES/A", "writer": WRITER, "active": True,
+                 "expires": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}
             )
         with open(self.registry_path, "w", encoding="utf-8") as fh:
             json.dump({"leases": leases}, fh)
@@ -58,12 +60,14 @@ class AdapterHarness:
             self.registry_path, allowed_writers=[WRITER, "mac-codex-astra"]
         )
 
-    def context(self, bridge=None, writer=WRITER) -> AdapterContext:
+    def context(self, bridge=None, writer=WRITER, verified=EXECUTOR_ID,
+                sync_root="default") -> AdapterContext:
         return AdapterContext(
             executor_id=EXECUTOR_ID,
             writer_identity=writer,
             bridge=bridge if bridge is not None else self.bridge(),
-            sync_hazard_root=self.vault,
+            sync_hazard_root=self.vault if sync_root == "default" else sync_root,
+            verified_executor_id=verified,
         )
 
     def proposal(self, payload: bytes = PAYLOAD, operation: str = "APPEND_EXISTING_NOTE",
@@ -271,3 +275,143 @@ class ExtraIdentityAndSafety(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepairBA01LeaseExpiry(unittest.TestCase):
+    """BA-01: lease validity requires a future expiry."""
+
+    def _harness(self, tmp, expires):
+        h = AdapterHarness(tmp, with_lease=False)
+        from datetime import datetime, timezone
+        entry = {"note": "CASES/A", "writer": WRITER, "active": True}
+        if expires is not None:
+            entry["expires"] = (
+                expires.isoformat() if isinstance(expires, datetime) else expires
+            )
+        with open(h.registry_path, "w", encoding="utf-8") as fh:
+            json.dump({"leases": [entry]}, fh)
+        return h
+
+    def test_expired_lease_rejected(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            past = datetime.now(timezone.utc) - timedelta(minutes=1)
+            h = self._harness(tmp, past)
+            proposal, permit = h.proposal(), None
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "REJECTED:LEASE_EXPIRED")
+            self.assertEqual(h.note_bytes(), BASE)
+            self.assertEqual(h.audit.records(), [])
+
+    def test_missing_expiry_is_invalid_not_forever(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = self._harness(tmp, None)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "REJECTED:LEASE_EXPIRED")
+
+    def test_malformed_expiry_is_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = self._harness(tmp, "not-a-date")
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "REJECTED:LEASE_EXPIRED")
+
+    def test_naive_datetime_expiry_treated_as_utc(self):
+        from datetime import datetime, timedelta
+        with tempfile.TemporaryDirectory() as tmp:
+            naive_future = datetime.utcnow() + timedelta(hours=2)  # naive
+            h = self._harness(tmp, naive_future)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "APPLIED")
+            self.assertEqual(h.note_bytes(), BASE + PAYLOAD)
+
+    def test_future_lease_still_valid(self):
+        from datetime import datetime, timedelta, timezone
+        with tempfile.TemporaryDirectory() as tmp:
+            future = datetime.now(timezone.utc) + timedelta(minutes=5)
+            h = self._harness(tmp, future)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "APPLIED")
+
+
+class RepairBA02SyncRootRequired(unittest.TestCase):
+    """BA-02: missing sync root is never silently skipped."""
+
+    def test_missing_sync_root_rejected_before_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = AdapterHarness(tmp, with_lease=True)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            gate_calls = []
+            real = h.executor.execute
+            with mock.patch.object(
+                h.executor, "execute",
+                side_effect=lambda p, q: (gate_calls.append(1), real(p, q))[1],
+            ):
+                result = h.adapter.execute(proposal, permit, h.context(sync_root=None))
+            self.assertEqual(result.status, "REJECTED:SYNC_ROOT_UNAVAILABLE")
+            self.assertEqual(gate_calls, [])
+            self.assertEqual(h.note_bytes(), BASE)
+            self.assertEqual(h.audit.records(), [])
+
+    def test_existing_conflict_still_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = AdapterHarness(tmp, with_lease=True)
+            with open(
+                os.path.join(h.vault, "CASES", "A.sync-conflict20260919.md"), "wb"
+            ) as fh:
+                fh.write(b"c")
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(proposal, permit, h.context())
+            self.assertEqual(result.status, "REJECTED:SYNC_HAZARD")
+            self.assertEqual(h.note_bytes(), BASE)
+
+
+class RepairBA03ExecutorIdentity(unittest.TestCase):
+    """BA-03: verified actual execution identity must match context."""
+
+    def test_verified_identity_mismatch_rejected_before_everything(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = AdapterHarness(tmp, with_lease=True)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            bridge_calls = []
+            gate_calls = []
+            bridge = type("B", (), {"check_write": staticmethod(
+                lambda t, w: (bridge_calls.append(t), BridgeDecision(True))[1]
+            )})()
+            real = h.executor.execute
+            with mock.patch.object(
+                h.executor, "execute",
+                side_effect=lambda p, q: (gate_calls.append(1), real(p, q))[1],
+            ):
+                result = h.adapter.execute(
+                    proposal, permit,
+                    h.context(bridge=bridge, verified="executor-9"),
+                )
+            self.assertEqual(result.status, "REJECTED:EXECUTOR_IDENTITY_MISMATCH")
+            self.assertEqual(bridge_calls, [])  # before bridge too
+            self.assertEqual(gate_calls, [])
+            self.assertEqual(h.note_bytes(), BASE)
+            self.assertEqual(h.audit.records(), [])
+            # identity fields still truthful
+            self.assertEqual(result.actual_executor, EXECUTOR_ID)
+
+    def test_verified_identity_match_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            h = AdapterHarness(tmp, with_lease=True)
+            proposal = h.proposal()
+            permit = h.permit(proposal)
+            result = h.adapter.execute(
+                proposal, permit, h.context(verified=EXECUTOR_ID)
+            )
+            self.assertEqual(result.status, "APPLIED")
