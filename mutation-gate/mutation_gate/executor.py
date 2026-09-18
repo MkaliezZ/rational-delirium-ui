@@ -1,18 +1,27 @@
 """Executor: admission + ONE exact APPEND_EXISTING_NOTE + audit.
 
-Security-hardened flow (MG-01..05):
+Security-hardened flow (MG-01..06):
 
   proposal validation (MG-05: empty payload rejected)
   → approval verification
   → executor admission (selected executor match)
-  → per-permit LOCKED admission (MG-02: duplicate check and mutation
-    admission are atomic against concurrent callers)
-  → blocked-permit check (an APPLIED **or EXECUTION_UNCERTAIN** permit
-    never runs again — uncertain outcomes also block unsafe retry)
-  → MG-01 path safety: containment under the mutation root, no
-    symlink/reparse component anywhere from root to file, and the
-    check+write operate on ONE opened file descriptor so there is no
-    check-then-use race on the path
+  → SHARED per-permit admission lock (MG-02: the lock is keyed by the
+    shared mutation state (audit path) + permit_id, so multiple
+    Executor instances over the same state cannot both admit) and it
+    covers duplicate check, admission, write and result persistence
+  → blocked-permit check (APPLIED **or EXECUTION_UNCERTAIN** never
+    runs again)
+  → MG-01 secure target resolution: an identity chain is validated
+    from the trusted mutation root down to the file (every component
+    lstat-checked: no symlink / Windows reparse point, directories
+    only), the file is opened ONCE (O_RDWR|O_APPEND), and the whole
+    chain plus the opened descriptor are re-verified AFTER the open
+    ("identity sandwich"). The write object (fd) is thereby proven to
+    be the validation object: any parent-replacement or final-file
+    swap around the open changes an identity and is rejected. (This
+    Python build has no dir_fd support — verified — so handle-based
+    binding is achieved through file-ID identity instead; where
+    dir_fd exists the same contract holds a fortiori.)
   → stale base hash check on the SAME fd
   → append EXACT bytes (O_APPEND) + fsync + readback verification
   → audit record (APPLIED / REJECTED:reason / EXECUTION_UNCERTAIN)
@@ -20,6 +29,10 @@ Security-hardened flow (MG-01..05):
 MG-04: once the write has begun, any failure is recorded as
 EXECUTION_UNCERTAIN — the file may have changed, evidence is kept,
 and the permit is blocked from automatic retry.
+
+MG-06: the audit's `executor` field is ALWAYS the actual processing
+executor (self.executor_id); the permit's requested executor is
+stored separately as `requested_executor`.
 """
 
 from __future__ import annotations
@@ -29,7 +42,7 @@ import stat as stat_module
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 from .audit import AuditLog
 from .model import Proposal, Permit, sha256_hex
@@ -61,6 +74,25 @@ def _is_link_or_reparse(st: os.stat_result) -> bool:
     return False
 
 
+def _identity(st: os.stat_result) -> Tuple[object, object]:
+    return (st.st_dev, st.st_ino)
+
+
+# ----------------------------------------------------------------------
+# MG-02: SHARED permit admission locks. Keyed by the shared mutation
+# state (canonical audit-log path) + permit_id, so every Executor
+# instance operating on the same state serializes on the same lock.
+# ----------------------------------------------------------------------
+_SHARED_PERMIT_LOCKS: "Dict[Tuple[str, str], threading.Lock]" = {}
+_SHARED_LOCKS_GUARD = threading.Lock()
+
+
+def shared_permit_lock(state_key: str, permit_id: str) -> threading.Lock:
+    key = (os.path.abspath(state_key), permit_id)
+    with _SHARED_LOCKS_GUARD:
+        return _SHARED_PERMIT_LOCKS.setdefault(key, threading.Lock())
+
+
 class Executor:
     def __init__(
         self,
@@ -73,48 +105,69 @@ class Executor:
         self.vault_root = os.path.abspath(vault_root)
         self.audit = audit_log
         self.approver = approver
-        # MG-02: local per-permit admission locks.
-        self._permit_locks: "dict[str, threading.Lock]" = {}
-        self._registry_lock = threading.Lock()
-
-    def _lock_for(self, permit_id: str) -> threading.Lock:
-        with self._registry_lock:
-            return self._permit_locks.setdefault(permit_id, threading.Lock())
+        if not hasattr(self.audit, "_path"):  # pragma: no cover - contract
+            raise TypeError("audit log must expose a stable state path")
+        self._state_key = self.audit._path  # shared-mutation-state identity
 
     # ------------------------------------------------------------------
-    # MG-01: safe target resolution — returns an OPEN fd bound to the
-    # validated file, so validation and writing cannot diverge.
+    # MG-01: secure resolution returning ONE open fd proven to be the
+    # validated target (identity sandwich around the open).
     # ------------------------------------------------------------------
-    def _safe_open_target(self, target: str) -> int:
-        root = self.vault_root
-        if os.path.isabs(target) or ":" in target:
-            raise Rejection(f"invalid target: {target!r}")
-        parts = target.replace("\\", "/").split("/")
-        if any(p in ("", ".", "..") for p in parts):
-            raise Rejection(f"invalid target: {target!r}")
-
-        current = root
+    def _validate_chain(self, parts) -> list:
+        """lstat every component from the trusted root; returns the
+        validated identity chain [root, dir..., file]."""
+        chain = []
+        current = self.vault_root
+        st = os.lstat(current)
+        if _is_link_or_reparse(st) or not stat_module.S_ISDIR(st.st_mode):
+            raise Rejection("invalid mutation root")
+        chain.append(_identity(st))
         for component in parts[:-1]:
             current = os.path.join(current, component)
-            try:
-                st = os.lstat(current)
-            except OSError as exc:
-                raise Rejection(f"target parent missing: {component}") from exc
+            st = os.lstat(current)
             if _is_link_or_reparse(st):
                 raise Rejection(f"path escape: {component} is a symlink/reparse point")
             if not stat_module.S_ISDIR(st.st_mode):
                 raise Rejection(f"target parent not a directory: {component}")
-
+            chain.append(_identity(st))
         file_path = os.path.join(current, parts[-1])
-        try:
-            lst = os.lstat(file_path)
-        except OSError as exc:
-            raise Rejection(f"target missing: {target}") from exc
-        if _is_link_or_reparse(lst):
-            raise Rejection(f"path escape: target is a symlink/reparse point")
-        if not stat_module.S_ISREG(lst.st_mode):
-            raise Rejection(f"target not a regular file: {target}")
+        st = os.lstat(file_path)
+        if _is_link_or_reparse(st):
+            raise Rejection("path escape: target is a symlink/reparse point")
+        if not stat_module.S_ISREG(st.st_mode):
+            raise Rejection(f"target not a regular file")
+        chain.append(_identity(st))
+        return chain
 
+    def _revalidate_chain(self, parts, chain) -> str:
+        """Post-open half of the sandwich: the path must still resolve
+        through IDENTICAL components; returns the final file path."""
+        current = self.vault_root
+        for idx, component in enumerate(parts[:-1]):
+            current = os.path.join(current, component)
+            st = os.lstat(current)
+            if _is_link_or_reparse(st):
+                raise Rejection(f"path escape: {component} became a symlink/reparse point")
+            if _identity(st) != chain[idx + 1]:
+                raise Rejection(f"path identity changed during open: {component}")
+        file_path = os.path.join(current, parts[-1])
+        st = os.lstat(file_path)
+        if _is_link_or_reparse(st):
+            raise Rejection("path escape: target became a symlink at open time")
+        if _identity(st) != chain[-1]:
+            raise Rejection("path identity changed during open: target")
+        return file_path
+
+    def _safe_open_target(self, target: str) -> int:
+        if os.path.isabs(target) or ":" in target or "\\" in target:
+            raise Rejection(f"invalid target: {target!r}")
+        parts = target.split("/")
+        if any(p in ("", ".", "..") for p in parts):
+            raise Rejection(f"invalid target: {target!r}")
+
+        chain = self._validate_chain(parts)
+
+        file_path = os.path.join(self.vault_root, *parts)
         flags = os.O_RDWR | os.O_APPEND
         if hasattr(os, "O_BINARY"):
             flags |= os.O_BINARY
@@ -123,15 +176,13 @@ class Executor:
         fd = os.open(file_path, flags)
         try:
             fst = os.fstat(fd)
-            # Bind the fd to the exact path identity we validated:
-            # if the path now resolves elsewhere, refuse.
-            lst2 = os.lstat(file_path)
-            if _is_link_or_reparse(lst2):
-                raise Rejection("path escape: target became a symlink at open time")
-            if lst2.st_ino and fst.st_ino and lst2.st_ino != fst.st_ino:
-                raise Rejection("path escape: opened file differs from validated target")
-            if lst2.st_dev and fst.st_dev and lst2.st_dev != fst.st_dev:
-                raise Rejection("path escape: opened device differs from validated target")
+            if fst.st_ino and chain[-1][1] and fst.st_ino != chain[-1][1]:
+                raise Rejection("open/bind mismatch: descriptor is not the validated file")
+            # post-open sandwich: every ancestor identity must be unchanged
+            final_path = self._revalidate_chain(parts, chain)
+            lst = os.lstat(final_path)
+            if lst.st_ino and fst.st_ino and lst.st_ino != fst.st_ino:
+                raise Rejection("open/bind mismatch: path resolved elsewhere")
         except BaseException:
             os.close(fd)
             raise
@@ -150,7 +201,10 @@ class Executor:
 
     # ------------------------------------------------------------------
     def execute(self, proposal: Proposal, permit: Permit) -> ExecutionResult:
-        with self._lock_for(permit.permit_id):
+        # MG-02: SHARED lock — same mutation state + permit serializes
+        # across ALL Executor instances; covers duplicate check,
+        # admission, write and audit persistence.
+        with shared_permit_lock(self._state_key, permit.permit_id):
             return self._execute_locked(proposal, permit)
 
     def _execute_locked(self, proposal: Proposal, permit: Permit) -> ExecutionResult:
@@ -166,8 +220,6 @@ class Executor:
                     f"executor mismatch: permit selects {permit.selected_executor_id!r}, "
                     f"this executor is {self.executor_id!r}"
                 )
-            # MG-02/MG-04: atomic admission — an APPLIED or UNCERTAIN
-            # permit never enters the append stage again.
             blocked = permit.permit_id in self.audit.blocked_permit_ids()
             if blocked:
                 raise Rejection(f"duplicate permit execution: {permit.permit_id}")
@@ -181,8 +233,6 @@ class Executor:
                 )
 
             expected_after = sha256_hex(current + proposal.payload)
-            # MG-04 boundary: everything past this point may have
-            # mutated the file; failures become EXECUTION_UNCERTAIN.
             write_started = True
             os.write(fd, proposal.payload)
             os.fsync(fd)
@@ -201,6 +251,7 @@ class Executor:
                     "proposal_digest": proposal.proposal_digest,
                     "target": proposal.target,
                     "executor": self.executor_id,
+                    "requested_executor": permit.selected_executor_id or None,
                     "before_sha256": before,
                     "after_sha256": after,
                     "result": "APPLIED",
@@ -228,8 +279,8 @@ class Executor:
             if fd is not None:
                 os.close(fd)
 
-    @staticmethod
     def _record(
+        self,
         proposal: Proposal,
         permit: Permit,
         before: str,
@@ -237,12 +288,15 @@ class Executor:
         status: str,
         reason: Optional[str],
     ) -> dict:
+        # MG-06: `executor` is ALWAYS the actual processing executor;
+        # the permit's requested executor is kept separately.
         return {
             "permit_id": permit.permit_id,
             "proposal_id": proposal.proposal_id,
             "proposal_digest": proposal.proposal_digest,
             "target": proposal.target,
-            "executor": permit.selected_executor_id or "unknown",
+            "executor": self.executor_id,
+            "requested_executor": permit.selected_executor_id or None,
             "before_sha256": before,
             "after_sha256": after,
             "result": f"{status}:{reason}" if reason else status,
