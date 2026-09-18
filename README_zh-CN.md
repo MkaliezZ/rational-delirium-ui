@@ -93,4 +93,4 @@ npm run check-artifacts
 
 ## 许可证
 
-本仓库尚未声明许可证;在选择许可证之前,所有权利由所有者保留。
+[MIT](LICENSE) — 全文见 [LICENSE](LICENSE)。

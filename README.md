@@ -104,5 +104,4 @@ npm run check-artifacts
 
 ## License
 
-No license has been declared for this repository yet; all rights are
-reserved by the owner until a license is chosen.
+[MIT](LICENSE) — see [LICENSE](LICENSE) for the full text.
