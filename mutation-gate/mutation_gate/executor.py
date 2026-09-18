@@ -16,12 +16,19 @@ Security-hardened flow (MG-01..06):
     lstat-checked: no symlink / Windows reparse point, directories
     only), the file is opened ONCE (O_RDWR|O_APPEND), and the whole
     chain plus the opened descriptor are re-verified AFTER the open
-    ("identity sandwich"). The write object (fd) is thereby proven to
-    be the validation object: any parent-replacement or final-file
-    swap around the open changes an identity and is rejected. (This
-    Python build has no dir_fd support — verified — so handle-based
-    binding is achieved through file-ID identity instead; where
-    dir_fd exists the same contract holds a fortiori.)
+    ("identity sandwich"), which rejects observable parent/file
+    replacement races around the open.
+
+  DOCUMENTED TRUST BOUNDARY (MG-01): this stdlib implementation does
+  NOT claim absolute TOCTOU elimination against a hostile concurrent
+  filesystem actor. Explicit assumption: the mutation root and its
+  ancestors are NOT concurrently renamed/replaced by an external
+  actor during execution. Within that boundary, the preserved
+  symlink/reparse checks + identity sandwich + safe-failure behavior
+  reject the realistic replacement races. This Python build has no
+  dir_fd support (verified: os.supports_dir_fd is empty), so
+  handle-based binding is approximated by file-ID identity; a full
+  kernel-level path-resolution layer is out of MVP scope.
   → stale base hash check on the SAME fd
   → append EXACT bytes (O_APPEND) + fsync + readback verification
   → audit record (APPLIED / REJECTED:reason / EXECUTION_UNCERTAIN)
@@ -37,12 +44,45 @@ stored separately as `requested_executor`.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import stat as stat_module
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
+
+# --- cross-process advisory lock primitives -----------------------
+try:
+    import msvcrt
+
+    def _lock_fd(fd: int) -> None:
+        # Blocking acquire: CRT LK_LOCK gives up after ~10s, so loop
+        # LK_NBLCK ourselves for indefinite (MVP) blocking.
+        while True:
+            try:
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                time.sleep(0.01)
+
+    def _unlock_fd(fd: int) -> None:
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+
+except ImportError:  # POSIX
+    import fcntl
+
+    def _lock_fd(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+    def _unlock_fd(fd: int) -> None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
 
 from .audit import AuditLog
 from .model import Proposal, Permit, sha256_hex
@@ -79,9 +119,15 @@ def _identity(st: os.stat_result) -> Tuple[object, object]:
 
 
 # ----------------------------------------------------------------------
-# MG-02: SHARED permit admission locks. Keyed by the shared mutation
-# state (canonical audit-log path) + permit_id, so every Executor
-# instance operating on the same state serializes on the same lock.
+# MG-02: cross-process permit admission locks. Identity = shared
+# mutation state (audit log location) + permit_id. Two layers:
+#   1. an in-process shared threading lock (fast path, also makes
+#      same-process multi-Executor races impossible);
+#   2. an OS-level advisory FILE lock (msvcrt/fcntl) in a lock
+#      directory beside the audit log — this serializes DIFFERENT
+#      PROCESSES over the same state+permit.
+# The lock covers duplicate check, admission, mutation execution and
+# audit persistence (the whole _execute_locked critical section).
 # ----------------------------------------------------------------------
 _SHARED_PERMIT_LOCKS: "Dict[Tuple[str, str], threading.Lock]" = {}
 _SHARED_LOCKS_GUARD = threading.Lock()
@@ -91,6 +137,38 @@ def shared_permit_lock(state_key: str, permit_id: str) -> threading.Lock:
     key = (os.path.abspath(state_key), permit_id)
     with _SHARED_LOCKS_GUARD:
         return _SHARED_PERMIT_LOCKS.setdefault(key, threading.Lock())
+
+
+class CrossProcessPermitLock:
+    """Advisory exclusive lock file keyed by state location + permit
+    id. Held across the entire execution critical section. Lock files
+    persist (deleting lock files reintroduces races); they are empty
+    and never contain secrets."""
+
+    def __init__(self, state_path: str, permit_id: str) -> None:
+        lock_dir = os.path.join(
+            os.path.dirname(os.path.abspath(state_path)), "permit-locks"
+        )
+        os.makedirs(lock_dir, exist_ok=True)
+        key = hashlib.sha256(
+            (os.path.abspath(state_path) + chr(0) + permit_id).encode("utf-8")
+        ).hexdigest()[:40]
+        self._path = os.path.join(lock_dir, key + ".lock")
+        self._fd: Optional[int] = None
+
+    def __enter__(self) -> "CrossProcessPermitLock":
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        self._fd = os.open(self._path, flags, 0o600)
+        _lock_fd(self._fd)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self._fd is not None:
+            _unlock_fd(self._fd)
+            os.close(self._fd)
+            self._fd = None
 
 
 class Executor:
@@ -105,9 +183,10 @@ class Executor:
         self.vault_root = os.path.abspath(vault_root)
         self.audit = audit_log
         self.approver = approver
-        if not hasattr(self.audit, "_path"):  # pragma: no cover - contract
-            raise TypeError("audit log must expose a stable state path")
-        self._state_key = self.audit._path  # shared-mutation-state identity
+        state_path = getattr(self.audit, "state_path", None)
+        if not isinstance(state_path, str) or not state_path:
+            raise TypeError("audit log must expose a stable state_path")
+        self._state_key = state_path  # shared-mutation-state identity
 
     # ------------------------------------------------------------------
     # MG-01: secure resolution returning ONE open fd proven to be the
@@ -201,11 +280,13 @@ class Executor:
 
     # ------------------------------------------------------------------
     def execute(self, proposal: Proposal, permit: Permit) -> ExecutionResult:
-        # MG-02: SHARED lock — same mutation state + permit serializes
-        # across ALL Executor instances; covers duplicate check,
-        # admission, write and audit persistence.
+        # MG-02: same mutation state + permit serializes across ALL
+        # Executor instances AND across processes (advisory file
+        # lock); covers duplicate check, admission, mutation
+        # execution and audit persistence.
         with shared_permit_lock(self._state_key, permit.permit_id):
-            return self._execute_locked(proposal, permit)
+            with CrossProcessPermitLock(self._state_key, permit.permit_id):
+                return self._execute_locked(proposal, permit)
 
     def _execute_locked(self, proposal: Proposal, permit: Permit) -> ExecutionResult:
         before = ""

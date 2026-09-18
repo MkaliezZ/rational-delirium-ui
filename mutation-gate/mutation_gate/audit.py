@@ -30,6 +30,9 @@ REQUIRED_AUDIT_FIELDS = (
 class AuditLog:
     def __init__(self, path: str) -> None:
         self._path = path
+        # MG-02: public, stable identity of the shared mutation state
+        # (used to key cross-process permit admission locks).
+        self.state_path = os.path.abspath(path)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
     def append(self, record: Dict[str, Any], timestamp: str) -> Dict[str, Any]:
