@@ -22,6 +22,16 @@ export class ObsidianNavigationPort implements NavigationPort {
     if (leaf === null) return;
     try {
       await leaf.openFile(file);
+      // GI-RT-01: cursor modes MUST await the reveal boundary. Native
+      // deferred loading / editor-state restoration settles when
+      // `await workspace.revealLeaf(leaf)` resolves (the documented
+      // lifecycle contract for communicating with a fully-loaded
+      // view); writing the cursor earlier loses to that restoration.
+      if (mode === "source" || target.subpath !== undefined) {
+        await this.app.workspace.revealLeaf(leaf);
+      }
+      // GI-RT-01: REACQUIRE the view after the readiness boundary —
+      // never trust a pre-reveal view reference.
       const view = leaf.view;
       if (!(view instanceof MarkdownView) || view.file?.path !== file.path) return;
       if (mode === "source") {

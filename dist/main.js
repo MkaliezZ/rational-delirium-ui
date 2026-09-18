@@ -12903,6 +12903,9 @@ var ObsidianNavigationPort = class {
     if (leaf === null) return;
     try {
       await leaf.openFile(file);
+      if (mode === "source" || target.subpath !== void 0) {
+        await this.app.workspace.revealLeaf(leaf);
+      }
       const view = leaf.view;
       if (!(view instanceof import_obsidian5.MarkdownView) || view.file?.path !== file.path) return;
       if (mode === "source") {
