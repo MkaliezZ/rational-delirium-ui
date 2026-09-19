@@ -803,3 +803,122 @@
   background: var(--rd-surface-raised, #1D1C19);
   color: var(--rd-surface-focus-rule, #D8C89D);
 }
+
+/* ============================================================
+   v1.6.4 — Animation & interaction polish (design contract:
+   docs/RD_V1_6_4_ANIMATION_AND_INTERACTION_DESIGN).
+   Motion explains structure; it never creates meaning. Pure CSS:
+   no timers, no loops, no observers, no framework. Every effect
+   is a one-shot, user-triggered reveal. Timing lives in motion
+   custom properties so a future theme may adjust feel — never
+   semantics.
+   ============================================================ */
+
+/* Motion tokens (presentation-only custom properties). */
+.rd-knowledge-panel,
+.rd-workspace-shell {
+  --rd-motion-duration: 140ms;
+  --rd-motion-duration-fast: 100ms;
+  --rd-motion-ease: ease-out;
+}
+
+/* Phase 1 — micro interactions: shared interaction transition.
+   Color/border/background only; no transform on hover, no radiance. */
+.rd-knowledge-panel .rdkp-nav,
+.rd-knowledge-panel .rdkp-section-title,
+.rd-workspace-shell .rdws-button,
+.rd-workspace-shell .rdws-theme-select,
+.rd-workspace-shell .rdws-object-input,
+.rd-workspace-shell .rdws-object-row {
+  transition:
+    color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
+    background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
+    border-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out);
+}
+
+/* Phase 1 — focus visibility for keyboard navigation (accessible
+   control boundary; not a semantic emphasis). */
+.rd-knowledge-panel .rdkp-nav:focus-visible,
+.rd-knowledge-panel .rdkp-section-title:focus-visible,
+.rd-workspace-shell .rdws-button:focus-visible,
+.rd-workspace-shell .rdws-theme-select:focus-visible,
+.rd-workspace-shell .rdws-object-input:focus-visible,
+.rd-workspace-shell .rdws-object-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+
+/* Phase 1 — selection feedback: current object row eases in its
+   neutral selection outline (position feedback, not importance). */
+.rd-workspace-shell .rdws-object-row[aria-pressed="true"] {
+  transition:
+    outline-color var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out),
+    background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out);
+}
+
+/* Phase 1 — expand/collapse reveal: newly opened section content
+   fades in once (progressive disclosure, 140ms). */
+.rd-knowledge-panel details[open] > .rdkp-section-body {
+  animation: rd-reveal var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out);
+}
+
+/* Phase 2 — investigation continuity: the reading panel enters
+   with a 4px settle when an object is (re)rendered — continuing
+   an investigation, not switching pages. No exit animation, no
+   layout shift beyond the settle. */
+.rd-workspace-shell .rdws-reading-inner {
+  animation: rd-enter var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out);
+}
+
+/* Phase 3 — knowledge structure motion. Provenance reading order
+   (Source → Snapshot → Declared; Observation → … → Conclusion) is
+   conveyed by a sibling-chain stagger: each subsequent declared
+   layer appears one step later. Order = structure; no layer is
+   emphasized over another. */
+.rd-knowledge-panel .rdkp-provenance .rdkp-layer {
+  animation: rd-reveal var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out) backwards;
+}
+.rd-knowledge-panel .rdkp-provenance .rdkp-layer ~ .rdkp-layer {
+  animation-delay: 60ms;
+}
+.rd-knowledge-panel .rdkp-provenance .rdkp-layer ~ .rdkp-layer ~ .rdkp-layer {
+  animation-delay: 120ms;
+}
+.rd-knowledge-panel .rdkp-provenance .rdkp-layer ~ .rdkp-layer ~ .rdkp-layer ~ .rdkp-layer {
+  animation-delay: 180ms;
+}
+
+/* Phase 3 — lineage groups appear in investigation order:
+   Previous → Current → Following (sibling-chain stagger on the
+   group titles). Sequence = structure; no branch is highlighted
+   as more important. */
+.rd-knowledge-panel .rdkp-lineage .rdkp-lineage-title {
+  animation: rd-reveal var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out) backwards;
+}
+.rd-knowledge-panel .rdkp-lineage .rdkp-lineage-title ~ .rdkp-lineage-title {
+  animation-delay: 60ms;
+}
+.rd-knowledge-panel .rdkp-lineage .rdkp-lineage-title ~ .rdkp-lineage-title ~ .rdkp-lineage-title {
+  animation-delay: 120ms;
+}
+
+/* Keyframes: two one-shot reveals only. */
+@keyframes rd-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rd-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Reduced motion (§6): movement removed; information and
+   interaction meaning fully preserved — animation was never the
+   only information source. */
+@media (prefers-reduced-motion: reduce) {
+  .rd-knowledge-panel *,
+  .rd-workspace-shell * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

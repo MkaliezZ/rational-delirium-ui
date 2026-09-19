@@ -172,6 +172,9 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
     for (const selector of selectors) {
       // media prelude lines etc. have no selector text
       if (selector === "" || selector.startsWith("@")) continue;
+      // v1.6.4: keyframe internals (from/to/percentage stops) are
+      // not selectors; keyframe blocks themselves start with @.
+      if (selector === "from" || selector === "to" || /^\d+(\.\d+)?%$/.test(selector)) continue;
       for (const part of selector.split(",")) {
         const s = part.trim();
         if (s === "") continue;
