@@ -15,14 +15,30 @@ docs/RD_V0_8_MULTI_DEVICE_AGENT_HANDOFF_PROTOCOL_DESIGN.md §5.
 - [ ] `timestamp` — UTC ISO-8601
 - [ ] `work_product_reference` — `{ kind, id, digest? }`; kind ∈
       proposal | review | synthesis | evidence | decision-context;
-      ONE primary product. `decision-context` = informational work
-      product assembled for Human consideration (references to
-      reviewed workflow state + proposed exact operation; NO
-      approval, NO execution authority — not a decision record,
-      not a Permit, not an Execution Request). NOTE: handoff_type
-      and kind are SEPARATE concepts (workflow transition vs
-      carried product) — never assume identical enum values;
-      classify the actual product truthfully
+      ONE primary product. NOTE: handoff_type and kind are
+      SEPARATE concepts (workflow transition vs carried product) —
+      never assume identical enum values; classify the actual
+      product truthfully.
+      - `evidence` = source material / traceable record of
+        observations, source statements, or pre-existing state
+        (epistemic basis: what was observed / what the source
+        stated / where from / under what conditions). NOT
+        proposals, recommendations, review findings, synthesis
+        conclusions, decision-context, approvals, or inference
+        relabeled as source fact. An artifact does not become
+        evidence merely because it cites/summarizes/depends on
+        evidence — classification follows the artifact's
+        PRIMARY SEMANTIC FUNCTION. Boundary test: strip all
+        workflow intentions,
+        recommendations, judgments, and approval context — does it
+        still represent observations/source material/pre-existing
+        state? (semantic test only, no authority)
+      - `decision-context` = informational work product assembled
+        for Human consideration (references to reviewed workflow
+        state + proposed exact operation; NO approval, NO
+        execution authority — not a decision record, not a Permit,
+        not an Execution Request). MAY reference evidence; IS NOT
+        evidence.
 - [ ] `assumptions` — possibly empty list (empty = "none declared")
 - [ ] `unknowns` — possibly empty; unknown/unavailable/not-performed
       kept distinct

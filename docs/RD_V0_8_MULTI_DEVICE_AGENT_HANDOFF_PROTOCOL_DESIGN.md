@@ -383,6 +383,79 @@ a derived presentation about workflow state. Do not classify it as
 draft; a decision-context is the Approval Assistant's presentation
 of already-reviewed state. Role clarity is part of the taxonomy.
 
+### Work-product kind semantics — the `evidence` boundary
+
+**Definition.** `evidence` is source material or a traceable
+record of observations, external source statements, or
+pre-existing state. Its primary semantic function is to answer:
+*What was observed? What did the source state? Where did this
+information come from? Under what acquisition/observation
+conditions was it obtained?* Evidence is about the **epistemic
+basis of knowledge**. It does not express workflow authority and
+does not say what action should be taken.
+
+**Evidence work products MAY contain:** direct observations; source
+statements; excerpts; faithful source summaries; acquisition
+context; provenance; source identifiers; timestamps; observation
+conditions; source limitations; availability/unavailable status;
+not-performed status; claim→evidence mappings; traceable records
+of pre-existing state. A structured summary is still evidence ONLY
+when its primary function is faithful representation of source
+material and it does not transform that material into a workflow
+judgment or action.
+
+**Evidence work products are NOT:** proposals; action
+recommendations; review findings; review recommendations; synthesis
+conclusions; approval requests; decision-context; Human decisions;
+Execution Requests; Permits; leases; signatures; execution
+instructions; mutation permission; or Agent inference presented as
+source fact. An artifact that contains evidence references does NOT
+thereby become an evidence work product.
+
+**Primary-semantic-function rule (invariant).** Classification is
+determined by the artifact's PRIMARY SEMANTIC FUNCTION, not by
+whether it contains evidence references. An artifact does not
+become `evidence` merely because it cites, summarizes, embeds, or
+depends on evidence.
+
+**Cross-kind distinctions:**
+
+| kind | Primary semantic function |
+|---|---|
+| `evidence` | what was observed / what sources state / traceable source basis |
+| `proposal` | what change or knowledge mutation is being proposed |
+| `review` | what an independent reviewer finds about a work product |
+| `synthesis` | how multiple research inputs are combined while preserving disagreement, uncertainty, provenance, unknowns |
+| `decision-context` | what exact reviewed operation, evidence basis, limitations, and unresolved conditions are presented to the Human for a decision |
+
+**Relationship rules:** a decision-context MAY REFERENCE evidence
+but IS NOT evidence; a review MAY CITE evidence but IS NOT
+evidence; a proposal MAY BE BASED ON evidence but IS NOT evidence;
+a synthesis MAY CONSUME evidence but IS NOT evidence. Research
+outputs may contain both evidence records and Agent analysis — only
+the source-material / observation portion qualifies as evidence.
+
+**EVIDENCE BOUNDARY TEST** (semantic classification test; NOT a
+runtime validator; creates no authority): *"If all workflow
+intentions, recommendations, proposed actions, review judgments,
+synthesis conclusions, and approval context were removed, would this
+artifact still meaningfully represent observations, source
+material, or traceable pre-existing state?"* — **YES**: it may
+qualify as an evidence work product. **NO**: it is not an evidence
+work product.
+
+**Inference boundary.** Agent inference is not evidence merely
+because it is based on evidence. A work product may say:
+
+```text
+Evidence:  Source A states X.
+Inference: The Agent infers Y from X.
+```
+
+Only the first statement is evidence. The second remains inference
+unless independently supported as a source statement or
+observation. Relabeling does not upgrade epistemic status.
+
 ### Prohibited fields (schema-level invariant)
 
 The schema has **no** fields for: approval, permit, signature,

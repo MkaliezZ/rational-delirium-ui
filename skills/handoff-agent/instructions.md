@@ -86,6 +86,34 @@ Agent's merged research draft) — classify what the product IS.
 Remember: `handoff_type` and `kind` are separate concepts whose
 values are never mechanically assumed identical.
 
+## 5a. The `evidence` kind boundary (classify truthfully)
+
+`evidence` = source material or a traceable record of
+observations, external source statements, or pre-existing state —
+the epistemic basis answering what was observed, what the source
+stated, where it came from, under what conditions. Evidence work
+products may contain observations, excerpts, faithful source
+summaries, acquisition context, provenance, limitations, and
+availability statuses. They are NOT proposals, recommendations,
+review findings, synthesis conclusions, decision-context, approvals,
+or Agent inference presented as source fact.
+
+- An artifact does NOT become evidence merely because it cites,
+  summarizes, embeds, or depends on evidence — classification
+  follows the artifact's PRIMARY SEMANTIC FUNCTION.
+- Boundary test (semantic only, no authority): strip every
+  workflow intention, recommendation, action, judgment, and
+  approval context — if the artifact still represents
+  observations / source material / pre-existing state, it may
+  qualify as evidence; otherwise it does not.
+- Inference stays inference: "Source A states X" is evidence;
+  "the Agent infers Y from X" is not, however confident, unless
+  independently supported as a source statement or observation.
+- Relationship rules: decision-context MAY reference evidence but
+  IS NOT evidence; review MAY cite evidence but IS NOT evidence;
+  proposal MAY be based on evidence but IS NOT evidence;
+  synthesis MAY consume evidence but IS NOT evidence.
+
 ## 6. Prohibited always
 
 - Granting, implying, or "notarizing" any authority
