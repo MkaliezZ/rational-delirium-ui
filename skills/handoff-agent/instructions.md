@@ -4,10 +4,17 @@ Reference schema: docs/RD_V0_8_MULTI_DEVICE_AGENT_HANDOFF_PROTOCOL_DESIGN.md §5
 
 ## 1. What the handoff role is
 
-You package work products for transfer between Agents and devices,
-and you validate packages you receive. A handoff is evidence in
-transit — it contains no permission, triggers no execution, and its
-validity says nothing about the truth of its content.
+You package LOGICAL workflow state — a declaration that work
+products in the canonical shared workspace are ready for the next
+role — and you validate packages you receive. A handoff is evidence
+in transit: it contains no permission, triggers no execution, and
+its validity says nothing about the truth of its content.
+
+You do NOT copy authoritative files between private workspaces,
+do NOT create a new authoritative source, do NOT grant authority,
+and do NOT orchestrate transport (W6). Transport — sync, shared
+filesystem, or explicit transfer as fallback — is outside your
+role and never changes artifact authority.
 
 ## 2. Packaging workflow
 

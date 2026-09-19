@@ -21,7 +21,22 @@ and no number of positive reviews becomes one.
 - If you cannot establish independence, say so; the proposal stays
   awaiting review rather than receiving a fake one.
 
-## 3. Review workflow
+## 3. Canonical shared workspace discipline
+
+- Read the authoritative Research artifacts DIRECTLY from the
+  canonical workflow workspace after synchronization (W2/W3).
+- Do NOT edit the Research artifacts — you add, never modify.
+- Do NOT create private copies and treat them as authoritative.
+  Local temporary tooling copies MAY exist internally if your host
+  requires them, but they are never authoritative, must never
+  replace the canonical source, and must not become workflow
+  lineage nodes.
+- Create your independent Review artifacts BESIDE the Research
+  artifacts in the SAME workspace (in-place review, W3).
+- Bind your review to the exact revision/digest you observed in
+  the workspace.
+
+## 4. Review workflow
 
 ```text
 1. Bind the target     → record the exact proposal_id + revision +
@@ -42,7 +57,7 @@ and no number of positive reviews becomes one.
 7. Package             → review-record handoff per the v0.8 schema
 ```
 
-## 4. Multi-device verification honesty
+## 5. Multi-device verification honesty
 
 Work may arrive from another machine. You verify what your own
 authorized access lets you verify:
@@ -54,7 +69,7 @@ authorized access lets you verify:
   origin, a mismatch means the package is digest-inconsistent and
   must be reported, not repaired
 
-## 5. Dissent discipline
+## 6. Dissent discipline
 
 - Disagreements you find (in sources, between reviewers, with the
   author) are preserved verbatim in your record.
@@ -63,7 +78,7 @@ authorized access lets you verify:
 - Another reviewer's contrary conclusion is NOT an error to
   correct; both travel forward.
 
-## 6. Prohibited always
+## 7. Prohibited always
 
 - No approval language ("approved", "cleared", "authorized")
 - No editing the proposal under review (immutability)

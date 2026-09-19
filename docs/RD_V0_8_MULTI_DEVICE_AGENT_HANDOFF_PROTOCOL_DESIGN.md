@@ -25,15 +25,23 @@ knowledge work does not look like that. The realistic shape —
 already the de-facto development pattern of this very project — is:
 
 ```text
-Windows machine:  Research Agent (any vendor) gathers evidence,
-                   drafts a proposal
+ONE canonical shared workflow workspace (logical)
+   replicated between devices
         │
-        │  Handoff Package (a file, a paste, a message)
+Windows:          Research Agent (any vendor) writes research
+                   artifacts INTO the workspace
+        │
+        │  sync (transport-neutral)
         ▼
-macOS machine:    Review Agent (any other vendor) independently
-                   inspects the exact digest and sources
+macOS:            Review Agent reads THE SAME authoritative
+                   artifacts in the SAME logical workspace,
+                   ADDS review artifacts beside them
         │
-        │  Review Artifact (handoff)
+        │  sync
+        ▼
+Windows:          Research Agent reads THE SAME review artifacts,
+                   ADDS successor revision artifacts (r2, r3…)
+        │
         ▼
 Human:            explicit decision on one exact package
                   (aided by a decision-context handoff that
@@ -47,6 +55,13 @@ Executor env:     Bridge Adapter → Bridge validation →
         ▼
 Knowledge System: read-only presentation
 ```
+
+Agents exchange **workflow stage/ownership**, not copied
+authoritative files. The earlier explicit copy/export pattern
+(export artifacts on one device, import into a separate private
+workspace on another) remains a supported **fallback / offline
+transport scenario** — it is not the primary model and must be
+labeled as such wherever it appears (see §1.1).
 
 When work crosses a **device boundary**, four things become fragile
 unless made explicit:
@@ -64,6 +79,71 @@ unless made explicit:
 v0.8 defines the protocol that makes these four separations
 explicit, machine-checkable where deterministic, and honest where
 not.
+
+### 1.1 CANONICAL_SHARED_WORKSPACE_PRINCIPLE (primary model)
+
+**Definition.** A `workflow_run` has exactly ONE canonical logical
+workspace. Different devices may expose that workspace at different
+local filesystem paths — e.g. `F:\RD-Work\RUN-0001` on Windows and
+`~/RD-Work/RUN-0001` on macOS are different local paths over the
+SAME logical synchronized workspace. All authoritative workflow
+artifacts live in that one logical workspace.
+
+**The invariant** (what "same workspace" means):
+
+```text
+SAME LOGICAL WORKSPACE
++ SAME AUTHORITATIVE ARTIFACT SET
++ SYNCED BETWEEN DEVICES
+```
+
+This does NOT claim one physical filesystem: local paths differ,
+and synchronization is eventually consistent. The protocol is
+transport-neutral — Syncthing is the *current deployment
+transport*, not RD protocol authority; a shared filesystem or
+explicit transfer may serve as transport without changing any rule.
+
+**Primary workflow rules.**
+
+| # | Rule |
+|---|---|
+| W1 | **One canonical workspace** — one workflow_run → one logical workspace holding all authoritative artifacts. |
+| W2 | **Same authoritative artifacts** — every participating Agent consumes the same authoritative artifacts after synchronization; an Agent MUST NOT copy authoritative inputs into a separate private directory and treat the copies as the new authoritative source. |
+| W3 | **In-place review** — a Review Agent reads existing Research artifacts in the canonical workspace, MUST NOT modify them, and creates NEW Review artifacts beside them in the same workspace. |
+| W4 | **Append-by-succession** — responding to REVISION_REQUIRED, the Research Agent reads the Review artifacts in the same workspace, MUST NOT overwrite submitted r1, and creates r2 as a new successor artifact with correct `revision_reference` / `input_references`. |
+| W5 | **Sequential writer** — at any workflow stage exactly one role/device is the active writer of newly-created artifacts; others read synchronized authoritative artifacts; simultaneous conflicting mutation of the same authoritative artifact is prohibited. This is a workflow/Skill discipline — no distributed lock runtime is created by this design. |
+| W6 | **Handoff is logical, not transport** — a handoff artifact means "this work product is ready for the next workflow role", never "copy these files to another private workspace". Transport (sync, shared FS, explicit transfer) does not change artifact authority. |
+| W7 | **Shared workspace is primary** — the canonical shared workspace is THE primary RD multi-device workflow model; explicit file copy/export is a supported fallback/offline scenario and must be labeled as such. |
+
+**Canonical workspace layout (illustrative).**
+
+```text
+<logical-workspace>/RUN-0001/
+├── case/                      # source artifacts
+├── workflow/
+│   ├── research-r1.md         + handoff-research-r1.md   (Windows Research)
+│   ├── review-r1.md           + handoff-review-r1.md     (macOS Review, added beside)
+│   ├── revision-response-r2.md + research-r2.md + handoff-research-r2.md
+│   └── …                      (successors; nothing above is ever overwritten)
+```
+
+### 1.2 Explicit-transfer fallback (reclassified evidence)
+
+The v0.8.2A/v0.8.2B trial used explicit copy/export between
+separate device sandboxes. That trial remains valid evidence —
+**for the fallback scenario**:
+
+```text
+V0_8_2A_B_EXPLICIT_TRANSFER_HANDOFF=VALIDATED_AS_FALLBACK_SCENARIO
+PRIMARY_SHARED_WORKSPACE_WORKFLOW_VALIDATED=false
+```
+
+It demonstrated: cross-device explicit file transfer; external
+Agent Skill consumption; independent review; provenance/unknown/
+dissent preservation; no authority leakage. It did NOT
+demonstrate: same-canonical-workspace collaboration or sequential
+multi-device in-place workflow. The primary model awaits its own
+trial; nothing here overclaims it.
 
 ### What this is NOT
 
@@ -237,6 +317,16 @@ Knowledge layers — that disconnection *is* the security property.
 
 Vendor-neutral schema. The package is a semantic record — file,
 message, or paste; transport chooses nothing about meaning.
+
+A handoff is a **logical workflow transition**: it declares "this
+work product, in the canonical shared workspace, is ready for the
+next role" (W6). It is NOT a transport instruction — it never
+means "copy these files to another private workspace", and
+transport (sync / shared FS / explicit transfer as fallback) never
+changes artifact authority. The handoff identifies exact existing
+work products and lineage inside the one canonical logical
+workflow; its `handoff_id` lives in that workspace alongside the
+artifacts it names.
 
 ### Field specification
 
@@ -419,7 +509,10 @@ Review record R2 (binds D2) → … → Human decides on some rN
 
 1. **Never overwrite history.** Submitted revisions are immutable;
    correction is succession, not edit. Every rN remains exactly as
-   submitted, forever inspectable.
+   submitted, forever inspectable — in place, in the canonical
+   workspace (W4: a responding author reads the review artifacts
+   beside r1 and creates r2 as a NEW artifact; r1's bytes never
+   change under any workflow operation).
 2. **Preserve the predecessor reference.** Each successor carries
    `revision_reference` (what it supersedes + why). A revision
    without lineage is a new proposal, not a successor.
@@ -466,6 +559,26 @@ Two distinct lineage kinds, never conflated:
 | **D — Unknown identity** | A package's `creator_identity` cannot be corroborated, or two packages claim contradictory origins | Honesty-level: the protocol records declared identities; it does not authenticate them (documented limitation) | Receiver declares the uncorroborated identity in its output; the Human weighs it; approval never depends on Agent identity claims anyway | No identity "inference" from writing style or metadata; no refusing review solely on unverifiable identity (the work is judged as work); no treating a verified-looking identity as authority |
 | **E — Stale approval reference** | An `decision-context` handoff references a decision record that predates a base change, or (execution-layer side) a Permit whose `base_sha256` no longer matches the note | Deterministic at the Gate: stale-base rejection; at packaging: context-reference → digest binding check | Back to Case-A-style successor: new observation → new proposal → fresh review → new decision. The earlier Permit is not "re-used" | No automatic re-approval; no patching the old Permit; no executor substitution to force success (frozen v0.5.x rules) |
 | **F — Network interruption** | A handoff never arrives, or arrives truncated; an outcome report is lost after execution | Missing lineage links; truncated packages fail deterministic validation | Missing handoff: report "not received", re-request from the source Agent (it still holds its work); lost outcome report: the executing side's **Audit layer** remains the authoritative record — request the audit reference again | No re-execution because a report was lost (audit is the truth, reports are views); no accepting a truncated package; no inferring content of unreceived packages |
+
+### Sequential writer discipline (W5)
+
+Multi-device does NOT mean concurrent uncontrolled writers. The
+preferred pattern:
+
+```text
+Agent A completes its artifacts → sync reaches the other device →
+Agent B consumes them → Agent B adds its own artifacts → sync back
+```
+
+At any workflow stage, one role/device is the active writer for
+newly-created artifacts; the others read synchronized authoritative
+artifacts. Two Agents simultaneously mutating the SAME
+authoritative artifact is prohibited — this is a workflow/Skill
+discipline enforced by honest behavior and review, NOT by a new
+distributed lock service (none is created here). The frozen
+deterministic concurrency boundaries (Mutation Gate admission,
+Bridge writer rules) remain the enforcement points where execution
+actually happens; nothing in this section modifies them.
 
 Global rule across all cases: **detection is deterministic where
 digests and lineage exist; response is always "surface and stop or

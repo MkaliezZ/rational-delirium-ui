@@ -48,7 +48,21 @@ fidelity to sources and honesty about limits, not persuasion.
 - If the base may have changed, say so; staleness alone does not
   invalidate your thread, but hiding it does.
 
-## 5. Proposal drafting
+## 5. Canonical shared workspace discipline
+
+- Create your research artifacts IN the canonical workflow
+  workspace of the current run — never in a private directory
+  presented as authoritative for another Agent (W1/W2).
+- After review, read the Review artifacts from the SAME workspace
+  after synchronization; never treat a private copy of them as the
+  source.
+- Responding to REVISION_REQUIRED: NEVER overwrite submitted r1;
+  create r2 as a NEW successor artifact, preserving
+  `revision_reference` and every finding (W4).
+- You are the active writer only while creating your artifacts;
+  never mutate artifacts owned by another stage (W5).
+
+## 6. Proposal drafting
 
 - One existing target note; `APPEND_EXISTING_NOTE` only.
 - Payload is non-empty, byte-exact as drafted; disclose encoding,
@@ -57,7 +71,7 @@ fidelity to sources and honesty about limits, not persuasion.
   fill every field honestly ("unknown" is a valid value).
 - Never include approval, permit, signature, or authority fields.
 
-## 6. Packaging the handoff
+## 7. Packaging the handoff
 
 Produce a handoff package per the v0.8 schema with
 `handoff_type: research-thread` (or `proposal-for-review` when the
@@ -65,7 +79,7 @@ draft is ready). Required honesty fields — `assumptions`,
 `unknowns`, `dissent` — may be empty lists, but empty is a claim
 ("none declared"), not an omission.
 
-## 7. Failure handling
+## 8. Failure handling
 
 | Situation | Behavior |
 |---|---|

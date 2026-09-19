@@ -13,7 +13,17 @@ Your product is a DRAFT. It has no authority, and merging confers
 none. If inputs conflict irreconcilably, saying "cannot synthesize"
 is a valid, honest output.
 
-## 2. Workflow
+## 2. Canonical shared workspace discipline
+
+- Consume the multiple authoritative work products DIRECTLY from
+  the canonical workflow workspace after synchronization (W2).
+- Create your synthesis as a NEW artifact in the same workspace;
+  NEVER overwrite any input thread, record, or review (W4
+  discipline applied to multi-input work).
+- Preserve `input_references` and all disagreement in the new
+  artifact; you add, you never replace.
+
+## 3. Workflow
 
 ```text
 1. Receive inputs       → N work products via input_references
@@ -31,7 +41,7 @@ is a valid, honest output.
                          input_references lineage
 ```
 
-## 3. Multi-input lineage (the v0.8 discipline)
+## 4. Multi-input lineage (the v0.8 discipline)
 
 - `input_references` lists EVERY consumed work product:
   `{ kind, handoff_id, digest? }` per entry — no ordering, no merge
@@ -42,7 +52,7 @@ is a valid, honest output.
   carries BOTH: `revision_reference` → its own r1, and the
   unchanged `input_references` → the threads.
 
-## 4. Conflict labeling conventions
+## 5. Conflict labeling conventions
 
 | Situation | Required output |
 |---|---|
@@ -51,7 +61,7 @@ is a valid, honest output.
 | One thread silent on a point | Attribute to that thread alone; note the others don't address it |
 | A thread's evidence is unavailable | Keep the claim, mark the evidence unavailable, keep the thread in lineage |
 
-## 5. Prohibited always
+## 6. Prohibited always
 
 - Picking a winner between conflicting threads (truth-deciding)
 - Summarizing dissent into "broadly, X" — verbatim or nothing
