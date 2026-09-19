@@ -95,3 +95,101 @@ export function diagnosticsFor(
   if (objectId === undefined) return graph.diagnostics;
   return graph.diagnostics.filter((d) => d.object_id === objectId);
 }
+
+/** ----- v1.3.1 Phase 2: Lineage Explorer (declared data only) -----
+ *
+ * Previous/following entries come from DECLARED pointers and edges
+ * only: the predecessor/successor fields, the object's own
+ * revises/supersedes declarations, and INVERSE READINGS of other
+ * objects' revises/supersedes declarations (an inverse listing is a
+ * reading of an existing edge, never a new relation). Historical
+ * objects stay visible; nothing is merged, hidden, or auto-selected;
+ * multiple successors are all listed. Inconsistent declarations are
+ * surfaced as notes, never reconciled. */
+
+export interface LineageEntry {
+  readonly objectId: string;
+  /** Which declaration produced this entry. */
+  readonly via: "predecessor field" | "successor field" | "revises declaration" | "supersedes declaration" | "revised-by reading" | "superseded-by reading";
+  readonly inSnapshot: boolean;
+  readonly status: string | null;
+}
+
+export interface LineageModel {
+  readonly previous: readonly LineageEntry[];
+  readonly following: readonly LineageEntry[];
+  readonly notes: readonly string[];
+}
+
+function statusOf(graph: SemanticGraphSnapshot, objectId: string): {
+  inSnapshot: boolean; status: string | null;
+} {
+  const node = graph.nodes.find((n) => n.object_id === objectId);
+  return { inSnapshot: node !== undefined, status: node ? node.status : null };
+}
+
+function entry(
+  graph: SemanticGraphSnapshot,
+  objectId: string,
+  via: LineageEntry["via"],
+): LineageEntry {
+  const s = statusOf(graph, objectId);
+  return { objectId, via, inSnapshot: s.inSnapshot, status: s.status };
+}
+
+export function buildLineage(graph: SemanticGraphSnapshot, objectId: string): LineageModel {
+  const node = graph.nodes.find((n) => n.object_id === objectId);
+  const notes: string[] = [];
+  const previous: LineageEntry[] = [];
+  const following: LineageEntry[] = [];
+
+  if (node !== undefined) {
+    if (node.predecessor !== null) {
+      previous.push(entry(graph, node.predecessor, "predecessor field"));
+    }
+    if (node.successor !== null) {
+      following.push(entry(graph, node.successor, "successor field"));
+    }
+  }
+
+  // The object's own revises/supersedes declarations point backward.
+  for (const edge of graph.edges) {
+    if (edge.source !== objectId) continue;
+    if (edge.relation === "revises") {
+      previous.push(entry(graph, edge.target, "revises declaration"));
+    } else if (edge.relation === "supersedes") {
+      previous.push(entry(graph, edge.target, "supersedes declaration"));
+    }
+  }
+  // Inverse readings: other objects declaring revises/supersedes TO
+  // this object point forward. Reading a declared edge, not creating.
+  for (const edge of graph.edges) {
+    if (edge.target !== objectId) continue;
+    if (edge.relation === "revises") {
+      following.push(entry(graph, edge.source, "revised-by reading"));
+    } else if (edge.relation === "supersedes") {
+      following.push(entry(graph, edge.source, "superseded-by reading"));
+    }
+  }
+
+  // Consistency notes (displayed, never reconciled):
+  const predIds = new Set(previous.map((e) => e.objectId));
+  const succIds = new Set(following.map((e) => e.objectId));
+  if (predIds.size > 1) {
+    notes.push(`multiple predecessors declared (${[...predIds].join(", ")}); not reconciled`);
+  }
+  if (succIds.size > 1) {
+    notes.push(
+      `multiple following objects (${[...succIds].join(", ")}); all listed, none auto-selected`,
+    );
+  }
+  if (node !== undefined && node.predecessor !== null &&
+      !graph.edges.some((e) => e.source === objectId && e.target === node.predecessor &&
+        (e.relation === "revises" || e.relation === "supersedes"))) {
+    notes.push(
+      `predecessor field (${node.predecessor}) has no matching revises/supersedes declaration`,
+    );
+  }
+
+  return { previous, following, notes };
+}

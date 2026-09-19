@@ -12,6 +12,8 @@ import type { ReadAdapter } from "./platform/obsidian-read-adapter";
 import type { WorkspaceLike, VaultLike } from "./runtime/runtime-wiring";
 import type { GraphSource } from "./semantic-graph/graph-loader";
 import { DEFAULT_SEMANTIC_GRAPH_PATH } from "./semantic-graph/graph-loader";
+import type { KoDetailResult, KoSourceReader } from "./semantic-graph/ko-detail-reader";
+import { extractFrontmatterBlock, koDetailFromNote, parseKoFrontmatter } from "./semantic-graph/ko-detail-reader";
 
 /** v1.3.1 §1: read-only source over the derived semantic-graph
  * artifact file. adapter.exists/read only — no write verb. */
@@ -26,6 +28,58 @@ class ObsidianGraphSourceImpl implements GraphSource {
       return { state: "available" as const, text: await adapter.read(DEFAULT_SEMANTIC_GRAPH_PATH) };
     } catch (err) {
       return { state: "unavailable" as const, reason: String(err) };
+    }
+  }
+}
+
+/** v1.3.1 Phase 2 §1: read-only KO source reader. Resolves an exact
+ * object_id by scanning note FRONTMATTER only (body never parsed);
+ * duplicate declarations are ambiguous, never silently chosen.
+ * Frontmatter map is cached per refresh cycle; invalidate() drops
+ * it so "Re-read" rebuilds from current files. */
+class ObsidianKoSourceReaderImpl implements KoSourceReader {
+  private index: Map<string, string[]> | null = null;
+
+  constructor(private readonly plugin: Plugin) {}
+
+  invalidate(): void {
+    this.index = null;
+  }
+
+  private async ensureIndex(): Promise<Map<string, string[]>> {
+    if (this.index !== null) return this.index;
+    const map = new Map<string, string[]>();
+    const adapter = this.plugin.app.vault.adapter;
+    const files = this.plugin.app.vault
+      .getMarkdownFiles().map((f) => f.path).sort();
+    for (const path of files) {
+      try {
+        const text = await adapter.read(path);
+        const block = extractFrontmatterBlock(text);
+        if (block === null) continue;
+        const fm = parseKoFrontmatter(block);
+        if (fm === null) continue;
+        const list = map.get(fm.object_id) ?? [];
+        list.push(path);
+        map.set(fm.object_id, list);
+      } catch {
+        // unreadable note: skip; it declares nothing usable here
+      }
+    }
+    this.index = map;
+    return map;
+  }
+
+  async resolve(objectId: string): Promise<KoDetailResult> {
+    try {
+      const map = await this.ensureIndex();
+      const paths = map.get(objectId) ?? [];
+      if (paths.length === 0) return { state: "missing" };
+      if (paths.length > 1) return { state: "ambiguous", paths };
+      const text = await this.plugin.app.vault.adapter.read(paths[0]);
+      return koDetailFromNote(paths[0], text);
+    } catch (err) {
+      return { state: "unavailable", reason: String(err) };
     }
   }
 }
@@ -170,6 +224,7 @@ export default class RationalDeliriumPlugin extends Plugin {
       (leaf: WorkspaceLeaf) =>
         new RDKnowledgePanelView(leaf, {
           source: new ObsidianGraphSourceImpl(this),
+          sourceReader: new ObsidianKoSourceReaderImpl(this),
           workspace: "default",
         }),
     );
