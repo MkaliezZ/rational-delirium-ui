@@ -343,9 +343,22 @@ function section(
   return createChild(details, "div", { cls: "rdkp-section-body" });
 }
 
+export interface PanelRenderOptions {
+  /** v1.6.3: optional object-navigation handler. When present,
+   * lineage entries, relation endpoints and unresolved targets
+   * render as buttons that call back with the object_id — the
+   * investigation flow. Pure rendering; the callback fires only on
+   * user action. */
+  readonly onSelectObject?: (objectId: string) => void;
+}
+
 /** Render the panel model into a container using the plugin's
  * safe-DOM helpers (createChild/textContent only). Pure output. */
-export function renderKnowledgePanel(container: HTMLElement, model: KnowledgePanelModel): void {
+export function renderKnowledgePanel(
+  container: HTMLElement,
+  model: KnowledgePanelModel,
+  options?: PanelRenderOptions,
+): void {
   emptyEl(container);
   const root = createChild(container, "div", { cls: "rd-knowledge-panel" });
 
@@ -408,8 +421,15 @@ export function renderKnowledgePanel(container: HTMLElement, model: KnowledgePan
         return;
       }
       for (const e of entries) {
-        const line = createChild(lin, "div", { cls: "rdkp-lineage-row" });
+        const navigate = options?.onSelectObject;
+        const line = navigate === undefined
+          ? createChild(lin, "div", { cls: "rdkp-lineage-row" })
+          : createChild(lin, "button", { cls: "rdkp-lineage-row rdkp-nav" });
         line.setAttribute("data-in-snapshot", String(e.inSnapshot));
+        if (navigate !== undefined) {
+          line.setAttribute("aria-label", `inspect ${e.objectId}`);
+          line.addEventListener("click", () => navigate(e.objectId));
+        }
         line.textContent =
           `${e.objectId}` +
           `${e.status !== null ? ` [${e.status}]` : ""}` +
@@ -440,9 +460,16 @@ export function renderKnowledgePanel(container: HTMLElement, model: KnowledgePan
     createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
   } else {
     for (const row of model.relations) {
-      const line = createChild(rel, "div", { cls: "rdkp-relation-row" });
+      const navigate = options?.onSelectObject;
+      const line = navigate === undefined
+        ? createChild(rel, "div", { cls: "rdkp-relation-row" })
+        : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
       line.setAttribute("data-direction", row.direction);
       line.setAttribute("data-endpoint", row.endpointState);
+      if (navigate !== undefined) {
+        line.setAttribute("aria-label", `inspect ${row.otherId}`);
+        line.addEventListener("click", () => navigate(row.otherId));
+      }
       line.textContent =
         `${row.edge.relation} [${row.direction}] ` +
         `source: ${row.edge.source} → target: ${row.edge.target}` +
@@ -450,10 +477,16 @@ export function renderKnowledgePanel(container: HTMLElement, model: KnowledgePan
     }
   }
   for (const u of model.unresolvedFrom) {
-    createChild(rel, "div", {
-      cls: "rdkp-unresolved",
-      text: `unresolved declaration: ${u.relation} → ${u.target} (target not in snapshot)`,
-    });
+    const navigate = options?.onSelectObject;
+    const line = navigate === undefined
+      ? createChild(rel, "div", { cls: "rdkp-unresolved" })
+      : createChild(rel, "button", { cls: "rdkp-unresolved rdkp-nav" });
+    if (navigate !== undefined) {
+      line.setAttribute("aria-label", `inspect ${u.target}`);
+      line.addEventListener("click", () => navigate(u.target));
+    }
+    line.textContent =
+      `unresolved declaration: ${u.relation} → ${u.target} (target not in snapshot)`;
   }
 
   if (model.diagnosticsGroups !== null) {

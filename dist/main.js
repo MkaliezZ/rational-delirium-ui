@@ -13066,171 +13066,6 @@ async function loadGraphFromSource(source) {
   return parseGraphSnapshot(read.text);
 }
 
-// src/architecture/theme-tokens.ts
-var RD_TOKEN_VERSION = "rd-tokens/1";
-var RD_THEME_ATTR = "data-rd-theme";
-var RD_TOKEN_CATEGORIES = [
-  "identity",
-  "provenance",
-  "relation",
-  "conflict",
-  "availability",
-  "lifecycle-display",
-  "surface"
-];
-var RD_TOKENS = Object.freeze({
-  identity: Object.freeze([
-    "--rd-identity-title-text",
-    "--rd-identity-meta-text",
-    "--rd-identity-id-text",
-    "--rd-identity-rule"
-  ]),
-  provenance: Object.freeze([
-    "--rd-provenance-observation-text",
-    "--rd-provenance-evidence-text",
-    "--rd-provenance-inference-text",
-    "--rd-provenance-conclusion-text",
-    "--rd-provenance-layer-rule"
-  ]),
-  relation: Object.freeze([
-    "--rd-relation-type-text",
-    "--rd-relation-endpoint-text",
-    "--rd-relation-unresolved-text",
-    "--rd-relation-rule"
-  ]),
-  conflict: Object.freeze([
-    "--rd-conflict-marker-text",
-    "--rd-conflict-marker-rule"
-  ]),
-  availability: Object.freeze([
-    "--rd-availability-available-text",
-    "--rd-availability-missing-text",
-    "--rd-availability-ambiguous-text",
-    "--rd-availability-unavailable-text"
-  ]),
-  "lifecycle-display": Object.freeze([
-    "--rd-lifecycle-candidate-text",
-    "--rd-lifecycle-active-text",
-    "--rd-lifecycle-superseded-text",
-    "--rd-lifecycle-archived-text"
-  ]),
-  surface: Object.freeze([
-    "--rd-surface-base",
-    "--rd-surface-raised",
-    "--rd-surface-rule",
-    "--rd-surface-focus-rule"
-  ])
-});
-
-// src/themes/theme-runtime.ts
-var CANONICAL_TOKEN_NAMES = Object.freeze(
-  RD_TOKEN_CATEGORIES.flatMap((c) => RD_TOKENS[c])
-);
-var HEX_RE = /^#[0-9a-fA-F]{6}$/;
-var FORBIDDEN_MEANING = [
-  "truth",
-  "confiden",
-  "rank",
-  "score",
-  "winner",
-  "correct",
-  "authority",
-  "glow"
-];
-function validateThemeDefinition(theme) {
-  const problems = [];
-  if (!/^[a-z][a-z0-9-]*$/.test(theme.id)) {
-    problems.push(`invalid theme id: ${theme.id}`);
-  }
-  if (FORBIDDEN_MEANING.some((w) => theme.id.includes(w))) {
-    problems.push(`theme id encodes forbidden meaning: ${theme.id}`);
-  }
-  const names = Object.keys(theme.tokens);
-  const missing = CANONICAL_TOKEN_NAMES.filter((t) => !(t in theme.tokens));
-  const extra = names.filter((t) => !CANONICAL_TOKEN_NAMES.includes(t));
-  for (const t of missing) problems.push(`missing token: ${t}`);
-  for (const t of extra) problems.push(`non-canonical token: ${t}`);
-  for (const [name, value] of Object.entries(theme.tokens)) {
-    if (FORBIDDEN_MEANING.some((w) => name.includes(w))) {
-      problems.push(`token name encodes forbidden meaning: ${name}`);
-    }
-    if (!HEX_RE.test(value)) {
-      problems.push(`token ${name} has a non-hex value: ${value}`);
-    }
-  }
-  return problems.length === 0 ? { valid: true } : { valid: false, problems };
-}
-var RDThemeRegistry = class {
-  constructor() {
-    this.themes = /* @__PURE__ */ new Map();
-  }
-  register(theme) {
-    const check = validateThemeDefinition(theme);
-    if (!check.valid) {
-      throw new Error(`invalid theme "${theme.id}": ${check.problems.join("; ")}`);
-    }
-    if (this.themes.has(theme.id)) {
-      throw new Error(`duplicate theme id: ${theme.id}`);
-    }
-    this.themes.set(theme.id, theme);
-  }
-  get(id) {
-    return this.themes.get(id);
-  }
-  list() {
-    return [...this.themes.values()];
-  }
-};
-function applyRDTheme(root, theme) {
-  root.setAttribute(RD_THEME_ATTR, theme.id);
-  let applied = 0;
-  for (const [token, value] of Object.entries(theme.tokens)) {
-    root.style.setProperty(token, value);
-    applied += 1;
-  }
-  return applied;
-}
-var RDThemeController = class {
-  constructor(registry, defaultThemeId) {
-    this.registry = registry;
-    const def = registry.get(defaultThemeId);
-    if (def === void 0) {
-      throw new Error(`unknown default theme: ${defaultThemeId}`);
-    }
-    this.current = def;
-  }
-  getCurrent() {
-    return this.current;
-  }
-  /** Explicit user selection only. Unknown ids are refused. */
-  setTheme(id) {
-    const def = this.registry.get(id);
-    if (def === void 0) {
-      throw new Error(`unknown theme: ${id}`);
-    }
-    this.current = def;
-    return def;
-  }
-  list() {
-    return this.registry.list();
-  }
-};
-
-// src/views/dom-helpers.ts
-function emptyEl(el) {
-  while (el.firstChild !== null) el.removeChild(el.firstChild);
-}
-function createChild(parent, tag, opts) {
-  const el = document.createElement(tag);
-  if (opts?.cls !== void 0 && opts.cls !== "") el.className = opts.cls;
-  if (opts?.text !== void 0) el.textContent = opts.text;
-  parent.appendChild(el);
-  return el;
-}
-
-// src/views/knowledge-panel-view.ts
-var import_obsidian2 = require("obsidian");
-
 // src/semantic-graph/object-resolver.ts
 function resolveObject(graph, _workspace, objectId) {
   const matches = graph.nodes.filter((n) => n.object_id === objectId);
@@ -13322,6 +13157,18 @@ function buildLineage(graph, objectId) {
     );
   }
   return { previous: previous2, following, notes };
+}
+
+// src/views/dom-helpers.ts
+function emptyEl(el) {
+  while (el.firstChild !== null) el.removeChild(el.firstChild);
+}
+function createChild(parent, tag, opts) {
+  const el = document.createElement(tag);
+  if (opts?.cls !== void 0 && opts.cls !== "") el.className = opts.cls;
+  if (opts?.text !== void 0) el.textContent = opts.text;
+  parent.appendChild(el);
+  return el;
 }
 
 // src/semantic-graph/knowledge-panel.ts
@@ -13537,7 +13384,7 @@ function section(parent, cls, title, open) {
   createChild(details, "summary", { cls: "rdkp-section-title", text: title });
   return createChild(details, "div", { cls: "rdkp-section-body" });
 }
-function renderKnowledgePanel(container, model) {
+function renderKnowledgePanel(container, model, options) {
   emptyEl(container);
   const root = createChild(container, "div", { cls: "rd-knowledge-panel" });
   const head = createChild(root, "div", { cls: "rdkp-head" });
@@ -13590,8 +13437,13 @@ function renderKnowledgePanel(container, model) {
         return;
       }
       for (const e of entries) {
-        const line = createChild(lin, "div", { cls: "rdkp-lineage-row" });
+        const navigate = options?.onSelectObject;
+        const line = navigate === void 0 ? createChild(lin, "div", { cls: "rdkp-lineage-row" }) : createChild(lin, "button", { cls: "rdkp-lineage-row rdkp-nav" });
         line.setAttribute("data-in-snapshot", String(e.inSnapshot));
+        if (navigate !== void 0) {
+          line.setAttribute("aria-label", `inspect ${e.objectId}`);
+          line.addEventListener("click", () => navigate(e.objectId));
+        }
         line.textContent = `${e.objectId}${e.status !== null ? ` [${e.status}]` : ""} \u2014 via ${e.via}${e.inSnapshot ? "" : " (not in snapshot)"}`;
       }
     };
@@ -13617,17 +13469,25 @@ function renderKnowledgePanel(container, model) {
     createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
   } else {
     for (const row of model.relations) {
-      const line = createChild(rel, "div", { cls: "rdkp-relation-row" });
+      const navigate = options?.onSelectObject;
+      const line = navigate === void 0 ? createChild(rel, "div", { cls: "rdkp-relation-row" }) : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
       line.setAttribute("data-direction", row.direction);
       line.setAttribute("data-endpoint", row.endpointState);
+      if (navigate !== void 0) {
+        line.setAttribute("aria-label", `inspect ${row.otherId}`);
+        line.addEventListener("click", () => navigate(row.otherId));
+      }
       line.textContent = `${row.edge.relation} [${row.direction}] source: ${row.edge.source} \u2192 target: ${row.edge.target} [endpoint: ${row.endpointState}]`;
     }
   }
   for (const u of model.unresolvedFrom) {
-    createChild(rel, "div", {
-      cls: "rdkp-unresolved",
-      text: `unresolved declaration: ${u.relation} \u2192 ${u.target} (target not in snapshot)`
-    });
+    const navigate = options?.onSelectObject;
+    const line = navigate === void 0 ? createChild(rel, "div", { cls: "rdkp-unresolved" }) : createChild(rel, "button", { cls: "rdkp-unresolved rdkp-nav" });
+    if (navigate !== void 0) {
+      line.setAttribute("aria-label", `inspect ${u.target}`);
+      line.addEventListener("click", () => navigate(u.target));
+    }
+    line.textContent = `unresolved declaration: ${u.relation} \u2192 ${u.target} (target not in snapshot)`;
   }
   if (model.diagnosticsGroups !== null) {
     const diag = section(root, "rdkp-diagnostics", "Diagnostics (observations, not repair requests)", false);
@@ -13663,7 +13523,158 @@ function renderKnowledgePanel(container, model) {
   }
 }
 
+// src/architecture/theme-tokens.ts
+var RD_TOKEN_VERSION = "rd-tokens/1";
+var RD_THEME_ATTR = "data-rd-theme";
+var RD_TOKEN_CATEGORIES = [
+  "identity",
+  "provenance",
+  "relation",
+  "conflict",
+  "availability",
+  "lifecycle-display",
+  "surface"
+];
+var RD_TOKENS = Object.freeze({
+  identity: Object.freeze([
+    "--rd-identity-title-text",
+    "--rd-identity-meta-text",
+    "--rd-identity-id-text",
+    "--rd-identity-rule"
+  ]),
+  provenance: Object.freeze([
+    "--rd-provenance-observation-text",
+    "--rd-provenance-evidence-text",
+    "--rd-provenance-inference-text",
+    "--rd-provenance-conclusion-text",
+    "--rd-provenance-layer-rule"
+  ]),
+  relation: Object.freeze([
+    "--rd-relation-type-text",
+    "--rd-relation-endpoint-text",
+    "--rd-relation-unresolved-text",
+    "--rd-relation-rule"
+  ]),
+  conflict: Object.freeze([
+    "--rd-conflict-marker-text",
+    "--rd-conflict-marker-rule"
+  ]),
+  availability: Object.freeze([
+    "--rd-availability-available-text",
+    "--rd-availability-missing-text",
+    "--rd-availability-ambiguous-text",
+    "--rd-availability-unavailable-text"
+  ]),
+  "lifecycle-display": Object.freeze([
+    "--rd-lifecycle-candidate-text",
+    "--rd-lifecycle-active-text",
+    "--rd-lifecycle-superseded-text",
+    "--rd-lifecycle-archived-text"
+  ]),
+  surface: Object.freeze([
+    "--rd-surface-base",
+    "--rd-surface-raised",
+    "--rd-surface-rule",
+    "--rd-surface-focus-rule"
+  ])
+});
+
+// src/themes/theme-runtime.ts
+var CANONICAL_TOKEN_NAMES = Object.freeze(
+  RD_TOKEN_CATEGORIES.flatMap((c) => RD_TOKENS[c])
+);
+var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+var FORBIDDEN_MEANING = [
+  "truth",
+  "confiden",
+  "rank",
+  "score",
+  "winner",
+  "correct",
+  "authority",
+  "glow"
+];
+function validateThemeDefinition(theme) {
+  const problems = [];
+  if (!/^[a-z][a-z0-9-]*$/.test(theme.id)) {
+    problems.push(`invalid theme id: ${theme.id}`);
+  }
+  if (FORBIDDEN_MEANING.some((w) => theme.id.includes(w))) {
+    problems.push(`theme id encodes forbidden meaning: ${theme.id}`);
+  }
+  const names = Object.keys(theme.tokens);
+  const missing = CANONICAL_TOKEN_NAMES.filter((t) => !(t in theme.tokens));
+  const extra = names.filter((t) => !CANONICAL_TOKEN_NAMES.includes(t));
+  for (const t of missing) problems.push(`missing token: ${t}`);
+  for (const t of extra) problems.push(`non-canonical token: ${t}`);
+  for (const [name, value] of Object.entries(theme.tokens)) {
+    if (FORBIDDEN_MEANING.some((w) => name.includes(w))) {
+      problems.push(`token name encodes forbidden meaning: ${name}`);
+    }
+    if (!HEX_RE.test(value)) {
+      problems.push(`token ${name} has a non-hex value: ${value}`);
+    }
+  }
+  return problems.length === 0 ? { valid: true } : { valid: false, problems };
+}
+var RDThemeRegistry = class {
+  constructor() {
+    this.themes = /* @__PURE__ */ new Map();
+  }
+  register(theme) {
+    const check = validateThemeDefinition(theme);
+    if (!check.valid) {
+      throw new Error(`invalid theme "${theme.id}": ${check.problems.join("; ")}`);
+    }
+    if (this.themes.has(theme.id)) {
+      throw new Error(`duplicate theme id: ${theme.id}`);
+    }
+    this.themes.set(theme.id, theme);
+  }
+  get(id) {
+    return this.themes.get(id);
+  }
+  list() {
+    return [...this.themes.values()];
+  }
+};
+function applyRDTheme(root, theme) {
+  root.setAttribute(RD_THEME_ATTR, theme.id);
+  let applied = 0;
+  for (const [token, value] of Object.entries(theme.tokens)) {
+    root.style.setProperty(token, value);
+    applied += 1;
+  }
+  return applied;
+}
+var RDThemeController = class {
+  constructor(registry, defaultThemeId) {
+    this.registry = registry;
+    const def = registry.get(defaultThemeId);
+    if (def === void 0) {
+      throw new Error(`unknown default theme: ${defaultThemeId}`);
+    }
+    this.current = def;
+  }
+  getCurrent() {
+    return this.current;
+  }
+  /** Explicit user selection only. Unknown ids are refused. */
+  setTheme(id) {
+    const def = this.registry.get(id);
+    if (def === void 0) {
+      throw new Error(`unknown theme: ${id}`);
+    }
+    this.current = def;
+    return def;
+  }
+  list() {
+    return this.registry.list();
+  }
+};
+
 // src/views/knowledge-panel-view.ts
+var import_obsidian2 = require("obsidian");
 var RD_KNOWLEDGE_PANEL_VIEW_TYPE = "rd-knowledge-panel";
 var RDKnowledgePanelView = class extends import_obsidian2.ItemView {
   constructor(leaf, deps) {
@@ -13749,17 +13760,28 @@ var RDKnowledgePanelView = class extends import_obsidian2.ItemView {
 // src/views/rd-workspace-view.ts
 var RD_WORKSPACE_VIEW_TYPE = "rd-workspace";
 var AREAS = [
-  { key: "Knowledge Panel", question: "What is this object?", implemented: true },
-  { key: "Provenance Explorer", question: "Why do we believe this?", implemented: false },
-  { key: "Lineage Explorer", question: "How did this change?", implemented: false },
-  { key: "Relation Explorer", question: "What is it connected to?", implemented: false },
-  { key: "Collaboration View", question: "Who worked on this and what happened?", implemented: false },
-  { key: "Agent Contribution View", question: "What did Agents do here?", implemented: false }
+  { key: "Knowledge Panel", question: "What is this object?", state: "live in workspace" },
+  { key: "Provenance Explorer", question: "Why do we believe this?", state: "live in workspace" },
+  { key: "Lineage Explorer", question: "How did this change?", state: "live in workspace" },
+  { key: "Relation Explorer", question: "What is it connected to?", state: "live in workspace" },
+  {
+    key: "Collaboration View",
+    question: "Who worked on this and what happened?",
+    state: "surface available when collaboration records exist"
+  },
+  {
+    key: "Agent Contribution View",
+    question: "What did Agents do here?",
+    state: "surface available when contribution records exist"
+  }
 ];
 var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
   constructor(leaf, deps) {
     super(leaf);
     this.unsubscribe = null;
+    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
+    this.sourceDetail = void 0;
+    this.observer = null;
     this.deps = deps;
   }
   getViewType() {
@@ -13782,43 +13804,64 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
       applyRDTheme(shell, this.deps.themeController.getCurrent());
     }
     this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
+    this.observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
+    });
+    this.observer.observe(shell);
     await this.refreshAvailability();
     this.renderBody();
   }
   async onClose() {
+    this.observer?.disconnect();
+    this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
   }
-  /** v1.6.2 §5: explicit, session-only theme selection. The
-   * dropdown lists registered themes; choosing one applies
-   * presentation to this RD surface only. No detection, no AI
-   * selection, no persistence. */
+  /** v1.6.2 §5: explicit, session-only theme selection. */
   buildToolbar(bar, shell) {
     const controller = this.deps.themeController;
-    if (controller === void 0) return;
-    createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
-    const select = createChild(bar, "select", { cls: "rdws-theme-select" });
-    select.setAttribute("aria-label", "RD theme (presentation only)");
-    for (const theme of controller.list()) {
-      const option = createChild(select, "option", { text: theme.label });
-      option.value = theme.id;
-      if (theme.id === controller.getCurrent().id) {
-        option.selected = true;
+    if (controller !== void 0) {
+      createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
+      const select = createChild(bar, "select", { cls: "rdws-theme-select" });
+      select.setAttribute("aria-label", "RD theme (presentation only)");
+      for (const theme of controller.list()) {
+        const option = createChild(select, "option", { text: theme.label });
+        option.value = theme.id;
+        if (theme.id === controller.getCurrent().id) {
+          option.selected = true;
+        }
       }
+      select.addEventListener("change", () => {
+        try {
+          const theme = controller.setTheme(select.value);
+          applyRDTheme(shell, theme);
+        } catch {
+        }
+      });
     }
-    select.addEventListener("change", () => {
-      try {
-        const theme = controller.setTheme(select.value);
-        applyRDTheme(shell, theme);
-      } catch {
-      }
+    const input = createChild(bar, "input", { cls: "rdws-object-input" });
+    input.type = "text";
+    input.placeholder = "inspect exact object_id (e.g. ko-20260921-0001)";
+    input.setAttribute("aria-label", "Knowledge object id (exact match)");
+    const go = () => {
+      const id = input.value.trim();
+      if (id !== "") this.deps.store.setSelectedObject(id);
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") go();
     });
+    createChild(bar, "button", { cls: "rdws-button", text: "Inspect" }).addEventListener("click", go);
+    const back = createChild(bar, "button", { cls: "rdws-button", text: "\u25C0 Back" });
+    back.setAttribute("aria-label", "Back along investigation trail");
+    back.addEventListener("click", () => this.deps.store.back());
   }
-  /** Explicit re-read of derived-state availability. No rebuild, no
-   * sync, no spawn — reads available data only (v1.3.0 §7). */
+  /** Explicit re-read of derived-state availability and snapshot.
+   * No rebuild, no sync, no spawn — reads available data only. */
   async refreshAvailability() {
-    const load = await loadGraphFromSource(this.deps.source);
+    this.graphLoad = await loadGraphFromSource(this.deps.source);
+    const load = this.graphLoad;
     if (load.state === "available") {
       this.deps.store.setSnapshotAvailability({
         state: "available",
@@ -13841,6 +13884,12 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
       });
     }
   }
+  async resolveSourceAndRender(objectId) {
+    if (this.deps.sourceReader === void 0) return;
+    const detail = await this.deps.sourceReader.resolve(objectId);
+    this.sourceDetail = detail;
+    this.renderBody();
+  }
   renderBody() {
     const body = this.contentEl.querySelector(".rdws-body");
     if (!(body instanceof HTMLElement)) return;
@@ -13854,37 +13903,104 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     const snap = createChild(head, "div", { cls: "rdws-snapshot" });
     snap.setAttribute("data-state", state.snapshot.state);
     snap.textContent = `snapshot: ${state.snapshot.state} \u2014 ${state.snapshot.note}`;
-    if (state.selectedObjectId !== null) {
+    const selected = state.selectedObjectId;
+    if (selected !== null) {
       createChild(head, "div", {
         cls: "rdws-selected",
-        text: `inspecting: ${state.selectedObjectId} (UI pointer; not a lifecycle state)`
+        text: `inspecting: ${selected} (UI pointer; not a lifecycle state) \xB7 trail ${state.navigation.length}`
       });
     }
-    const list2 = createChild(body, "div", { cls: "rdws-areas" });
-    createChild(list2, "div", {
-      cls: "rdws-areas-title",
-      text: "Inspection areas (v1.6.0 \xA74)"
+    const layout = createChild(body, "div", { cls: "rdws-layout" });
+    if (this.graphLoad.state === "available" && selected !== null) {
+      this.renderInspection(layout, selected);
+      this.renderObjectRail(layout, selected);
+      void this.resolveSourceAndRender(selected);
+      return;
+    }
+    this.renderOverview(layout, selected);
+    if (this.graphLoad.state === "available") {
+      this.renderObjectRail(layout, selected);
+    }
+  }
+  /** Primary reading panel: the re-homed v1.3.1 Knowledge Panel
+   * projection with object navigation enabled. */
+  renderInspection(layout, selected) {
+    if (this.graphLoad.state !== "available") return;
+    const model = buildKnowledgePanelModel({
+      load: this.graphLoad,
+      workspace: this.deps.store.getState().workspaceLabel,
+      objectId: selected,
+      sourceDetail: this.sourceDetail
     });
+    const host = createChild(layout, "div", { cls: "rdws-reading" });
+    const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
+    renderKnowledgePanel(reading, model, {
+      onSelectObject: (objectId) => {
+        this.deps.store.setSelectedObject(objectId);
+      }
+    });
+    createChild(host, "div", {
+      cls: "rdws-reading-note",
+      text: "declared data only \u2014 projection eligibility is not Knowledge Object validity; no ranking, no recommendation"
+    });
+  }
+  /** Neutral navigation rail: what exists in this snapshot, stable
+   * object-id order, no importance ordering. Click selects. */
+  renderObjectRail(layout, selected) {
+    if (this.graphLoad.state !== "available") return;
+    const rail = createChild(layout, "div", { cls: "rdws-rail" });
+    createChild(rail, "div", {
+      cls: "rdws-rail-title",
+      text: `Objects in snapshot (neutral id order \u2014 ${this.graphLoad.graph.nodes.length})`
+    });
+    const nodes = [...this.graphLoad.graph.nodes].sort((a, b) => a.object_id.localeCompare(b.object_id));
+    if (nodes.length === 0) {
+      createChild(rail, "div", { cls: "rdws-empty", text: "no objects in this snapshot" });
+      return;
+    }
+    for (const node2 of nodes) {
+      const row = createChild(rail, "button", { cls: "rdws-object-row" });
+      row.setAttribute("aria-label", `inspect ${node2.object_id}`);
+      if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
+      row.textContent = `${node2.object_id} \xB7 ${node2.kind} \xB7 ${node2.status} \u2014 ${node2.title}`;
+      row.addEventListener("click", () => {
+        this.deps.store.setSelectedObject(node2.object_id);
+      });
+    }
+  }
+  /** Overview: area map with honest live/placeholder states; shown
+   * when nothing is selected. */
+  renderOverview(layout, _selected) {
+    const overview = createChild(layout, "div", { cls: "rdws-overview" });
+    if (this.graphLoad.state !== "available") {
+      createChild(overview, "div", {
+        cls: "rdws-unavailable",
+        text: this.deps.store.getState().snapshot.note
+      });
+    }
+    const list2 = createChild(overview, "div", { cls: "rdws-areas" });
+    createChild(list2, "div", { cls: "rdws-areas-title", text: "Inspection areas (v1.6.0 \xA74)" });
     for (const area of AREAS) {
       const row = createChild(list2, "div", { cls: "rdws-area" });
-      row.setAttribute("data-implemented", String(area.implemented));
-      const label = createChild(row, "div", { cls: "rdws-area-name", text: area.key });
-      const q = createChild(row, "div", { cls: "rdws-area-question", text: area.question });
-      if (area.implemented) {
-        const open = createChild(row, "button", {
-          cls: "rdws-area-open",
-          text: "Open Knowledge Panel"
-        });
-        open.addEventListener("click", () => {
-          void this.deps.openView(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+      row.setAttribute("data-live", String(area.state === "live in workspace"));
+      createChild(row, "div", { cls: "rdws-area-name", text: area.key });
+      createChild(row, "div", { cls: "rdws-area-question", text: area.question });
+      if (area.state === "live in workspace") {
+        createChild(row, "div", {
+          cls: "rdws-area-hint",
+          text: "select an object above to inspect"
         });
       } else {
-        createChild(row, "div", {
-          cls: "rdws-area-pending",
-          text: "planned surface \u2014 not implemented in v1.6.1"
-        });
+        createChild(row, "div", { cls: "rdws-area-pending", text: area.state });
       }
     }
+    const openPanel = createChild(overview, "button", {
+      cls: "rdws-button",
+      text: "Open standalone Knowledge Panel"
+    });
+    openPanel.addEventListener("click", () => {
+      void this.deps.openView(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+    });
   }
 };
 
@@ -15205,6 +15321,7 @@ function buildRDViewRegistry() {
     createView: (leaf, services) => new RDWorkspaceShellView(leaf, {
       store: services.workspaceStore,
       source: services.graphSource,
+      sourceReader: services.koSourceReader,
       openView: services.openView,
       themeController: services.themeController
     })

@@ -1,20 +1,28 @@
-/** v1.6.1 §1 — RD workspace shell (explicit entry point).
+/** v1.6.1 §1 / v1.6.3 — RD workspace: the investigation surface.
  *
- * The shell is the architectural boundary of the future RD product
- * experience (v1.6.0 §5): one explicitly opened surface that will
- * host the six inspection areas. In this phase it renders the area
- * map with honest "not implemented" placeholders, the REAL
- * availability of the derived snapshot (explicit read only), and a
- * navigation entry to the already-implemented Knowledge Panel.
+ * v1.6.3 turns the v1.6.1 shell into the usable core journey
+ * (v1.6.0 §3): open workspace → select an object (exact id or the
+ * neutral snapshot list) → inspect identity/provenance/relations/
+ * lineage via the RE-HOMED v1.3.1 Knowledge Panel projection —
+ * not a rewrite — with object-to-object navigation (lineage,
+ * relation endpoints, unresolved targets). Collaboration and Agent
+ * Contribution areas stay honest placeholders until their records
+ * exist; no fake functionality.
  *
- * Boundaries: no auto-open, no background service, no refresh
- * timer; availability re-reads happen only on explicit user
- * action. No fake data: placeholders say they are placeholders.
+ * Boundaries: read-only; explicit opens/reads only (one read on
+ * open, re-reads on user action); selection is a UI pointer, never
+ * a lifecycle state; no ranking or recommendation anywhere — the
+ * object list is a neutral stable order.
  */
 
 import { ItemView, type WorkspaceLeaf } from "obsidian";
 import type { GraphSource } from "../semantic-graph/graph-loader";
-import { loadGraphFromSource } from "../semantic-graph/graph-loader";
+import { loadGraphFromSource, type GraphLoadResult } from "../semantic-graph/graph-loader";
+import type { KoDetailResult, KoSourceReader } from "../semantic-graph/ko-detail-reader";
+import {
+  buildKnowledgePanelModel,
+  renderKnowledgePanel,
+} from "../semantic-graph/knowledge-panel";
 import type { RDWorkspaceStore } from "../architecture/workspace-state";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
 import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
@@ -26,28 +34,40 @@ export const RD_WORKSPACE_VIEW_TYPE = "rd-workspace";
 export interface RDWorkspaceShellDeps {
   readonly store: RDWorkspaceStore;
   readonly source: GraphSource;
+  /** v1.6.3: exact-id source reader for the inspection panel. */
+  readonly sourceReader?: KoSourceReader;
   /** Explicit activation of another RD view (registry path). */
   readonly openView: (viewType: string) => Promise<void>;
-  /** v1.6.2: explicit, session-only theme selection. Optional until
-   * wired; absence keeps fallback styling. */
+  /** v1.6.2: explicit, session-only theme selection. */
   readonly themeController?: RDThemeController;
 }
 
-/** The six information-architecture areas (v1.6.0 §4) with their
- * user questions. Implemented-in-phase flags are honest: only the
- * Knowledge Panel exists today (v1.3.1). */
-const AREAS: readonly { key: string; question: string; implemented: boolean }[] = [
-  { key: "Knowledge Panel", question: "What is this object?", implemented: true },
-  { key: "Provenance Explorer", question: "Why do we believe this?", implemented: false },
-  { key: "Lineage Explorer", question: "How did this change?", implemented: false },
-  { key: "Relation Explorer", question: "What is it connected to?", implemented: false },
-  { key: "Collaboration View", question: "Who worked on this and what happened?", implemented: false },
-  { key: "Agent Contribution View", question: "What did Agents do here?", implemented: false },
+/** The six information-architecture areas (v1.6.0 §4). The four
+ * intelligence areas are live via the re-homed panel; collaboration
+ * and agent contribution wait for their records — honestly. */
+const AREAS: readonly { key: string; question: string; state: string }[] = [
+  { key: "Knowledge Panel", question: "What is this object?", state: "live in workspace" },
+  { key: "Provenance Explorer", question: "Why do we believe this?", state: "live in workspace" },
+  { key: "Lineage Explorer", question: "How did this change?", state: "live in workspace" },
+  { key: "Relation Explorer", question: "What is it connected to?", state: "live in workspace" },
+  {
+    key: "Collaboration View",
+    question: "Who worked on this and what happened?",
+    state: "surface available when collaboration records exist",
+  },
+  {
+    key: "Agent Contribution View",
+    question: "What did Agents do here?",
+    state: "surface available when contribution records exist",
+  },
 ];
 
 export class RDWorkspaceShellView extends ItemView {
   private readonly deps: RDWorkspaceShellDeps;
   private unsubscribe: (() => void) | null = null;
+  private graphLoad: GraphLoadResult = { state: "unavailable", reason: "not loaded yet" };
+  private sourceDetail: KoDetailResult | undefined = undefined;
+  private observer: ResizeObserver | null = null;
 
   constructor(leaf: WorkspaceLeaf, deps: RDWorkspaceShellDeps) {
     super(leaf);
@@ -69,49 +89,74 @@ export class RDWorkspaceShellView extends ItemView {
       applyRDTheme(shell, this.deps.themeController.getCurrent());
     }
     this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
-    // One explicit availability read on open; after that, only the
-    // user's "Re-read availability" action triggers reads.
+    // Pane-width layout state (v1.3.5 §5: breakpoints follow the
+    // allocated pane, not the window). Class toggling only.
+    this.observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
+    });
+    this.observer.observe(shell);
     await this.refreshAvailability();
     this.renderBody();
   }
 
   async onClose(): Promise<void> {
+    this.observer?.disconnect();
+    this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
   }
 
-  /** v1.6.2 §5: explicit, session-only theme selection. The
-   * dropdown lists registered themes; choosing one applies
-   * presentation to this RD surface only. No detection, no AI
-   * selection, no persistence. */
+  /** v1.6.2 §5: explicit, session-only theme selection. */
   private buildToolbar(bar: HTMLElement, shell: HTMLElement): void {
     const controller = this.deps.themeController;
-    if (controller === undefined) return;
-    createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
-    const select = createChild(bar, "select", { cls: "rdws-theme-select" }) as HTMLSelectElement;
-    select.setAttribute("aria-label", "RD theme (presentation only)");
-    for (const theme of controller.list()) {
-      const option = createChild(select, "option", { text: theme.label });
-      (option as HTMLOptionElement).value = theme.id;
-      if (theme.id === controller.getCurrent().id) {
-        (option as HTMLOptionElement).selected = true;
+    if (controller !== undefined) {
+      createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
+      const select = createChild(bar, "select", { cls: "rdws-theme-select" }) as HTMLSelectElement;
+      select.setAttribute("aria-label", "RD theme (presentation only)");
+      for (const theme of controller.list()) {
+        const option = createChild(select, "option", { text: theme.label });
+        (option as HTMLOptionElement).value = theme.id;
+        if (theme.id === controller.getCurrent().id) {
+          (option as HTMLOptionElement).selected = true;
+        }
       }
+      select.addEventListener("change", () => {
+        try {
+          const theme = controller.setTheme(select.value);
+          applyRDTheme(shell, theme);
+        } catch {
+          // unknown id: keep current theme; selection is explicit-only
+        }
+      });
     }
-    select.addEventListener("change", () => {
-      try {
-        const theme = controller.setTheme(select.value);
-        applyRDTheme(shell, theme);
-      } catch {
-        // unknown id: keep current theme; selection is explicit-only
-      }
+    // v1.6.3: exact-id query (the selection discipline: exact
+    // object_id only — never fuzzy).
+    const input = createChild(bar, "input", { cls: "rdws-object-input" }) as HTMLInputElement;
+    input.type = "text";
+    input.placeholder = "inspect exact object_id (e.g. ko-20260921-0001)";
+    input.setAttribute("aria-label", "Knowledge object id (exact match)");
+    const go = () => {
+      const id = input.value.trim();
+      if (id !== "") this.deps.store.setSelectedObject(id);
+    };
+    input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") go();
     });
+    createChild(bar, "button", { cls: "rdws-button", text: "Inspect" })
+      .addEventListener("click", go);
+    // v1.6.3: back along the UI investigation trail.
+    const back = createChild(bar, "button", { cls: "rdws-button", text: "◀ Back" });
+    back.setAttribute("aria-label", "Back along investigation trail");
+    back.addEventListener("click", () => this.deps.store.back());
   }
 
-  /** Explicit re-read of derived-state availability. No rebuild, no
-   * sync, no spawn — reads available data only (v1.3.0 §7). */
+  /** Explicit re-read of derived-state availability and snapshot.
+   * No rebuild, no sync, no spawn — reads available data only. */
   private async refreshAvailability(): Promise<void> {
-    const load = await loadGraphFromSource(this.deps.source);
+    this.graphLoad = await loadGraphFromSource(this.deps.source);
+    const load = this.graphLoad;
     if (load.state === "available") {
       this.deps.store.setSnapshotAvailability({
         state: "available",
@@ -137,6 +182,13 @@ export class RDWorkspaceShellView extends ItemView {
     }
   }
 
+  private async resolveSourceAndRender(objectId: string): Promise<void> {
+    if (this.deps.sourceReader === undefined) return;
+    const detail = await this.deps.sourceReader.resolve(objectId);
+    this.sourceDetail = detail;
+    this.renderBody();
+  }
+
   private renderBody(): void {
     const body = this.contentEl.querySelector(".rdws-body");
     if (!(body instanceof HTMLElement)) return;
@@ -152,39 +204,112 @@ export class RDWorkspaceShellView extends ItemView {
     snap.setAttribute("data-state", state.snapshot.state);
     snap.textContent = `snapshot: ${state.snapshot.state} — ${state.snapshot.note}`;
 
-    if (state.selectedObjectId !== null) {
+    const selected = state.selectedObjectId;
+    if (selected !== null) {
       createChild(head, "div", {
         cls: "rdws-selected",
-        text: `inspecting: ${state.selectedObjectId} (UI pointer; not a lifecycle state)`,
+        text: `inspecting: ${selected} (UI pointer; not a lifecycle state) · trail ${state.navigation.length}`,
       });
     }
 
-    const list = createChild(body, "div", { cls: "rdws-areas" });
-    createChild(list, "div", {
-      cls: "rdws-areas-title",
-      text: "Inspection areas (v1.6.0 §4)",
+    const layout = createChild(body, "div", { cls: "rdws-layout" });
+
+    if (this.graphLoad.state === "available" && selected !== null) {
+      this.renderInspection(layout, selected);
+      this.renderObjectRail(layout, selected);
+      void this.resolveSourceAndRender(selected);
+      return;
+    }
+    this.renderOverview(layout, selected);
+    if (this.graphLoad.state === "available") {
+      this.renderObjectRail(layout, selected);
+    }
+  }
+
+  /** Primary reading panel: the re-homed v1.3.1 Knowledge Panel
+   * projection with object navigation enabled. */
+  private renderInspection(layout: HTMLElement, selected: string): void {
+    if (this.graphLoad.state !== "available") return;
+    const model = buildKnowledgePanelModel({
+      load: this.graphLoad,
+      workspace: this.deps.store.getState().workspaceLabel,
+      objectId: selected,
+      sourceDetail: this.sourceDetail,
     });
+    const host = createChild(layout, "div", { cls: "rdws-reading" });
+    const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
+    renderKnowledgePanel(reading, model, {
+      onSelectObject: (objectId) => {
+        this.deps.store.setSelectedObject(objectId);
+      },
+    });
+    createChild(host, "div", {
+      cls: "rdws-reading-note",
+      text:
+        "declared data only — projection eligibility is not Knowledge Object validity; " +
+        "no ranking, no recommendation",
+    });
+  }
+
+  /** Neutral navigation rail: what exists in this snapshot, stable
+   * object-id order, no importance ordering. Click selects. */
+  private renderObjectRail(layout: HTMLElement, selected: string | null): void {
+    if (this.graphLoad.state !== "available") return;
+    const rail = createChild(layout, "div", { cls: "rdws-rail" });
+    createChild(rail, "div", {
+      cls: "rdws-rail-title",
+      text: `Objects in snapshot (neutral id order — ${this.graphLoad.graph.nodes.length})`,
+    });
+    const nodes = [...this.graphLoad.graph.nodes]
+      .sort((a, b) => a.object_id.localeCompare(b.object_id));
+    if (nodes.length === 0) {
+      createChild(rail, "div", { cls: "rdws-empty", text: "no objects in this snapshot" });
+      return;
+    }
+    for (const node of nodes) {
+      const row = createChild(rail, "button", { cls: "rdws-object-row" });
+      row.setAttribute("aria-label", `inspect ${node.object_id}`);
+      if (node.object_id === selected) row.setAttribute("aria-pressed", "true");
+      row.textContent =
+        `${node.object_id} · ${node.kind} · ${node.status} — ${node.title}`;
+      row.addEventListener("click", () => {
+        this.deps.store.setSelectedObject(node.object_id);
+      });
+    }
+  }
+
+  /** Overview: area map with honest live/placeholder states; shown
+   * when nothing is selected. */
+  private renderOverview(layout: HTMLElement, _selected: string | null): void {
+    const overview = createChild(layout, "div", { cls: "rdws-overview" });
+    if (this.graphLoad.state !== "available") {
+      createChild(overview, "div", {
+        cls: "rdws-unavailable",
+        text: this.deps.store.getState().snapshot.note,
+      });
+    }
+    const list = createChild(overview, "div", { cls: "rdws-areas" });
+    createChild(list, "div", { cls: "rdws-areas-title", text: "Inspection areas (v1.6.0 §4)" });
     for (const area of AREAS) {
       const row = createChild(list, "div", { cls: "rdws-area" });
-      row.setAttribute("data-implemented", String(area.implemented));
-      const label = createChild(row, "div", { cls: "rdws-area-name", text: area.key });
-      void label;
-      const q = createChild(row, "div", { cls: "rdws-area-question", text: area.question });
-      void q;
-      if (area.implemented) {
-        const open = createChild(row, "button", {
-          cls: "rdws-area-open",
-          text: "Open Knowledge Panel",
-        });
-        open.addEventListener("click", () => {
-          void this.deps.openView(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+      row.setAttribute("data-live", String(area.state === "live in workspace"));
+      createChild(row, "div", { cls: "rdws-area-name", text: area.key });
+      createChild(row, "div", { cls: "rdws-area-question", text: area.question });
+      if (area.state === "live in workspace") {
+        createChild(row, "div", {
+          cls: "rdws-area-hint",
+          text: "select an object above to inspect",
         });
       } else {
-        createChild(row, "div", {
-          cls: "rdws-area-pending",
-          text: "planned surface — not implemented in v1.6.1",
-        });
+        createChild(row, "div", { cls: "rdws-area-pending", text: area.state });
       }
     }
+    const openPanel = createChild(overview, "button", {
+      cls: "rdws-button",
+      text: "Open standalone Knowledge Panel",
+    });
+    openPanel.addEventListener("click", () => {
+      void this.deps.openView(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+    });
   }
 }

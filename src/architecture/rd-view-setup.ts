@@ -120,6 +120,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
       new RDWorkspaceShellView(leaf, {
         store: services.workspaceStore as RDWorkspaceStore,
         source: services.graphSource as GraphSource,
+        sourceReader: services.koSourceReader as KoSourceReader,
         openView: services.openView as (viewType: string) => Promise<void>,
         themeController: services.themeController as RDThemeController,
       }),

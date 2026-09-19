@@ -243,7 +243,10 @@ describe("v1.6.1 §1 workspace shell boundary", () => {
     for (const banned of ["setInterval", "setTimeout", "registerInterval", "onLayoutReady"]) {
       expect(src).not.toContain(banned);
     }
-    expect(src).toContain("not implemented in v1.6.1"); // honest placeholders
+    // v1.6.3: honest placeholders now target the not-yet-existing
+    // collaboration/agent record surfaces, not the intelligence areas.
+    expect(src).toContain("available when collaboration records exist");
+    expect(src).toContain("available when contribution records exist");
     expect(src).toContain("does not mean no knowledge exists"); // missing-artifact honesty
   });
 
