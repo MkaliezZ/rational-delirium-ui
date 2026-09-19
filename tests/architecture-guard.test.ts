@@ -156,7 +156,7 @@ describe("v0.4.4 graph intelligence narrow guard", () => {
 });
 
 describe("v0.4.2 CSS scope isolation (§30)", () => {
-  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop or .rd-graph", () => {
+  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop, .rd-graph or .rd-knowledge-panel", () => {
     const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
     // Strip comments, then collect selector text preceding every '{'.
     const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -175,7 +175,8 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
         if (s === "") continue;
         expect(
           s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
-            || s.startsWith(".rd-loop") || s.startsWith(".rd-graph"),
+            || s.startsWith(".rd-loop") || s.startsWith(".rd-graph")
+            || s.startsWith(".rd-knowledge-panel"),
           `unscoped selector: ${s}`,
         ).toBe(true);
       }

@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => RationalDeliriumPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/views/context-view.ts
 var import_obsidian = require("obsidian");
@@ -354,12 +354,12 @@ function buildInvestigationProjection(index2) {
     if (states.includes("BROKEN")) counts.broken += 1;
     if (states.includes("AMBIGUOUS")) counts.ambiguous += 1;
   }
-  const relationSummary = /* @__PURE__ */ new Map();
+  const relationSummary2 = /* @__PURE__ */ new Map();
   const summaryOf = (path) => {
-    let entry = relationSummary.get(path);
+    let entry = relationSummary2.get(path);
     if (entry === void 0) {
       entry = { resolved: 0, unresolved: 0, contradiction: 0 };
-      relationSummary.set(path, entry);
+      relationSummary2.set(path, entry);
     }
     return entry;
   };
@@ -379,7 +379,7 @@ function buildInvestigationProjection(index2) {
     title: object.title,
     status: object.status,
     mtime: object.mtime,
-    relations: relationSummary.get(object.path) ?? { resolved: 0, unresolved: 0, contradiction: 0 }
+    relations: relationSummary2.get(object.path) ?? { resolved: 0, unresolved: 0, contradiction: 0 }
   }));
   const attention2 = relations.filter((relation) => needsAttention(relation)).map((relation) => ({
     key: relation.key,
@@ -1234,6 +1234,376 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
   }
 };
 
+// src/views/knowledge-panel-view.ts
+var import_obsidian5 = require("obsidian");
+
+// src/semantic-graph/graph-loader.ts
+var GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
+var DEFAULT_SEMANTIC_GRAPH_PATH = "semantic-graph/graph.json";
+var GRAPH_RELATIONS = [
+  "supports",
+  "contradicts",
+  "derived_from",
+  "depends_on",
+  "revises",
+  "supersedes"
+];
+function deepFreeze(value) {
+  if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) deepFreeze(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+function isString(v) {
+  return typeof v === "string";
+}
+function parseNode(raw) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  const pred = r.predecessor;
+  const succ = r.successor;
+  if (!isString(r.object_id) || !isString(r.kind) || !isString(r.status) || !isString(r.title) || pred !== null && !isString(pred) || succ !== null && !isString(succ)) {
+    return null;
+  }
+  return {
+    object_id: r.object_id,
+    kind: r.kind,
+    status: r.status,
+    title: r.title,
+    predecessor: pred,
+    successor: succ
+  };
+}
+function parseEdge(raw) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  if (!isString(r.source) || !isString(r.target) || !isString(r.relation)) return null;
+  if (!GRAPH_RELATIONS.includes(r.relation)) return null;
+  return { source: r.source, target: r.target, relation: r.relation };
+}
+function parseDiagnostic(raw) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  if (!isString(r.type) || !isString(r.object_id) || !Array.isArray(r.paths)) return null;
+  if (!r.paths.every(isString)) return null;
+  return { type: r.type, object_id: r.object_id, paths: r.paths };
+}
+function parseGraphSnapshot(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { state: "invalid", reason: "malformed-json" };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  const r = parsed;
+  if (r.schema !== GRAPH_SCHEMA_TAG) {
+    return { state: "invalid", reason: "unsupported-schema" };
+  }
+  if (!Array.isArray(r.nodes) || !Array.isArray(r.edges) || !Array.isArray(r.unresolved) || !Array.isArray(r.diagnostics)) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  const nodes = r.nodes.map(parseNode);
+  const edges = r.edges.map(parseEdge);
+  const unresolved = r.unresolved.map(parseEdge);
+  const diagnostics = r.diagnostics.map(parseDiagnostic);
+  if (nodes.includes(null) || edges.includes(null) || unresolved.includes(null) || diagnostics.includes(null)) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  return {
+    state: "available",
+    graph: deepFreeze({
+      schema: GRAPH_SCHEMA_TAG,
+      nodes,
+      edges,
+      unresolved,
+      diagnostics
+    })
+  };
+}
+async function loadGraphFromSource(source) {
+  const read = await source.read();
+  if (read.state === "missing") return { state: "missing" };
+  if (read.state === "unavailable") return { state: "unavailable", reason: read.reason };
+  return parseGraphSnapshot(read.text);
+}
+
+// src/semantic-graph/object-resolver.ts
+function resolveObject(graph, _workspace, objectId) {
+  const matches = graph.nodes.filter((n) => n.object_id === objectId);
+  if (matches.length === 1) return { state: "available", node: matches[0] };
+  if (matches.length === 0) return { state: "missing" };
+  return { state: "ambiguous", matches };
+}
+function relationSummary(graph, objectId) {
+  const ids = new Set(graph.nodes.map((n) => n.object_id));
+  const rows = [];
+  for (const edge of graph.edges) {
+    if (edge.source === objectId) {
+      rows.push({
+        edge,
+        direction: "outgoing",
+        otherId: edge.target,
+        endpointState: ids.has(edge.target) ? "available" : "missing"
+      });
+    }
+    if (edge.target === objectId) {
+      rows.push({
+        edge,
+        direction: "incoming",
+        otherId: edge.source,
+        endpointState: ids.has(edge.source) ? "available" : "missing"
+      });
+    }
+  }
+  return {
+    rows,
+    unresolvedFrom: graph.unresolved.filter((e) => e.source === objectId),
+    unresolvedTo: graph.unresolved.filter((e) => e.target === objectId)
+  };
+}
+function diagnosticsFor(graph, objectId) {
+  if (objectId === void 0) return graph.diagnostics;
+  return graph.diagnostics.filter((d) => d.object_id === objectId);
+}
+
+// src/semantic-graph/knowledge-panel.ts
+var NOT_IN_SNAPSHOT = "not in v1.2.1 snapshot";
+function buildKnowledgePanelModel(input) {
+  const base = {
+    snapshotState: "unavailable",
+    snapshotMessage: "",
+    workspace: input.workspace,
+    queryObjectId: input.objectId ?? null,
+    resolveState: null,
+    ambiguousMatches: [],
+    fields: [],
+    relations: [],
+    unresolvedFrom: [],
+    diagnostics: []
+  };
+  if (input.load.state === "missing") {
+    return {
+      ...base,
+      snapshotState: "unavailable",
+      snapshotMessage: "Graph artifact missing \u2014 no snapshot is loaded. This does not mean no knowledge exists."
+    };
+  }
+  if (input.load.state === "unavailable") {
+    return {
+      ...base,
+      snapshotMessage: `Graph artifact unavailable (${input.load.reason}). No snapshot is loaded.`
+    };
+  }
+  if (input.load.state === "invalid") {
+    return {
+      ...base,
+      snapshotState: "invalid",
+      snapshotMessage: `Graph artifact invalid (${input.load.reason}). No snapshot is loaded.`
+    };
+  }
+  const graph = input.load.graph;
+  if (input.objectId === void 0 || input.objectId === "") {
+    return {
+      ...base,
+      snapshotState: "available",
+      snapshotMessage: `${graph.nodes.length} objects, ${graph.edges.length} declared relations in this snapshot (freshness unverified).`,
+      diagnostics: graph.diagnostics.map((d) => ({ ...d }))
+    };
+  }
+  const resolved = resolveObject(graph, input.workspace, input.objectId);
+  if (resolved.state === "missing") {
+    return {
+      ...base,
+      snapshotState: "available",
+      snapshotMessage: "Snapshot loaded.",
+      resolveState: "missing",
+      diagnostics: graph.diagnostics.map((d) => ({ ...d }))
+    };
+  }
+  if (resolved.state === "ambiguous") {
+    return {
+      ...base,
+      snapshotState: "available",
+      snapshotMessage: "Snapshot loaded. Identity is ambiguous \u2014 no silent selection.",
+      resolveState: "ambiguous",
+      ambiguousMatches: resolved.matches.map((n) => n.object_id),
+      diagnostics: graph.diagnostics.map((d) => ({ ...d }))
+    };
+  }
+  const node2 = resolved.node;
+  const rel = relationSummary(graph, node2.object_id);
+  return {
+    snapshotState: "available",
+    snapshotMessage: "Snapshot loaded.",
+    workspace: input.workspace,
+    queryObjectId: node2.object_id,
+    resolveState: "available",
+    ambiguousMatches: [],
+    fields: [
+      { label: "object_id", text: node2.object_id, state: "available" },
+      { label: "title", text: node2.title, state: "available" },
+      { label: "kind", text: `${node2.kind} (declared classification)`, state: "available" },
+      {
+        label: "status",
+        text: `${node2.status} (declared lifecycle; not a validity badge)`,
+        state: "available"
+      },
+      { label: "predecessor", text: node2.predecessor ?? "none declared", state: "available" },
+      { label: "successor", text: node2.successor ?? "none declared", state: "available" },
+      // Origin/provenance are deliberately absent from the v1.2.1
+      // artifact; they display as not_loaded, never fabricated.
+      { label: "origin (workspace_context / created_from / creator_role)", text: NOT_IN_SNAPSHOT, state: "not_loaded" },
+      { label: "provenance (observation / evidence / inference / conclusion)", text: NOT_IN_SNAPSHOT, state: "not_loaded" },
+      {
+        label: "validation",
+        text: "schema/lifecycle validation not established by projection",
+        state: "not_loaded"
+      }
+    ],
+    relations: rel.rows,
+    unresolvedFrom: rel.unresolvedFrom.map((e) => ({ relation: e.relation, target: e.target })),
+    diagnostics: diagnosticsFor(graph, node2.object_id).map((d) => ({ ...d }))
+  };
+}
+function renderKnowledgePanel(container, model) {
+  emptyEl(container);
+  const root = createChild(container, "div", { cls: "rd-knowledge-panel" });
+  const head = createChild(root, "div", { cls: "rdkp-head" });
+  createChild(head, "span", { cls: "rdkp-scope", text: `workspace: ${model.workspace}` });
+  createChild(head, "span", {
+    cls: "rdkp-snapshot-state",
+    text: `snapshot: ${model.snapshotState}`
+  });
+  createChild(root, "div", { cls: "rdkp-message", text: model.snapshotMessage });
+  if (model.queryObjectId !== null) {
+    createChild(root, "div", { cls: "rdkp-query", text: `query: ${model.queryObjectId}` });
+  }
+  if (model.resolveState === "missing") {
+    createChild(root, "div", {
+      cls: "rdkp-resolve-state",
+      text: "object: NOT_FOUND (exact object_id match only)"
+    });
+  } else if (model.resolveState === "ambiguous") {
+    createChild(root, "div", {
+      cls: "rdkp-resolve-state",
+      text: `object: AMBIGUOUS (${model.ambiguousMatches.length} matches: ${model.ambiguousMatches.join(", ")}) \u2014 no silent selection`
+    });
+  }
+  if (model.fields.length > 0) {
+    const list2 = createChild(root, "dl", { cls: "rdkp-fields" });
+    for (const f of model.fields) {
+      createChild(list2, "dt", { text: f.label });
+      const dd = createChild(list2, "dd", { text: f.text });
+      dd.setAttribute("data-state", f.state);
+    }
+  }
+  const rel = createChild(root, "div", { cls: "rdkp-section" });
+  createChild(rel, "div", {
+    cls: "rdkp-section-title",
+    text: `Relations (${model.relations.length} declared; snapshot counts only)`
+  });
+  if (model.relations.length === 0) {
+    createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
+  } else {
+    for (const row of model.relations) {
+      const line = createChild(rel, "div", { cls: "rdkp-relation-row" });
+      line.setAttribute("data-direction", row.direction);
+      line.setAttribute("data-endpoint", row.endpointState);
+      line.textContent = `${row.direction === "outgoing" ? "\u2192" : "\u2190"} ${row.edge.relation} ${row.direction === "outgoing" ? row.otherId : row.otherId} [endpoint: ${row.endpointState}]`;
+    }
+  }
+  for (const u of model.unresolvedFrom) {
+    createChild(root, "div", {
+      cls: "rdkp-unresolved",
+      text: `unresolved declaration: ${u.relation} \u2192 ${u.target} (target not in snapshot)`
+    });
+  }
+  const diag = createChild(root, "div", { cls: "rdkp-section" });
+  createChild(diag, "div", {
+    cls: "rdkp-section-title",
+    text: `Diagnostics (${model.diagnostics.length})`
+  });
+  if (model.diagnostics.length === 0) {
+    createChild(diag, "div", { cls: "rdkp-empty", text: "none" });
+  } else {
+    for (const d of model.diagnostics) {
+      const line = createChild(diag, "div", { cls: "rdkp-diagnostic" });
+      line.setAttribute("data-type", d.type);
+      line.textContent = `${d.type}: ${d.object_id} \u2014 ${d.paths.length} declaring path(s)`;
+    }
+  }
+}
+
+// src/views/knowledge-panel-view.ts
+var RD_KNOWLEDGE_PANEL_VIEW_TYPE = "rd-knowledge-panel";
+var RDKnowledgePanelView = class extends import_obsidian5.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    // Named graphLoad: View.load() is an Obsidian lifecycle method.
+    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
+    this.query = "";
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_KNOWLEDGE_PANEL_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Knowledge Panel";
+  }
+  getIcon() {
+    return "book-open";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    const shell = createChild(this.contentEl, "div", { cls: "rd-knowledge-panel-shell" });
+    const bar = createChild(shell, "div", { cls: "rdkp-toolbar" });
+    const input = createChild(bar, "input", { cls: "rdkp-input" });
+    input.type = "text";
+    input.placeholder = "exact object_id (e.g. ko-20260919-0001)";
+    input.setAttribute("aria-label", "Knowledge object id (exact match)");
+    const apply = createChild(bar, "button", { cls: "rdkp-button", text: "Inspect" });
+    apply.addEventListener("click", () => {
+      this.query = input.value.trim();
+      this.renderPanel();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.query = input.value.trim();
+        this.renderPanel();
+      }
+    });
+    const reload = createChild(bar, "button", { cls: "rdkp-button", text: "Re-read snapshot" });
+    reload.addEventListener("click", () => {
+      void this.refresh();
+    });
+    createChild(shell, "div", { cls: "rdkp-panel-host" });
+    await this.refresh();
+  }
+  async onClose() {
+    emptyEl(this.contentEl);
+  }
+  /** Refresh = re-read available data through the source port.
+   * No Python spawn, no file mutation, no agent invocation. */
+  async refresh() {
+    this.graphLoad = await loadGraphFromSource(this.deps.source);
+    this.renderPanel();
+  }
+  renderPanel() {
+    const host = this.contentEl.querySelector(".rdkp-panel-host");
+    if (!(host instanceof HTMLElement)) return;
+    const model = buildKnowledgePanelModel({
+      load: this.graphLoad,
+      workspace: this.deps.workspace,
+      objectId: this.query === "" ? void 0 : this.query
+    });
+    renderKnowledgePanel(host, model);
+  }
+};
+
 // src/scope.ts
 var KNOWLEDGE_ROOTS = [
   "CASES",
@@ -1267,7 +1637,7 @@ function isForbiddenDataSource(path) {
 }
 
 // src/platform/obsidian-navigation.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/platform/navigation-core.ts
 var NATIVE_LOCAL_GRAPH_COMMAND_ID = "graph:open-local";
@@ -12898,7 +13268,7 @@ var ObsidianNavigationPort = class {
   }
   async open(target, mode) {
     const file = this.app.vault.getAbstractFileByPath(target.path);
-    if (!(file instanceof import_obsidian5.TFile)) return;
+    if (!(file instanceof import_obsidian6.TFile)) return;
     const leaf = this.pickLeaf(mode);
     if (leaf === null) return;
     try {
@@ -12907,7 +13277,7 @@ var ObsidianNavigationPort = class {
         await this.app.workspace.revealLeaf(leaf);
       }
       const view = leaf.view;
-      if (!(view instanceof import_obsidian5.MarkdownView) || view.file?.path !== file.path) return;
+      if (!(view instanceof import_obsidian6.MarkdownView) || view.file?.path !== file.path) return;
       if (mode === "source") {
         if (target.sourceRevision === void 0 || target.sourceLocator === void 0) return;
         const current = await this.app.vault.read(file);
@@ -12929,7 +13299,7 @@ var ObsidianNavigationPort = class {
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache === null) return;
         const subpath = target.subpath.startsWith("^") ? "#" + target.subpath : target.subpath;
-        const resolved = (0, import_obsidian5.resolveSubpath)(cache, subpath);
+        const resolved = (0, import_obsidian6.resolveSubpath)(cache, subpath);
         if (resolved !== null) {
           view.editor.setCursor({ line: resolved.start.line, ch: resolved.start.col });
         }
@@ -12950,7 +13320,7 @@ var ObsidianNavigationPort = class {
       return "UNAVAILABLE";
     }
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian5.TFile)) return "UNAVAILABLE";
+    if (!(file instanceof import_obsidian6.TFile)) return "UNAVAILABLE";
     try {
       const leaf = this.app.workspace.getLeaf(false);
       if (leaf === null) return "UNAVAILABLE";
@@ -14052,6 +14422,22 @@ var RuntimeWiring = class {
 };
 
 // src/main.ts
+var ObsidianGraphSourceImpl = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+  }
+  async read() {
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      if (!await adapter.exists(DEFAULT_SEMANTIC_GRAPH_PATH)) {
+        return { state: "missing" };
+      }
+      return { state: "available", text: await adapter.read(DEFAULT_SEMANTIC_GRAPH_PATH) };
+    } catch (err) {
+      return { state: "unavailable", reason: String(err) };
+    }
+  }
+};
 var ObsidianReadAdapterImpl = class {
   constructor(plugin) {
     this.plugin = plugin;
@@ -14064,7 +14450,7 @@ var ObsidianReadAdapterImpl = class {
   }
   mtime(path) {
     const file = this.plugin.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian6.TFile ? file.stat.mtime : 0;
+    return file instanceof import_obsidian7.TFile ? file.stat.mtime : 0;
   }
 };
 var ObsidianWorkspaceBridge = class {
@@ -14081,7 +14467,7 @@ var ObsidianWorkspaceBridge = class {
   }
   getActiveFile() {
     const f = this.plugin.app.workspace.getActiveFile();
-    return f instanceof import_obsidian6.TFile ? { path: f.path } : null;
+    return f instanceof import_obsidian7.TFile ? { path: f.path } : null;
   }
 };
 var ObsidianVaultBridge = class {
@@ -14094,7 +14480,7 @@ var ObsidianVaultBridge = class {
     );
   }
 };
-var RationalDeliriumPlugin = class extends import_obsidian6.Plugin {
+var RationalDeliriumPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.wiring = null;
@@ -14185,6 +14571,23 @@ var RationalDeliriumPlugin = class extends import_obsidian6.Plugin {
         await this.activateGraphView();
       }
     });
+    this.registerView(
+      RD_KNOWLEDGE_PANEL_VIEW_TYPE,
+      (leaf) => new RDKnowledgePanelView(leaf, {
+        source: new ObsidianGraphSourceImpl(this),
+        workspace: "default"
+      })
+    );
+    this.addRibbonIcon("book-open", "Open RD Knowledge Panel", async () => {
+      await this.activateKnowledgePanelView();
+    });
+    this.addCommand({
+      id: "open-rd-knowledge-panel",
+      name: "Open RD Knowledge Panel",
+      callback: async () => {
+        await this.activateKnowledgePanelView();
+      }
+    });
     await this.wiring.start();
   }
   onunload() {
@@ -14218,6 +14621,13 @@ var RationalDeliriumPlugin = class extends import_obsidian6.Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_GRAPH_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_GRAPH_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+  /** v1.3.1 §3: Knowledge Panel opens as a main-area tab. */
+  async activateKnowledgePanelView() {
+    const existing = this.app.workspace.getLeavesOfType(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_KNOWLEDGE_PANEL_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 };

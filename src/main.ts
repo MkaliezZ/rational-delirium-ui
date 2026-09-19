@@ -3,12 +3,32 @@ import { RDContextView, RD_CONTEXT_VIEW_TYPE } from "./views/context-view";
 import { RDInvestigationView, RD_INVESTIGATION_VIEW_TYPE } from "./views/investigation-view";
 import { RDLoopView, RD_LOOP_VIEW_TYPE } from "./views/loop-view";
 import { RDGraphIntelligenceView, RD_GRAPH_VIEW_TYPE } from "./views/graph-intelligence-view";
+import { RDKnowledgePanelView, RD_KNOWLEDGE_PANEL_VIEW_TYPE } from "./views/knowledge-panel-view";
 import { ContextController } from "./context/context-controller";
 import { isCandidatePath } from "./scope";
 import { ObsidianNavigationPort } from "./platform/obsidian-navigation";
 import { RuntimeWiring } from "./runtime/runtime-wiring";
 import type { ReadAdapter } from "./platform/obsidian-read-adapter";
 import type { WorkspaceLike, VaultLike } from "./runtime/runtime-wiring";
+import type { GraphSource } from "./semantic-graph/graph-loader";
+import { DEFAULT_SEMANTIC_GRAPH_PATH } from "./semantic-graph/graph-loader";
+
+/** v1.3.1 §1: read-only source over the derived semantic-graph
+ * artifact file. adapter.exists/read only — no write verb. */
+class ObsidianGraphSourceImpl implements GraphSource {
+  constructor(private readonly plugin: Plugin) {}
+  async read() {
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      if (!(await adapter.exists(DEFAULT_SEMANTIC_GRAPH_PATH))) {
+        return { state: "missing" as const };
+      }
+      return { state: "available" as const, text: await adapter.read(DEFAULT_SEMANTIC_GRAPH_PATH) };
+    } catch (err) {
+      return { state: "unavailable" as const, reason: String(err) };
+    }
+  }
+}
 
 /** Read-only adapter over the real Vault. */
 class ObsidianReadAdapterImpl {
@@ -143,6 +163,24 @@ export default class RationalDeliriumPlugin extends Plugin {
       callback: async () => { await this.activateGraphView(); },
     });
 
+    // v1.3.1 Phase 1: read-only Knowledge Panel over the derived
+    // semantic-graph artifact (not the RDIndex assertion layer).
+    this.registerView(
+      RD_KNOWLEDGE_PANEL_VIEW_TYPE,
+      (leaf: WorkspaceLeaf) =>
+        new RDKnowledgePanelView(leaf, {
+          source: new ObsidianGraphSourceImpl(this),
+          workspace: "default",
+        }),
+    );
+    this.addRibbonIcon("book-open", "Open RD Knowledge Panel", async () => {
+      await this.activateKnowledgePanelView();
+    });
+    this.addCommand({
+      id: "open-rd-knowledge-panel", name: "Open RD Knowledge Panel",
+      callback: async () => { await this.activateKnowledgePanelView(); },
+    });
+
     await this.wiring.start();
   }
 
@@ -181,6 +219,14 @@ export default class RationalDeliriumPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(RD_GRAPH_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: RD_GRAPH_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** v1.3.1 §3: Knowledge Panel opens as a main-area tab. */
+  private async activateKnowledgePanelView(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
+    const leaf = existing[0] ?? this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: RD_KNOWLEDGE_PANEL_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 }

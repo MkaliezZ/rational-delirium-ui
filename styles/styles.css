@@ -578,3 +578,46 @@
 @media (prefers-reduced-motion: reduce) {
   .rd-graph * { transition: none !important; animation: none !important; }
 }
+
+/* v1.3.1 Knowledge Panel — read-only presentation adapter. All
+   selectors scoped under .rd-knowledge-panel; states are
+   availability labels, not epistemic badges. */
+.rd-knowledge-panel-shell { padding: 10px 12px; }
+.rd-knowledge-panel-shell .rdkp-toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+.rd-knowledge-panel-shell .rdkp-input {
+  flex: 1;
+  background: #171714;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  color: #D4D0C8;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.rd-knowledge-panel-shell .rdkp-button {
+  background: #171714;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  color: #A19C92;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+.rd-knowledge-panel-shell .rdkp-button:hover { border-color: #76908D; color: #76908D; }
+.rd-knowledge-panel { font-size: 13px; color: #D4D0C8; }
+.rd-knowledge-panel .rdkp-head { display: flex; gap: 10px; font-family: var(--font-monospace); font-size: 11px; color: #A19C92; }
+.rd-knowledge-panel .rdkp-message { color: #77736B; font-size: 12px; margin: 6px 0; }
+.rd-knowledge-panel .rdkp-query,
+.rd-knowledge-panel .rdkp-resolve-state,
+.rd-knowledge-panel .rdkp-unresolved { font-family: var(--font-monospace); font-size: 12px; margin: 4px 0; color: #D4D0C8; }
+.rd-knowledge-panel .rdkp-resolve-state { color: #B7A56A; }
+.rd-knowledge-panel .rdkp-fields { margin: 8px 0; }
+.rd-knowledge-panel .rdkp-fields dt { font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #77736B; margin-top: 6px; }
+.rd-knowledge-panel .rdkp-fields dd { margin: 1px 0 0; }
+.rd-knowledge-panel .rdkp-fields dd[data-state="not_loaded"] { color: #77736B; }
+.rd-knowledge-panel .rdkp-section { border-top: 1px solid #292824; margin-top: 10px; padding-top: 6px; }
+.rd-knowledge-panel .rdkp-section-title { font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #77736B; margin-bottom: 4px; }
+.rd-knowledge-panel .rdkp-relation-row { font-family: var(--font-monospace); font-size: 12px; padding: 2px 0; color: #D4D0C8; }
+.rd-knowledge-panel .rdkp-relation-row[data-endpoint="missing"] { color: #8B3A3A; }
+.rd-knowledge-panel .rdkp-diagnostic { font-family: var(--font-monospace); font-size: 12px; padding: 2px 0; color: #B7A56A; }
+.rd-knowledge-panel .rdkp-empty { color: #77736B; font-size: 12px; }
