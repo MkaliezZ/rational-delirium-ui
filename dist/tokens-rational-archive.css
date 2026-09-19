@@ -1,0 +1,47 @@
+/* v1.6.2 — Rational Archive theme mapping (CSS layer).
+ *
+ * Static CSS mapping of the canonical semantic tokens for the
+ * default theme, scoped under [data-rd-theme="rational-archive"].
+ * The TypeScript definition (src/themes/rational-archive.ts) is the
+ * validated authority; this file mirrors it for pure-CSS consumers
+ * and is DRIFT-CHECKED against it by tests/theme-system.test.ts.
+ *
+ * Presentation only: these values style declared states; they never
+ * add meaning (v1.3.5 §3, v1.6.0 §6). */
+
+[data-rd-theme="rational-archive"] {
+  /* identity */
+  --rd-identity-title-text: #D4D0C8;
+  --rd-identity-meta-text: #A19C92;
+  --rd-identity-id-text: #A19C92;
+  --rd-identity-rule: #34322D;
+  /* provenance */
+  --rd-provenance-observation-text: #A8B6AD;
+  --rd-provenance-evidence-text: #91B5B0;
+  --rd-provenance-inference-text: #C6B477;
+  --rd-provenance-conclusion-text: #D4D0C8;
+  --rd-provenance-layer-rule: #34322D;
+  /* relation */
+  --rd-relation-type-text: #D4D0C8;
+  --rd-relation-endpoint-text: #A19C92;
+  --rd-relation-unresolved-text: #D0B77C;
+  --rd-relation-rule: #34322D;
+  /* conflict */
+  --rd-conflict-marker-text: #C78683;
+  --rd-conflict-marker-rule: #C78683;
+  /* availability (neutral: availability is not validity) */
+  --rd-availability-available-text: #A19C92;
+  --rd-availability-missing-text: #D0B77C;
+  --rd-availability-ambiguous-text: #D0B77C;
+  --rd-availability-unavailable-text: #AAA69E;
+  /* lifecycle-display (labels carry meaning; color accompanies) */
+  --rd-lifecycle-candidate-text: #A19C92;
+  --rd-lifecycle-active-text: #91B5B0;
+  --rd-lifecycle-superseded-text: #A19C92;
+  --rd-lifecycle-archived-text: #A19C92;
+  /* surface */
+  --rd-surface-base: #11110F;
+  --rd-surface-raised: #1D1C19;
+  --rd-surface-rule: #34322D;
+  --rd-surface-focus-rule: #D8C89D;
+}

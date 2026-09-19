@@ -17,6 +17,7 @@ import type { GraphSource } from "../semantic-graph/graph-loader";
 import { loadGraphFromSource } from "../semantic-graph/graph-loader";
 import type { RDWorkspaceStore } from "../architecture/workspace-state";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
+import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
 import { createChild, emptyEl } from "./dom-helpers";
 import { RD_KNOWLEDGE_PANEL_VIEW_TYPE } from "./knowledge-panel-view";
 
@@ -27,6 +28,9 @@ export interface RDWorkspaceShellDeps {
   readonly source: GraphSource;
   /** Explicit activation of another RD view (registry path). */
   readonly openView: (viewType: string) => Promise<void>;
+  /** v1.6.2: explicit, session-only theme selection. Optional until
+   * wired; absence keeps fallback styling. */
+  readonly themeController?: RDThemeController;
 }
 
 /** The six information-architecture areas (v1.6.0 §4) with their
@@ -59,8 +63,11 @@ export class RDWorkspaceShellView extends ItemView {
     const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
     shell.setAttribute(RD_THEME_ATTR, "");
     shell.setAttribute("data-rd-tokens", RD_TOKEN_VERSION);
-    createChild(shell, "div", { cls: "rdws-toolbar" });
+    this.buildToolbar(createChild(shell, "div", { cls: "rdws-toolbar" }), shell);
     createChild(shell, "div", { cls: "rdws-body" });
+    if (this.deps.themeController !== undefined) {
+      applyRDTheme(shell, this.deps.themeController.getCurrent());
+    }
     this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
     // One explicit availability read on open; after that, only the
     // user's "Re-read availability" action triggers reads.
@@ -72,6 +79,33 @@ export class RDWorkspaceShellView extends ItemView {
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
+  }
+
+  /** v1.6.2 §5: explicit, session-only theme selection. The
+   * dropdown lists registered themes; choosing one applies
+   * presentation to this RD surface only. No detection, no AI
+   * selection, no persistence. */
+  private buildToolbar(bar: HTMLElement, shell: HTMLElement): void {
+    const controller = this.deps.themeController;
+    if (controller === undefined) return;
+    createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
+    const select = createChild(bar, "select", { cls: "rdws-theme-select" }) as HTMLSelectElement;
+    select.setAttribute("aria-label", "RD theme (presentation only)");
+    for (const theme of controller.list()) {
+      const option = createChild(select, "option", { text: theme.label });
+      (option as HTMLOptionElement).value = theme.id;
+      if (theme.id === controller.getCurrent().id) {
+        (option as HTMLOptionElement).selected = true;
+      }
+    }
+    select.addEventListener("change", () => {
+      try {
+        const theme = controller.setTheme(select.value);
+        applyRDTheme(shell, theme);
+      } catch {
+        // unknown id: keep current theme; selection is explicit-only
+      }
+    });
   }
 
   /** Explicit re-read of derived-state availability. No rebuild, no

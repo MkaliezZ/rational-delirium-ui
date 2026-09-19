@@ -694,3 +694,14 @@
   padding: 2px 8px;
 }
 .rd-workspace-shell .rdws-area-open:hover { border-color: #76908D; color: #76908D; }
+
+/* v1.6.2 theme selector (workspace shell toolbar). */
+.rd-workspace-shell .rdws-theme-label { font-size: 11px; color: #A19C92; }
+.rd-workspace-shell .rdws-theme-select {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  font-size: 11px;
+  padding: 2px 4px;
+}

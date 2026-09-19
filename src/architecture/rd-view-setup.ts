@@ -23,6 +23,8 @@ import type { RDIndex } from "../index/rd-index";
 import type { NavigationPort } from "../platform/navigation-core";
 import type { GraphSource } from "../semantic-graph/graph-loader";
 import type { KoSourceReader } from "../semantic-graph/ko-detail-reader";
+import { createDefaultThemeRegistry } from "../themes/rational-archive";
+import { RDThemeController } from "../themes/theme-runtime";
 
 /** Everything views need, supplied by main.ts. */
 export interface RDServices {
@@ -119,6 +121,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
         store: services.workspaceStore as RDWorkspaceStore,
         source: services.graphSource as GraphSource,
         openView: services.openView as (viewType: string) => Promise<void>,
+        themeController: services.themeController as RDThemeController,
       }),
   });
 
@@ -147,6 +150,9 @@ function liveDeps(services: S) {
 export function registerRDViews(plugin: Plugin, services: RDServices): RDViewRegistry {
   const registry = buildRDViewRegistry();
   const workspaceStore = new RDWorkspaceStore();
+  // v1.6.2: single shipped theme; explicit, session-only selection.
+  const themeController = new RDThemeController(
+    createDefaultThemeRegistry(), "rational-archive");
   const openView = async (viewType: string): Promise<void> => {
     const reg = registry.get(viewType);
     if (reg === undefined) return;
@@ -154,7 +160,7 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
   };
   registry.registerAll({
     plugin,
-    services: { ...services, workspaceStore, openView },
+    services: { ...services, workspaceStore, openView, themeController },
   });
   return registry;
 }

@@ -13069,6 +13069,15 @@ async function loadGraphFromSource(source) {
 // src/architecture/theme-tokens.ts
 var RD_TOKEN_VERSION = "rd-tokens/1";
 var RD_THEME_ATTR = "data-rd-theme";
+var RD_TOKEN_CATEGORIES = [
+  "identity",
+  "provenance",
+  "relation",
+  "conflict",
+  "availability",
+  "lifecycle-display",
+  "surface"
+];
 var RD_TOKENS = Object.freeze({
   identity: Object.freeze([
     "--rd-identity-title-text",
@@ -13112,6 +13121,100 @@ var RD_TOKENS = Object.freeze({
     "--rd-surface-focus-rule"
   ])
 });
+
+// src/themes/theme-runtime.ts
+var CANONICAL_TOKEN_NAMES = Object.freeze(
+  RD_TOKEN_CATEGORIES.flatMap((c) => RD_TOKENS[c])
+);
+var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+var FORBIDDEN_MEANING = [
+  "truth",
+  "confiden",
+  "rank",
+  "score",
+  "winner",
+  "correct",
+  "authority",
+  "glow"
+];
+function validateThemeDefinition(theme) {
+  const problems = [];
+  if (!/^[a-z][a-z0-9-]*$/.test(theme.id)) {
+    problems.push(`invalid theme id: ${theme.id}`);
+  }
+  if (FORBIDDEN_MEANING.some((w) => theme.id.includes(w))) {
+    problems.push(`theme id encodes forbidden meaning: ${theme.id}`);
+  }
+  const names = Object.keys(theme.tokens);
+  const missing = CANONICAL_TOKEN_NAMES.filter((t) => !(t in theme.tokens));
+  const extra = names.filter((t) => !CANONICAL_TOKEN_NAMES.includes(t));
+  for (const t of missing) problems.push(`missing token: ${t}`);
+  for (const t of extra) problems.push(`non-canonical token: ${t}`);
+  for (const [name, value] of Object.entries(theme.tokens)) {
+    if (FORBIDDEN_MEANING.some((w) => name.includes(w))) {
+      problems.push(`token name encodes forbidden meaning: ${name}`);
+    }
+    if (!HEX_RE.test(value)) {
+      problems.push(`token ${name} has a non-hex value: ${value}`);
+    }
+  }
+  return problems.length === 0 ? { valid: true } : { valid: false, problems };
+}
+var RDThemeRegistry = class {
+  constructor() {
+    this.themes = /* @__PURE__ */ new Map();
+  }
+  register(theme) {
+    const check = validateThemeDefinition(theme);
+    if (!check.valid) {
+      throw new Error(`invalid theme "${theme.id}": ${check.problems.join("; ")}`);
+    }
+    if (this.themes.has(theme.id)) {
+      throw new Error(`duplicate theme id: ${theme.id}`);
+    }
+    this.themes.set(theme.id, theme);
+  }
+  get(id) {
+    return this.themes.get(id);
+  }
+  list() {
+    return [...this.themes.values()];
+  }
+};
+function applyRDTheme(root, theme) {
+  root.setAttribute(RD_THEME_ATTR, theme.id);
+  let applied = 0;
+  for (const [token, value] of Object.entries(theme.tokens)) {
+    root.style.setProperty(token, value);
+    applied += 1;
+  }
+  return applied;
+}
+var RDThemeController = class {
+  constructor(registry, defaultThemeId) {
+    this.registry = registry;
+    const def = registry.get(defaultThemeId);
+    if (def === void 0) {
+      throw new Error(`unknown default theme: ${defaultThemeId}`);
+    }
+    this.current = def;
+  }
+  getCurrent() {
+    return this.current;
+  }
+  /** Explicit user selection only. Unknown ids are refused. */
+  setTheme(id) {
+    const def = this.registry.get(id);
+    if (def === void 0) {
+      throw new Error(`unknown theme: ${id}`);
+    }
+    this.current = def;
+    return def;
+  }
+  list() {
+    return this.registry.list();
+  }
+};
 
 // src/views/dom-helpers.ts
 function emptyEl(el) {
@@ -13673,8 +13776,11 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
     shell.setAttribute(RD_THEME_ATTR, "");
     shell.setAttribute("data-rd-tokens", RD_TOKEN_VERSION);
-    createChild(shell, "div", { cls: "rdws-toolbar" });
+    this.buildToolbar(createChild(shell, "div", { cls: "rdws-toolbar" }), shell);
     createChild(shell, "div", { cls: "rdws-body" });
+    if (this.deps.themeController !== void 0) {
+      applyRDTheme(shell, this.deps.themeController.getCurrent());
+    }
     this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
     await this.refreshAvailability();
     this.renderBody();
@@ -13683,6 +13789,31 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
+  }
+  /** v1.6.2 §5: explicit, session-only theme selection. The
+   * dropdown lists registered themes; choosing one applies
+   * presentation to this RD surface only. No detection, no AI
+   * selection, no persistence. */
+  buildToolbar(bar, shell) {
+    const controller = this.deps.themeController;
+    if (controller === void 0) return;
+    createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
+    const select = createChild(bar, "select", { cls: "rdws-theme-select" });
+    select.setAttribute("aria-label", "RD theme (presentation only)");
+    for (const theme of controller.list()) {
+      const option = createChild(select, "option", { text: theme.label });
+      option.value = theme.id;
+      if (theme.id === controller.getCurrent().id) {
+        option.selected = true;
+      }
+    }
+    select.addEventListener("change", () => {
+      try {
+        const theme = controller.setTheme(select.value);
+        applyRDTheme(shell, theme);
+      } catch {
+      }
+    });
   }
   /** Explicit re-read of derived-state availability. No rebuild, no
    * sync, no spawn — reads available data only (v1.3.0 §7). */
@@ -14954,6 +15085,54 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
   }
 };
 
+// src/themes/rational-archive.ts
+var RATIONAL_ARCHIVE_THEME = Object.freeze({
+  id: "rational-archive",
+  label: "Rational Archive",
+  description: "Default RD identity: deep archive atmosphere, investigative calm.",
+  tokens: Object.freeze({
+    // identity
+    "--rd-identity-title-text": "#D4D0C8",
+    "--rd-identity-meta-text": "#A19C92",
+    "--rd-identity-id-text": "#A19C92",
+    "--rd-identity-rule": "#34322D",
+    // provenance
+    "--rd-provenance-observation-text": "#A8B6AD",
+    "--rd-provenance-evidence-text": "#91B5B0",
+    "--rd-provenance-inference-text": "#C6B477",
+    "--rd-provenance-conclusion-text": "#D4D0C8",
+    "--rd-provenance-layer-rule": "#34322D",
+    // relation
+    "--rd-relation-type-text": "#D4D0C8",
+    "--rd-relation-endpoint-text": "#A19C92",
+    "--rd-relation-unresolved-text": "#D0B77C",
+    "--rd-relation-rule": "#34322D",
+    // conflict
+    "--rd-conflict-marker-text": "#C78683",
+    "--rd-conflict-marker-rule": "#C78683",
+    // availability (neutral: availability is not validity)
+    "--rd-availability-available-text": "#A19C92",
+    "--rd-availability-missing-text": "#D0B77C",
+    "--rd-availability-ambiguous-text": "#D0B77C",
+    "--rd-availability-unavailable-text": "#AAA69E",
+    // lifecycle-display (labels carry meaning; color accompanies)
+    "--rd-lifecycle-candidate-text": "#A19C92",
+    "--rd-lifecycle-active-text": "#91B5B0",
+    "--rd-lifecycle-superseded-text": "#A19C92",
+    "--rd-lifecycle-archived-text": "#A19C92",
+    // surface
+    "--rd-surface-base": "#11110F",
+    "--rd-surface-raised": "#1D1C19",
+    "--rd-surface-rule": "#34322D",
+    "--rd-surface-focus-rule": "#D8C89D"
+  })
+});
+function createDefaultThemeRegistry() {
+  const registry = new RDThemeRegistry();
+  registry.register(RATIONAL_ARCHIVE_THEME);
+  return registry;
+}
+
 // src/architecture/rd-view-setup.ts
 function buildRDViewRegistry() {
   const registry = new RDViewRegistry();
@@ -15026,7 +15205,8 @@ function buildRDViewRegistry() {
     createView: (leaf, services) => new RDWorkspaceShellView(leaf, {
       store: services.workspaceStore,
       source: services.graphSource,
-      openView: services.openView
+      openView: services.openView,
+      themeController: services.themeController
     })
   });
   return registry;
@@ -15048,6 +15228,10 @@ function liveDeps(services) {
 function registerRDViews(plugin, services) {
   const registry = buildRDViewRegistry();
   const workspaceStore = new RDWorkspaceStore();
+  const themeController = new RDThemeController(
+    createDefaultThemeRegistry(),
+    "rational-archive"
+  );
   const openView = async (viewType) => {
     const reg = registry.get(viewType);
     if (reg === void 0) return;
@@ -15055,7 +15239,7 @@ function registerRDViews(plugin, services) {
   };
   registry.registerAll({
     plugin,
-    services: { ...services, workspaceStore, openView }
+    services: { ...services, workspaceStore, openView, themeController }
   });
   return registry;
 }

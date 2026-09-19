@@ -4,5 +4,9 @@
   "version": "0.4.4",
   "minAppVersion": "1.13.7",
   "description": "Read-only CASE workspace projection: context, relations and native navigation for the Rational Delirium vault.",
-  "isDesktopOnly": true
+  "isDesktopOnly": true,
+  "css": [
+    "styles.css",
+    "tokens-rational-archive.css"
+  ]
 }

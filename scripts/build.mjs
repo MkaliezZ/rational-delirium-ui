@@ -22,4 +22,5 @@ await build({
 
 copyFileSync(join(root, "manifest.json"), join(root, "dist", "manifest.json"));
 copyFileSync(join(root, "styles", "styles.css"), join(root, "dist", "styles.css"));
-console.log("build complete: dist/main.js, dist/manifest.json, dist/styles.css");
+copyFileSync(join(root, "styles", "tokens-rational-archive.css"), join(root, "dist", "tokens-rational-archive.css"));
+console.log("build complete: dist/main.js, dist/manifest.json, dist/styles.css, dist/tokens-rational-archive.css");

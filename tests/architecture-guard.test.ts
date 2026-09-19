@@ -156,8 +156,10 @@ describe("v0.4.4 graph intelligence narrow guard", () => {
 });
 
 describe("v0.4.2 CSS scope isolation (§30)", () => {
-  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop, .rd-graph or .rd-knowledge-panel", () => {
-    const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
+  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop, .rd-graph, .rd-knowledge-panel or the theme attribute", () => {
+    const css = ["styles.css", "tokens-rational-archive.css"]
+      .map((f) => readFileSync(join(root, "styles", f), "utf-8"))
+      .join("\n");
     // Strip comments, then collect selector text preceding every '{'.
     const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
     const selectors: string[] = [];
@@ -177,7 +179,8 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
           s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
             || s.startsWith(".rd-loop") || s.startsWith(".rd-graph")
             || s.startsWith(".rd-knowledge-panel")
-            || s.startsWith(".rd-workspace"),
+            || s.startsWith(".rd-workspace")
+            || s.startsWith("[data-rd-theme"),
           `unscoped selector: ${s}`,
         ).toBe(true);
       }
