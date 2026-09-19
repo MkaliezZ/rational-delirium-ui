@@ -77,6 +77,15 @@ an Approval Assistant to present to a Human. It is a presentation
 input: it may point to where a decision record lives, and it must
 never contain or imply the decision itself.
 
+The work product such a package carries is itself an assembly:
+classify it as `work_product_reference.kind = decision-context`
+(informational input for Human consideration; no approval or
+execution authority). Do NOT label it `evidence` (that is source
+material about the world) or `synthesis` (that is the Synthesis
+Agent's merged research draft) — classify what the product IS.
+Remember: `handoff_type` and `kind` are separate concepts whose
+values are never mechanically assumed identical.
+
 ## 6. Prohibited always
 
 - Granting, implying, or "notarizing" any authority

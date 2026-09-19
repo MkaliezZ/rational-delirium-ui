@@ -338,7 +338,7 @@ artifacts it names.
 | `creator_identity` | Declared producing identity + device context | ✔ | Role + context statement; a declaration, not a proof |
 | `receiver_identity` | Declared intended consuming role | ✖ | Optional routing hint; absence means "workflow decides" |
 | `timestamp` | Creation time (UTC, ISO-8601) | ✔ | Freshness is judged by receivers; staleness alone is not invalidity |
-| `work_product_reference` | Typed reference to THE work product this package carries | ✔ | Structure: `{ kind, id, digest? }` where kind ∈ `proposal` \| `review` \| `synthesis` \| `evidence`. One primary work product per package; auxiliary material goes in the other reference fields |
+| `work_product_reference` | Typed reference to THE work product this package carries | ✔ | Structure: `{ kind, id, digest? }` where kind ∈ `proposal` \| `review` \| `synthesis` \| `evidence` \| `decision-context`. One primary work product per package; auxiliary material goes in the other reference fields. `decision-context` = an informational work product assembled for Human consideration, containing references to reviewed workflow state and proposed exact operation details, but containing no approval or execution authority (not a decision record, not a Permit, not an Execution Request). **`handoff_type` and `work_product_reference.kind` are separate concepts** — handoff_type describes WHY/WHERE the package is moving in the workflow; kind describes WHAT primary work product it carries. Their values must never be mechanically assumed identical (e.g. `handoff_type=decision-context` does not by itself dictate any particular kind; the kind must describe the actual carried product truthfully) |
 | `proposal_reference` | proposal_id + revision + exact digest | type-dependent | Required when `work_product_reference.kind = proposal` or the package discusses a specific proposal |
 | `evidence_reference` | Source refs, excerpts/artifact ids, acquisition context | type-dependent | Research threads and proposals carry it; per-claim mapping preserved |
 | `source_information` | Vault context + note path + observed base hash + observation time | type-dependent | The "where/when" of the knowledge state the work assumed |
@@ -372,7 +372,16 @@ that assembles the historical references (proposal, review, prior
 decision records as context pointers) an Approval Assistant
 presents to the Human. It is an input to a Human decision moment —
 it is never a record of a decision and never an instruction to any
-executor.
+executor. The decision-context WORK PRODUCT carried by such a
+package is itself an informational assembly (kind =
+`decision-context`): references to reviewed workflow state and the
+proposed exact operation, with no approval or execution authority.
+Do not classify it as `evidence` — evidence is source material
+about the world with acquisition provenance; a decision-context is
+a derived presentation about workflow state. Do not classify it as
+`synthesis` — synthesis is the Synthesis Agent's merged research
+draft; a decision-context is the Approval Assistant's presentation
+of already-reviewed state. Role clarity is part of the taxonomy.
 
 ### Prohibited fields (schema-level invariant)
 

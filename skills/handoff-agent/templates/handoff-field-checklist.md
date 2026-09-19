@@ -14,7 +14,15 @@ docs/RD_V0_8_MULTI_DEVICE_AGENT_HANDOFF_PROTOCOL_DESIGN.md §5.
       declaration, not a proof)
 - [ ] `timestamp` — UTC ISO-8601
 - [ ] `work_product_reference` — `{ kind, id, digest? }`; kind ∈
-      proposal | review | synthesis | evidence; ONE primary product
+      proposal | review | synthesis | evidence | decision-context;
+      ONE primary product. `decision-context` = informational work
+      product assembled for Human consideration (references to
+      reviewed workflow state + proposed exact operation; NO
+      approval, NO execution authority — not a decision record,
+      not a Permit, not an Execution Request). NOTE: handoff_type
+      and kind are SEPARATE concepts (workflow transition vs
+      carried product) — never assume identical enum values;
+      classify the actual product truthfully
 - [ ] `assumptions` — possibly empty list (empty = "none declared")
 - [ ] `unknowns` — possibly empty; unknown/unavailable/not-performed
       kept distinct
