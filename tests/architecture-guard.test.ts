@@ -176,7 +176,8 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
         expect(
           s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
             || s.startsWith(".rd-loop") || s.startsWith(".rd-graph")
-            || s.startsWith(".rd-knowledge-panel"),
+            || s.startsWith(".rd-knowledge-panel")
+            || s.startsWith(".rd-workspace"),
           `unscoped selector: ${s}`,
         ).toBe(true);
       }

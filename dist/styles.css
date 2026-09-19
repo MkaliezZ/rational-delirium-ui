@@ -635,3 +635,62 @@
 .rd-knowledge-panel .rdkp-lineage-row[data-in-snapshot="false"] { color: #8B3A3A; }
 .rd-knowledge-panel .rdkp-lineage-note { color: #B7A56A; font-size: 12px; padding: 2px 0; }
 .rd-knowledge-panel .rdkp-diag-group { font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #77736B; margin-top: 6px; }
+
+/* v1.6.1 RD workspace shell — scoped under .rd-workspace-shell.
+   Token names establish the future mapping point (--rd-*); the
+   fallback values here are the current baseline presentation only,
+   not a theme variant. */
+.rd-workspace-shell {
+  padding: 10px 12px;
+  background: var(--rd-surface-base, #11110F);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-head { margin-bottom: 8px; }
+.rd-workspace-shell .rdws-title { font-size: 14px; margin-bottom: 4px; }
+.rd-workspace-shell .rdws-snapshot {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-availability-available-text, #A19C92);
+}
+.rd-workspace-shell .rdws-snapshot[data-state="missing"],
+.rd-workspace-shell .rdws-snapshot[data-state="unavailable"],
+.rd-workspace-shell .rdws-snapshot[data-state="invalid"] {
+  color: var(--rd-availability-unavailable-text, #8B3A3A);
+}
+.rd-workspace-shell .rdws-selected {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-id-text, #A19C92);
+}
+.rd-workspace-shell .rdws-areas { border-top: 1px solid var(--rd-surface-rule, #292824); padding-top: 6px; }
+.rd-workspace-shell .rdws-areas-title {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #77736B;
+  margin-bottom: 4px;
+}
+.rd-workspace-shell .rdws-area {
+  border-left: 2px solid var(--rd-identity-rule, #34322D);
+  padding: 4px 8px;
+  margin: 6px 0;
+}
+.rd-workspace-shell .rdws-area[data-implemented="false"] { opacity: 0.75; }
+.rd-workspace-shell .rdws-area-name { font-size: 13px; }
+.rd-workspace-shell .rdws-area-question { font-size: 11px; color: #77736B; }
+.rd-workspace-shell .rdws-area-pending {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-availability-missing-text, #77736B);
+}
+.rd-workspace-shell .rdws-area-open {
+  background: #171714;
+  border: 1px solid #34322D;
+  border-radius: 4px;
+  color: #A19C92;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.rd-workspace-shell .rdws-area-open:hover { border-color: #76908D; color: #76908D; }
