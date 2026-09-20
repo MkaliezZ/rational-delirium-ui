@@ -203,6 +203,57 @@ never reconciled by an agent.
 
 ## 7. Multi-Agent Async Collaboration Model
 
+Single-agent workflow is the fundamental baseline; multi-agent
+workflow is an extension of the same contract — not a separate,
+stronger mode.
+
+### Single-Agent Baseline Workflow
+
+A single external agent MUST be able to complete the complete
+contribution lifecycle without requiring another agent:
+
+```text
+Read Knowledge Object (exact object_id)
+   ↓
+Understand:
+   - identity
+   - provenance
+   - lineage
+   - relations
+   ↓
+Create proposal (§5)
+   ↓
+Create contribution record (§6)
+   ↓
+Human review
+   ↓
+Human apply
+```
+
+The baseline clarifications:
+
+- A single agent does **NOT** gain authority — one contributor is
+  still one contributor.
+- A single agent does **NOT** directly modify Knowledge Objects.
+- A single agent does **NOT** bypass Human decision.
+- Review may be performed by the Human; a second agent is not
+  required for the lifecycle to complete.
+
+### Multi-Agent Extension
+
+Multi-agent collaboration is an extension of the single-agent
+workflow. Additional agents provide:
+
+- independent research
+- alternative analysis
+- review perspectives
+
+Additional agents do **NOT** provide:
+
+- additional authority
+- automatic approval
+- conflict resolution power
+
 Asynchronous turn-taking, per artifact — never simultaneous
 uncontrolled file editing:
 
