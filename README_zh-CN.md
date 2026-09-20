@@ -17,7 +17,7 @@ Rational Delirium **不是** Agent 平台，**不是** Agent 运行时，也**�
 - Obsidian 插件：负责知识展示、关系探索和工作流记录；
 - Agent Skill 契约：指导外部 Agent 如何参与协作。
 
-外部 Agent 提案，人类决定，RD 展示过程。
+外部 Agent 是贡献者，不是权威：Agent 提案，人类决定，RD 展示过程。
 
 [English](README.md)
 
@@ -59,7 +59,7 @@ RD Skill 契约
 人类审核决定
     |
     v
-外部 Agent 执行批准范围
+外部 Agent 仅执行人类明确批准的范围
     |
     v
 Contribution Record（贡献记录）
@@ -68,28 +68,29 @@ Contribution Record（贡献记录）
 RD 展示完整历史
 ```
 
-提案不是执行。批准不代表真相判断。贡献记录描述发生过什么，而不是证明什么正确。
+提案不是执行。人类批准是一项被记录的决定，不是真相验证。贡献记录保存报告的执行溯源，不证明结果正确。
 
 ## 架构概览
 
 ```text
-知识对象（Knowledge Object, KO）
+知识数据 + 派生投影
           |
           v
-只读语义投影
-          |
-          v
-Rational Delirium 插件
-          |
-          +---- 知识工作区
-          +---- 图谱展示
-          +---- 协作面
-          +---- 人类决定记录
+知识工作区 / 图谱视图
 
-外部 Agent 通过工件协作：
+工作流工件
 .proposals/
 .contributions/
+.organization-proposals/
+          |
+          v
+协作面
+提案 / 人类决定 / 贡献记录
 ```
+
+知识视图读取知识数据和派生投影。协作面独立读取工作流工件，不依赖语义图快照。
+
+插件可以记录人类的明确决定，但不执行获批的知识修改。外部 Agent 在 RD 之外，仅执行人类明确批准的操作；Contribution Record 记录报告的执行溯源，不构成独立验证。
 
 知识对象（KO）指带有身份、溯源和关系信息的笔记或知识工件。
 
@@ -116,10 +117,11 @@ Rational Delirium 插件
 
 ### 普通 Obsidian 用户
 
-1. 安装 Rational Delirium 插件。
-2. 在 Obsidian 设置中启用插件。
-3. 打开 Rational Delirium 工作区。
-4. 查看知识对象、关系和工作流记录。
+1. 从 `dist/` 获取四个插件文件（构建步骤见下文）：`main.js`、`manifest.json`、`styles.css`、`tokens-rational-archive.css`。
+2. 将四个文件全部复制到 `<vault>/.obsidian/plugins/rational-delirium/`。
+3. 在 Obsidian 设置中启用 Rational Delirium。
+4. 在命令面板运行 **Open RD Workspace**，打开 RD 工作区。
+5. 从 RD Workspace 打开 **Collaboration**，查看已有 Proposal、Human Decision 和 Contribution Record。工作流工件由外部 Agent 创建；RD 不运行 Agent。
 
 ### 从源码构建
 
@@ -130,7 +132,7 @@ npm ci
 npm run build
 ```
 
-将生成的插件文件复制到：
+将上述四个生成的插件文件从 `dist/` 复制到：
 
 ```text
 <vault>/.obsidian/plugins/rational-delirium/
@@ -142,7 +144,7 @@ npm run build
 2. Agent 检查知识对象。
 3. Agent 创建 Proposal。
 4. 人类在 Obsidian 中审核。
-5. Agent 仅执行批准范围外的实际操作。
+5. 外部 Agent 在 RD 插件之外，仅执行人类明确批准范围内的操作。
 6. Agent 创建 Contribution Record。
 7. RD 展示完整链路。
 
@@ -156,10 +158,10 @@ Evidence supports Hypothesis
 Human Approved
 
 执行：
-External Agent 完成批准范围
+External Agent 仅执行人类明确批准的范围
 
 记录：
-Contribution Record 保存过程信息
+Contribution Record 保存报告的执行溯源
 ```
 
 ## 当前状态——已冻结
@@ -169,15 +171,27 @@ Contribution Record 保存过程信息
 | 里程碑 | 状态 |
 | --- | --- |
 | v1.9 Agent Skill Workflow Validation | FROZEN |
-| v1.10 Real Agent Usage Validation（DSH 5/5 PASS） | PASSED |
+| v1.10 Real Agent Usage Validation | PASSED |
 
-冻结时验证：
+已在以下环境完成真实 Obsidian 使用验证：
 
-- 434/434 测试通过；
-- TypeScript 检查通过；
-- 构建通过。
+- macOS + Codex；
+- Windows + WorkBuddy + GLM 5.3。
+
+已验证工作流：
+
+```text
+Proposal → Human Decision → Contribution Record → Relation Display
+提案 → 人类决定 → 贡献记录 → 关系展示
+```
+
+验证覆盖外部 Agent 工作流兼容性、跨设备工件兼容性、Obsidian 冷启动和暖重载。
+
+这些结果仅覆盖已测试的环境和工作流，不代表所有 Agent 均兼容，也不代表所有多 Agent 场景或自主批准已通过验证。关系展示呈现已声明的关系，不构成真相验证。
 
 ## 局限
+
+依赖语义图快照的视图需要有效的 `semantic-graph/graph.json`。插件不会自动生成或修复该快照。缺少快照不代表 Vault 中没有知识，也不阻止 Collaboration 工作流。
 
 Rational Delirium 有意不提供：
 

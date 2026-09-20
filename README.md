@@ -12,7 +12,7 @@ It is:
 - an Agent Skill contract that guides external agents;
 - a human-controlled workflow connecting proposals, decisions, and contribution records.
 
-External agents propose. Humans decide. RD displays the history.
+External agents contribute proposals, not authority. Humans decide. RD displays the history.
 
 [简体中文](README_zh-CN.md)
 
@@ -54,7 +54,7 @@ Proposal
 Human Decision
       |
       v
-External Agent executes approved scope
+External Agent executes only explicitly Human-approved scope
       |
       v
 Contribution Record
@@ -63,28 +63,29 @@ Contribution Record
 Rational Delirium displays the history
 ```
 
-A proposal is not an action. An approval is not a truth judgment. A contribution record describes an event, not correctness.
+A proposal is not an action. Human approval is a recorded decision, not truth validation. A contribution record records reported execution provenance, not proof of correctness.
 
 ## Architecture Overview
 
 ```text
-Knowledge Objects (KO)
+Knowledge data + derived projections
         |
         v
-Read-only semantic projection
-        |
-        v
-Rational Delirium Plugin
-        |
-        +---- Knowledge Workspace
-        +---- Graph Visualization
-        +---- Collaboration Surface
-        +---- Human Decision Recording
+Knowledge Workspace / Graph Views
 
-External agents interact through artifacts:
+Workflow artifacts
 .proposals/
 .contributions/
+.organization-proposals/
+        |
+        v
+Collaboration Surface
+Proposal / Human Decision / Contribution Record
 ```
+
+Knowledge views read knowledge data and derived projections. Collaboration reads workflow artifacts independently of the semantic graph snapshot.
+
+The plugin can record explicit Human decisions. It does not execute approved knowledge modifications. An external Agent performs only explicitly Human-approved operations outside RD; the Contribution Record records reported execution provenance, not independent verification.
 
 Knowledge Object (KO) means a note or artifact with identity, provenance, and relationships.
 
@@ -111,10 +112,11 @@ No truth scores, confidence meters, rankings, or automatic merging.
 
 ### For Obsidian users
 
-1. Install Rational Delirium into your Obsidian vault.
-2. Enable the plugin in Obsidian settings.
-3. Open the Rational Delirium workspace.
-4. Explore knowledge objects, relations, and workflow records.
+1. Obtain the four plugin files from `dist/` (see the build steps below): `main.js`, `manifest.json`, `styles.css`, and `tokens-rational-archive.css`.
+2. Copy all four files into `<vault>/.obsidian/plugins/rational-delirium/`.
+3. Enable Rational Delirium in Obsidian settings.
+4. Use the command palette to run **Open RD Workspace**.
+5. Open **Collaboration** from RD Workspace to view existing Proposals, Human Decisions, and Contribution Records. External agents create the workflow artifacts; RD does not run agents.
 
 ### For developers building from source
 
@@ -125,7 +127,7 @@ npm ci
 npm run build
 ```
 
-Copy the generated plugin files into:
+Copy the four generated plugin files listed above from `dist/` into:
 
 ```text
 <vault>/.obsidian/plugins/rational-delirium/
@@ -137,7 +139,7 @@ Copy the generated plugin files into:
 2. Agent inspects knowledge objects.
 3. Agent creates a Proposal.
 4. Human approves or rejects in Obsidian.
-5. Agent performs only the approved action outside RD.
+5. External Agent performs only the explicitly Human-approved operation outside RD.
 6. Agent creates a Contribution Record.
 7. RD displays the complete chain.
 
@@ -151,10 +153,10 @@ Decision:
 Approved by Human
 
 Execution:
-External Agent performs approved scope
+External Agent performs only explicitly Human-approved scope
 
 Record:
-Contribution Record stores provenance
+Contribution Record stores reported execution provenance
 ```
 
 ## Current Status — FROZEN
@@ -164,15 +166,26 @@ Development is paused after validation milestones.
 | Milestone | Status |
 | --- | --- |
 | v1.9 Agent Skill Workflow Validation | FROZEN |
-| v1.10 Real Agent Usage Validation (DSH 5/5 PASS) | PASSED |
+| v1.10 Real Agent Usage Validation | PASSED |
 
-Validation at freeze:
+Real Obsidian usage has been validated with:
 
-- 434/434 tests
-- TypeScript check clean
-- Build pass
+- Codex on macOS;
+- WorkBuddy + GLM 5.3 on Windows.
+
+Validated workflow:
+
+```text
+Proposal → Human Decision → Contribution Record → Relation Display
+```
+
+Validation covered external Agent workflow compatibility, cross-device artifact compatibility, Obsidian cold start, and warm reload.
+
+These results cover the tested environments and workflow. They do not establish compatibility with all Agents or validate all multi-Agent scenarios or autonomous approval. Relation display shows a declared relationship, not truth validation.
 
 ## Limitations
+
+Views depending on semantic graph snapshots require a valid `semantic-graph/graph.json`. The plugin does not automatically generate or repair this snapshot. A missing snapshot does not mean the Vault has no knowledge and does not block the Collaboration workflow.
 
 Rational Delirium intentionally does not:
 
