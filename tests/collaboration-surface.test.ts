@@ -198,7 +198,7 @@ describe("v1.7.4-A artifact loading", () => {
     const browser = new CollaborationBrowser();
     await browser.refresh(source({}));
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const text = host.textContent ?? "";
     // FIX 1: per-kind empty states, none implying no knowledge or error
@@ -217,7 +217,7 @@ describe("v1.7.4-A artifact loading", () => {
     await browser.refresh(partial);
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const text = host.textContent ?? "";
     expect(text).not.toContain("No proposal records found."); // proposals exist
@@ -237,7 +237,7 @@ describe("v1.7.4-A detail view and navigation", () => {
     await browser.refresh(fullSource);
     browser.select("proposal", `${PROPOSALS_DIR}/prop-001.md`);
     renderCollaboration(host, browser.getState(), detail, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const text = host.textContent ?? "";
     expect(text).toContain("Requested / Proposed Change");
@@ -245,7 +245,8 @@ describe("v1.7.4-A detail view and navigation", () => {
     expect(text).toContain("Reasoning");
     expect(text).toContain("History (append-only)");
     expect(text).toContain("read-only inspection");
-    expect(text).toContain("no approve, reject or apply action exists here");
+    expect(text).toContain("Approve/Reject record your decision on a pending proposal");
+    expect(text).toContain("No apply or execute action exists in RD");
   });
 
   it("exact-path only: wrong path resolves to null", async () => {
@@ -319,7 +320,7 @@ describe("v1.7.4-A read-only boundary", () => {
     await browser.refresh(fullSource);
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     // Every button in list mode is an artifact row; no standalone
     // action controls exist. (Artifact-DECLARED status text like
@@ -368,7 +369,7 @@ describe("v1.7.4-B usability polish", () => {
     await browser.refresh(fullSource);
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const intro = host.querySelector(".rdcol-intro");
     expect(intro).not.toBeNull();
@@ -392,7 +393,7 @@ describe("v1.7.4-B usability polish", () => {
     await browser.refresh(fullSource);
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     expect(host.textContent).toContain("status: approved (recorded human action)");
     const detail = await loadArtifactDetail(fullSource, "proposal", `${PROPOSALS_DIR}/prop-002.md`);
@@ -400,7 +401,7 @@ describe("v1.7.4-B usability polish", () => {
     const host2 = document.createElement("div");
     browser.select("proposal", `${PROPOSALS_DIR}/prop-002.md`);
     renderCollaboration(host2, browser.getState(), detail, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     expect(host2.textContent).toContain("approved (recorded human action; not a truth state)");
   });
@@ -410,7 +411,7 @@ describe("v1.7.4-B usability polish", () => {
     await browser.refresh(source({}));
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const text = host.textContent ?? "";
     expect((text.match(/Artifact records appear here when agents create contribution or proposal records\./g) ?? []).length).toBe(3);
@@ -428,7 +429,7 @@ describe("v1.7.4-B usability polish", () => {
     if (prop === null) throw new Error();
     let host = document.createElement("div");
     browser.select("proposal", `${PROPOSALS_DIR}/prop-001.md`);
-    renderCollaboration(host, browser.getState(), prop, { onSelect: () => undefined, onBack: () => undefined });
+    renderCollaboration(host, browser.getState(), prop, { onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined });
     expect(orderOf(host)).toEqual([
       "Requested / Proposed Change", "Evidence", "Reasoning",
       "Expected Impact", "Status (recorded human action)", "History (append-only)",
@@ -438,7 +439,7 @@ describe("v1.7.4-B usability polish", () => {
     if (contrib === null) throw new Error();
     host = document.createElement("div");
     browser.select("contribution", `${CONTRIBUTIONS_DIR}/contrib-001.md`);
-    renderCollaboration(host, browser.getState(), contrib, { onSelect: () => undefined, onBack: () => undefined });
+    renderCollaboration(host, browser.getState(), contrib, { onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined });
     expect(orderOf(host)).toEqual([
       "Contribution Summary", "Change Description", "Evidence Used",
       "Human Decision (recorded human action)", "History (append-only)",
@@ -448,7 +449,7 @@ describe("v1.7.4-B usability polish", () => {
     if (org === null) throw new Error();
     host = document.createElement("div");
     browser.select("organization-proposal", `${ORGANIZATION_PROPOSALS_DIR}/orgprop-001.md`);
-    renderCollaboration(host, browser.getState(), org, { onSelect: () => undefined, onBack: () => undefined });
+    renderCollaboration(host, browser.getState(), org, { onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined });
     expect(orderOf(host)).toEqual([
       "Observed Structure", "Proposed Organization Change", "Evidence",
       "Reasoning", "Expected Impact", "Human Decision (recorded human action)",
@@ -461,7 +462,7 @@ describe("v1.7.4-B usability polish", () => {
     await browser.refresh(fullSource);
     const host = document.createElement("div");
     renderCollaboration(host, browser.getState(), null, {
-      onSelect: () => undefined, onBack: () => undefined,
+      onSelect: () => undefined, onBack: () => undefined, onDecide: () => undefined,
     });
     const buttons = [...host.querySelectorAll("button")];
     for (const b of buttons) {

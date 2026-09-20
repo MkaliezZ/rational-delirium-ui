@@ -11,6 +11,7 @@
 - author_agent: "FICT-AGENT-RESEARCHER-1 (example host, researcher role)"
 - created_at: "2026-09-20T08:20Z (host clock, UTC)"
 - related_proposal_id: "PROP-20260920-001"
+- related_proposal_decision: "approved (recorded human action — fictional example)"
 
 ## Contribution Summary
 
@@ -35,9 +36,13 @@ separately.
 
 ## Human Decision
 
-none yet (example record; silence is not a decision)
+approved on 2026-09-20 (fictional example) — the Human approved
+proposal PROP-20260920-001; approval is a recorded human action,
+not truth validation
 
 ## History
 
 - 2026-09-20 — record created alongside proposal PROP-20260920-001
-  (append-only; this line will not be rewritten)
+- 2026-09-20 — external execution of the approved scope completed
+  (fictional); this record reports what happened, it does not prove
+  correctness (append-only)

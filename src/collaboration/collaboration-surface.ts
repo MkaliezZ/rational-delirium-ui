@@ -16,6 +16,10 @@ import type {
   CollaborationArtifactSource,
   CollaborationModel,
 } from "./artifact-reader";
+import {
+  isDecidableProposalText,
+  type ProposalDecision,
+} from "./proposal-decision";
 import { buildCollaborationModel, loadArtifactDetail } from "./artifact-reader";
 import { createChild, emptyEl } from "../views/dom-helpers";
 
@@ -190,7 +194,13 @@ function renderSection(
   for (const row of rows) renderRow(body, row, onSelect);
 }
 
-function renderDetail(parent: HTMLElement, detail: ArtifactDetail): void {
+function renderDetail(
+  parent: HTMLElement,
+  detail: ArtifactDetail,
+  handlers: {
+    onDecide: (decision: ProposalDecision, path: string) => void;
+  },
+): void {
   const box = createChild(parent, "div", { cls: "rdcol-detail" });
   const head = createChild(box, "div", { cls: "rdcol-detail-head" });
   head.textContent =
@@ -219,6 +229,31 @@ function renderDetail(parent: HTMLElement, detail: ArtifactDetail): void {
       cls: "rdcol-flag",
       text: `⚠ flagged (shown, not hidden): ${detail.problems.join("; ")}`,
     });
+  }
+
+  // v1.8: Human decision interaction — proposals only, pending
+  // only, explicit only. Approve/Reject RECORD a decision; they do
+  // not execute, apply, validate truth, or trust the agent.
+  if (detail.kind === "proposal" && detail.metadata.status === "pending"
+      && isDecidableProposalText(detail.rawText)) {
+    const decide = createChild(box, "div", { cls: "rdcol-decide" });
+    createChild(decide, "div", {
+      cls: "rdcol-decide-note",
+      text:
+        "Record your decision on this proposal. Approved means you authorize the " +
+        "proposed scope for external execution — it does not mean correct, does not " +
+        "mean verified, and does not trust the agent.",
+    });
+    const approve = createChild(decide, "button", {
+      cls: "rdcol-decide-button", text: "Approve (record decision)",
+    });
+    approve.setAttribute("aria-label", "Record approval of this proposal");
+    approve.addEventListener("click", () => handlers.onDecide("approved", detail.path));
+    const reject = createChild(decide, "button", {
+      cls: "rdcol-decide-button", text: "Reject (record decision)",
+    });
+    reject.setAttribute("aria-label", "Record rejection of this proposal");
+    reject.addEventListener("click", () => handlers.onDecide("rejected", detail.path));
   }
   // v1.7.4-B §3: per-kind reading order — Target/Metadata (the dl
   // above) → Proposed Change → Evidence → Reasoning → Human
@@ -261,8 +296,10 @@ function renderDetail(parent: HTMLElement, detail: ArtifactDetail): void {
   createChild(box, "div", {
     cls: "rdcol-note",
     text:
-      "This view displays what was proposed. Decisions are Human acts recorded in artifacts; " +
-      "no approve, reject or apply action exists here.",
+      "This view displays what was proposed. Decisions are Human acts recorded in " +
+      "artifacts: Approve/Reject record your decision on a pending proposal. No apply " +
+      "or execute action exists in RD — approved work is performed outside RD, " +
+      "limited to the approved scope, and reported back via a Contribution Record.",
   });
 }
 
@@ -275,6 +312,7 @@ export function renderCollaboration(
   handlers: {
     onSelect: (kind: import("./artifact-reader").ArtifactKind, path: string) => void;
     onBack: () => void;
+    onDecide: (decision: ProposalDecision, path: string) => void;
   },
 ): void {
   emptyEl(container);
@@ -285,7 +323,9 @@ export function renderCollaboration(
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "◀ Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
     back.addEventListener("click", handlers.onBack);
-    renderDetail(root, detail);
+    renderDetail(root, detail, {
+      onDecide: handlers.onDecide,
+    });
     return;
   }
 

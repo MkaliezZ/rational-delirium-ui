@@ -31,6 +31,7 @@ import type {
   ArtifactKind,
   CollaborationArtifactSource,
 } from "../collaboration/artifact-reader";
+import type { ProposalDecision, ProposalDecisionPort } from "../collaboration/proposal-decision";
 import {
   CollaborationBrowser,
   renderCollaboration,
@@ -52,6 +53,8 @@ export interface RDWorkspaceShellDeps {
   readonly themeController?: RDThemeController;
   /** v1.7.4-A: read-only collaboration artifact source. */
   readonly collaborationSource?: CollaborationArtifactSource;
+  /** v1.8: the one controlled write path (proposal decisions). */
+  readonly decisionPort?: ProposalDecisionPort;
 }
 
 /** The six information-architecture areas (v1.6.0 §4). The four
@@ -184,6 +187,26 @@ export class RDWorkspaceShellView extends ItemView {
     }
   }
 
+  /** v1.8: explicit Human decision recording — the only write.
+   * Records the decision, then re-reads artifacts and re-opens the
+   * same proposal so the Human sees the recorded state. */
+  private async recordProposalDecision(
+    decision: ProposalDecision,
+    path: string,
+  ): Promise<void> {
+    const port = this.deps.decisionPort;
+    const source = this.deps.collaborationSource;
+    if (port === undefined || source === undefined) return;
+    const result = await port.recordDecision(path, decision);
+    if (result.state === "written") {
+      await this.browser.refresh(source);
+      this.browser.select("proposal", path);
+      await this.refreshCollabDetail();
+    }
+    // invalid/missing/unavailable: no write happened; the view
+    // keeps showing current state. (Minimal MVP: no toast.)
+  }
+
   /** v1.7.4-A: load the detail for the current collaboration
    * selection (exact path), then re-render. Read-only. */
   private async refreshCollabDetail(): Promise<void> {
@@ -265,6 +288,9 @@ export class RDWorkspaceShellView extends ItemView {
         onBack: () => {
           this.browser.back();
           void this.refreshCollabDetail();
+        },
+        onDecide: (decision: ProposalDecision, path: string) => {
+          void this.recordProposalDecision(decision, path);
         },
       });
       return;

@@ -40,6 +40,7 @@ export interface ArtifactMetadata {
   readonly authorAgent: string | null;
   readonly createdAt: string | null;
   readonly relatedProposalId: string | null;
+  readonly relatedProposalDecision: string | null;
   readonly targetObjectId: string | null;
   readonly targetType: string | null;
   readonly targetScope: string | null;
@@ -50,6 +51,9 @@ export interface ArtifactMetadata {
 export interface ArtifactDetail {
   readonly kind: ArtifactKind;
   readonly path: string;
+  /** Original artifact text (needed for byte-accurate transforms;
+   * display code must not alter it). */
+  readonly rawText: string;
   readonly metadata: ArtifactMetadata;
   /** Section title → body text (verbatim, trimmed). */
   readonly sections: Readonly<Record<string, string>>;
@@ -70,6 +74,7 @@ export interface ArtifactRow {
   readonly target: string | null;
   readonly humanDecision: string | null;
   readonly relatedProposalId: string | null;
+  readonly relatedProposalDecision: string | null;
   readonly malformed: boolean;
 }
 
@@ -144,11 +149,13 @@ export function parseArtifact(kind: ArtifactKind, file: ArtifactFile): ArtifactD
   return deepFreeze({
     kind,
     path: file.path,
+    rawText: file.text,
     metadata: deepFreeze({
       id,
       authorAgent,
       createdAt: metaField(metadataBody, "created_at"),
       relatedProposalId: metaField(metadataBody, "related_proposal_id"),
+      relatedProposalDecision: metaField(metadataBody, "related_proposal_decision"),
       targetObjectId: metaField(metadataBody, "target_object_id"),
       targetType: metaField(metadataBody, "target_object_type"),
       targetScope: metaField(metadataBody, "target_scope"),
@@ -196,6 +203,7 @@ function rowOf(kind: ArtifactKind, detail: ArtifactDetail): ArtifactRow {
       : detail.metadata.targetObjectId,
     humanDecision: detail.metadata.humanDecision,
     relatedProposalId: detail.metadata.relatedProposalId,
+    relatedProposalDecision: detail.metadata.relatedProposalDecision,
     malformed: detail.malformed,
   });
 }

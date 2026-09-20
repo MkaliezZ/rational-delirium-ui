@@ -8,6 +8,13 @@ import type { GraphSource } from "../semantic-graph/graph-loader";
 import { DEFAULT_SEMANTIC_GRAPH_PATH } from "../semantic-graph/graph-loader";
 import type { KoDetailResult, KoSourceReader } from "../semantic-graph/ko-detail-reader";
 import type { CollaborationArtifactSource, DirReadResult } from "../collaboration/artifact-reader";
+import {
+  applyDecisionToProposalText,
+  isProposalArtifactPath,
+  type DecisionResult,
+  type ProposalDecision,
+  type ProposalDecisionPort,
+} from "../collaboration/proposal-decision";
 import { extractFrontmatterBlock, koDetailFromNote, parseKoFrontmatter } from "../semantic-graph/ko-detail-reader";
 
 /** v1.3.1 §1: read-only source over the derived semantic-graph
@@ -100,6 +107,35 @@ export class ObsidianCollaborationSourceImpl implements CollaborationArtifactSou
     } catch {
       // adapter errors on missing directories: honest empty state
       return { state: "missing" };
+    }
+  }
+}
+
+/** v1.8: the ONE controlled write path — recording a Human
+ * decision on a proposal artifact. Guards: .proposals/*.md only;
+ * read-current → pure transform → write. No other write verb
+ * exists in this codebase. */
+export class ObsidianProposalDecisionPortImpl implements ProposalDecisionPort {
+  constructor(private readonly plugin: Plugin) {}
+  async recordDecision(path: string, decision: ProposalDecision): Promise<DecisionResult> {
+    if (!isProposalArtifactPath(path)) {
+      return { state: "invalid", reason: "not a proposal artifact path" };
+    }
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      if (!(await adapter.exists(path))) {
+        return { state: "missing" };
+      }
+      const text = await adapter.read(path);
+      const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+      const result = applyDecisionToProposalText(text, decision, now);
+      if (!result.ok) {
+        return { state: "invalid", reason: result.reason };
+      }
+      await adapter.write(path, result.text);
+      return { state: "written", decision };
+    } catch (err) {
+      return { state: "unavailable", reason: String(err) };
     }
   }
 }

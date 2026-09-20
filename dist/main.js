@@ -13673,6 +13673,67 @@ var RDThemeController = class {
   }
 };
 
+// src/collaboration/proposal-decision.ts
+var STATUS_HEADER = /^##\s+Status\s*$/m;
+var HISTORY_HEADER = /^##\s+History\s*$/m;
+function isProposalArtifactPath(path) {
+  return /^\.proposals\/(?!\.\.(?:\/|$))[^\/]+\.md$/.test(path);
+}
+function isDecidableProposalText(text3) {
+  const m = STATUS_HEADER.exec(text3);
+  if (m === null) return false;
+  const rest = text3.slice(m.index + m[0].length);
+  const next = /^##\s+/m.exec(rest);
+  const body = (next === null ? rest : rest.slice(0, next.index)).trim();
+  return body === "pending";
+}
+function sectionBounds(text3, header) {
+  const m = header.exec(text3);
+  if (m === null) return null;
+  const start = m.index + m[0].length;
+  const after = text3.slice(start);
+  const next = /^##\s+/m.exec(after);
+  const end = next === null ? text3.length : start + next.index;
+  return { start, end };
+}
+function applyDecisionToProposalText(text3, decision, timestamp2) {
+  const status = sectionBounds(text3, STATUS_HEADER);
+  if (status === null) {
+    return { ok: false, reason: "no Status section" };
+  }
+  if (!isDecidableProposalText(text3)) {
+    return { ok: false, reason: "proposal is not pending (decisions are recorded once)" };
+  }
+  const newStatusBody = `
+
+${decision}
+
+> Human decision recorded ${timestamp2} \u2014 a recorded human action.
+> Approval is not truth validation and not agent trust. Execution, if any,
+> happens outside RD, limited to the approved scope.
+
+`;
+  let updated = text3.slice(0, status.start) + newStatusBody + text3.slice(status.end);
+  const historyLine = `- ${timestamp2} \u2014 Human decision: ${decision} (recorded via RD collaboration surface; not truth validation)`;
+  const history = sectionBounds(updated, HISTORY_HEADER);
+  if (history === null) {
+    const trimmedEnd = updated.replace(/\s*$/, "");
+    updated = `${trimmedEnd}
+
+## History
+
+${historyLine}
+`;
+  } else {
+    const historyBody = updated.slice(history.start, history.end).replace(/\s*$/, "");
+    updated = updated.slice(0, history.start) + `
+${historyBody}
+${historyLine}
+` + updated.slice(history.end);
+  }
+  return { ok: true, text: updated };
+}
+
 // src/collaboration/artifact-reader.ts
 var PROPOSALS_DIR = ".proposals";
 var CONTRIBUTIONS_DIR = ".contributions";
@@ -13729,11 +13790,13 @@ function parseArtifact(kind, file) {
   return deepFreeze3({
     kind,
     path: file.path,
+    rawText: file.text,
     metadata: deepFreeze3({
       id,
       authorAgent,
       createdAt: metaField(metadataBody, "created_at"),
       relatedProposalId: metaField(metadataBody, "related_proposal_id"),
+      relatedProposalDecision: metaField(metadataBody, "related_proposal_decision"),
       targetObjectId: metaField(metadataBody, "target_object_id"),
       targetType: metaField(metadataBody, "target_object_type"),
       targetScope: metaField(metadataBody, "target_scope"),
@@ -13791,6 +13854,7 @@ function rowOf(kind, detail) {
     target: kind === "organization-proposal" ? detail.metadata.targetScope : detail.metadata.targetObjectId,
     humanDecision: detail.metadata.humanDecision,
     relatedProposalId: detail.metadata.relatedProposalId,
+    relatedProposalDecision: detail.metadata.relatedProposalDecision,
     malformed: detail.malformed
   });
 }
@@ -13946,7 +14010,7 @@ function renderSection(parent, title, rows, dirState, emptyText, onSelect) {
   }
   for (const row of rows) renderRow(body, row, onSelect);
 }
-function renderDetail(parent, detail) {
+function renderDetail(parent, detail, handlers) {
   const box = createChild(parent, "div", { cls: "rdcol-detail" });
   const head = createChild(box, "div", { cls: "rdcol-detail-head" });
   head.textContent = `${detail.metadata.id ?? "(no id declared)"} \xB7 ${detail.metadata.authorAgent ?? "author not declared"} \xB7 source: ${detail.path} (read-only inspection)`;
@@ -13969,6 +14033,25 @@ function renderDetail(parent, detail) {
       cls: "rdcol-flag",
       text: `\u26A0 flagged (shown, not hidden): ${detail.problems.join("; ")}`
     });
+  }
+  if (detail.kind === "proposal" && detail.metadata.status === "pending" && isDecidableProposalText(detail.rawText)) {
+    const decide = createChild(box, "div", { cls: "rdcol-decide" });
+    createChild(decide, "div", {
+      cls: "rdcol-decide-note",
+      text: "Record your decision on this proposal. Approved means you authorize the proposed scope for external execution \u2014 it does not mean correct, does not mean verified, and does not trust the agent."
+    });
+    const approve = createChild(decide, "button", {
+      cls: "rdcol-decide-button",
+      text: "Approve (record decision)"
+    });
+    approve.setAttribute("aria-label", "Record approval of this proposal");
+    approve.addEventListener("click", () => handlers.onDecide("approved", detail.path));
+    const reject = createChild(decide, "button", {
+      cls: "rdcol-decide-button",
+      text: "Reject (record decision)"
+    });
+    reject.setAttribute("aria-label", "Record rejection of this proposal");
+    reject.addEventListener("click", () => handlers.onDecide("rejected", detail.path));
   }
   const ORDERS = Object.freeze({
     proposal: Object.freeze([
@@ -14005,7 +14088,7 @@ function renderDetail(parent, detail) {
   }
   createChild(box, "div", {
     cls: "rdcol-note",
-    text: "This view displays what was proposed. Decisions are Human acts recorded in artifacts; no approve, reject or apply action exists here."
+    text: "This view displays what was proposed. Decisions are Human acts recorded in artifacts: Approve/Reject record your decision on a pending proposal. No apply or execute action exists in RD \u2014 approved work is performed outside RD, limited to the approved scope, and reported back via a Contribution Record."
   });
 }
 function renderCollaboration(container, state, detail, handlers) {
@@ -14016,7 +14099,9 @@ function renderCollaboration(container, state, detail, handlers) {
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "\u25C0 Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
     back.addEventListener("click", handlers.onBack);
-    renderDetail(root, detail);
+    renderDetail(root, detail, {
+      onDecide: handlers.onDecide
+    });
     return;
   }
   if (state.model === null) {
@@ -14258,6 +14343,20 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
       });
     }
   }
+  /** v1.8: explicit Human decision recording — the only write.
+   * Records the decision, then re-reads artifacts and re-opens the
+   * same proposal so the Human sees the recorded state. */
+  async recordProposalDecision(decision, path) {
+    const port = this.deps.decisionPort;
+    const source = this.deps.collaborationSource;
+    if (port === void 0 || source === void 0) return;
+    const result = await port.recordDecision(path, decision);
+    if (result.state === "written") {
+      await this.browser.refresh(source);
+      this.browser.select("proposal", path);
+      await this.refreshCollabDetail();
+    }
+  }
   /** v1.7.4-A: load the detail for the current collaboration
    * selection (exact path), then re-render. Read-only. */
   async refreshCollabDetail() {
@@ -14332,6 +14431,9 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
         onBack: () => {
           this.browser.back();
           void this.refreshCollabDetail();
+        },
+        onDecide: (decision, path) => {
+          void this.recordProposalDecision(decision, path);
         }
       });
       return;
@@ -15748,6 +15850,7 @@ function buildRDViewRegistry() {
       source: services.graphSource,
       sourceReader: services.koSourceReader,
       collaborationSource: services.collaborationSource,
+      decisionPort: services.decisionPort,
       openView: services.openView,
       themeController: services.themeController
     })
@@ -15959,6 +16062,32 @@ var ObsidianCollaborationSourceImpl = class {
     }
   }
 };
+var ObsidianProposalDecisionPortImpl = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+  }
+  async recordDecision(path, decision) {
+    if (!isProposalArtifactPath(path)) {
+      return { state: "invalid", reason: "not a proposal artifact path" };
+    }
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      if (!await adapter.exists(path)) {
+        return { state: "missing" };
+      }
+      const text3 = await adapter.read(path);
+      const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
+      const result = applyDecisionToProposalText(text3, decision, now);
+      if (!result.ok) {
+        return { state: "invalid", reason: result.reason };
+      }
+      await adapter.write(path, result.text);
+      return { state: "written", decision };
+    } catch (err) {
+      return { state: "unavailable", reason: String(err) };
+    }
+  }
+};
 
 // src/main.ts
 var ObsidianReadAdapterImpl = class {
@@ -16029,7 +16158,8 @@ var RationalDeliriumPlugin = class extends import_obsidian8.Plugin {
       navigation,
       graphSource: new ObsidianGraphSourceImpl(this),
       koSourceReader: new ObsidianKoSourceReaderImpl(this),
-      collaborationSource: new ObsidianCollaborationSourceImpl(this)
+      collaborationSource: new ObsidianCollaborationSourceImpl(this),
+      decisionPort: new ObsidianProposalDecisionPortImpl(this)
     });
     await this.wiring.start();
   }

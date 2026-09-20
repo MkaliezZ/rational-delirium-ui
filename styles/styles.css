@@ -991,3 +991,37 @@
   color: var(--rd-identity-meta-text, #A19C92);
   padding: 0 0 2px 0;
 }
+
+/* v1.8 Human decision controls — scoped, semantic tokens; these
+   buttons RECORD a decision, they never execute anything. */
+.rd-workspace-shell .rdcol-decide {
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+.rd-workspace-shell .rdcol-decide-note {
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-bottom: 4px;
+}
+.rd-workspace-shell .rdcol-decide-button {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  cursor: pointer;
+  font-size: 11px;
+  margin-right: 6px;
+  padding: 3px 10px;
+}
+.rd-workspace-shell .rdcol-decide-button:hover,
+.rd-workspace-shell .rdcol-decide-button:focus-visible {
+  border-color: var(--rd-surface-focus-rule, #D8C89D);
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-knowledge-panel *, .rd-workspace-shell * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

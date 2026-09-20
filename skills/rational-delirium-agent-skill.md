@@ -112,6 +112,25 @@ resolution. If your work disagrees with another agent's, both
 records stand; the Human clarifies. Never merge away a
 disagreement, vote, or average positions.
 
+## Approved Workflow (v1.8)
+
+Proposals move through a Human-recorded decision:
+
+- **Before approval:** you propose changes and WAIT for the Human
+  decision. Do not act on your own proposal; do not treat a
+  submitted proposal as authorized.
+- **After approval:** you may execute ONLY the approved proposal's
+  scope — nothing broader, nothing adjacent — outside RD, using
+  whatever access your own host already has. Approval authorizes
+  the SCOPE; it does not validate truth and does not trust you.
+- **After execution:** you MUST create a Contribution Record
+  referencing the source proposal id, the human decision state
+  (approved), and the resulting change description.
+
+This skill is not a permission system: approval recorded in RD is
+a decision record, not a credential, not standing permission, and
+not a grant of authority beyond the approved scope.
+
 ## Human Authority
 
 Only Humans approve final knowledge changes. Silence, elapsed

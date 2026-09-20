@@ -26,6 +26,7 @@ import type { KoSourceReader } from "../semantic-graph/ko-detail-reader";
 import { createDefaultThemeRegistry } from "../themes/rational-archive";
 import { RDThemeController } from "../themes/theme-runtime";
 import type { CollaborationArtifactSource } from "../collaboration/artifact-reader";
+import type { ProposalDecisionPort } from "../collaboration/proposal-decision";
 
 /** Everything views need, supplied by main.ts. */
 export interface RDServices {
@@ -38,6 +39,7 @@ export interface RDServices {
   readonly graphSource: GraphSource;
   readonly koSourceReader: KoSourceReader;
   readonly collaborationSource: CollaborationArtifactSource;
+  readonly decisionPort: ProposalDecisionPort;
 }
 
 type S = Readonly<Record<string, unknown>>;
@@ -124,6 +126,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
         source: services.graphSource as GraphSource,
         sourceReader: services.koSourceReader as KoSourceReader,
         collaborationSource: services.collaborationSource as CollaborationArtifactSource,
+        decisionPort: services.decisionPort as ProposalDecisionPort,
         openView: services.openView as (viewType: string) => Promise<void>,
         themeController: services.themeController as RDThemeController,
       }),

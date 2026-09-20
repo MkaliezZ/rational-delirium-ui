@@ -15,6 +15,7 @@
 - author_agent: "<declared agent name / host / role>"
 - created_at: "YYYY-MM-DDTHH:MMZ (state the clock basis if known)"
 - related_proposal_id: "<PROP-… this contribution records, or null>"
+- related_proposal_decision: "<approved | rejected — the recorded Human decision on that proposal, if any>"
 
 ## Contribution Summary
 
