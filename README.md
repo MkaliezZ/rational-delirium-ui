@@ -29,7 +29,7 @@ Rational Delirium provides that layer inside Obsidian.
 
 ## Screenshots
 
-*(placeholders — real screenshots coming)*
+*Real screenshots from Obsidian on macOS using DEMO content.*
 
 | Knowledge Workspace | Semantic Graph |
 | --- | --- |

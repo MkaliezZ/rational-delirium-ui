@@ -34,7 +34,7 @@ Rational Delirium 将这一层带入 Obsidian。
 
 ## 截图
 
-*（占位图——真实截图稍后补充）*
+*真实 macOS Obsidian 截图，使用 DEMO 内容。*
 
 | 知识工作区 | 语义图 |
 | --- | --- |
