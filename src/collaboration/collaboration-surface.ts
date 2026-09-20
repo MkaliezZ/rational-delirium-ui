@@ -19,10 +19,17 @@ import type {
 import { buildCollaborationModel, loadArtifactDetail } from "./artifact-reader";
 import { createChild, emptyEl } from "../views/dom-helpers";
 
+export interface ArtifactSelection {
+  /** Explicit artifact identity — the selection carries its kind;
+   * detail resolution never guesses by trying kinds in order. */
+  readonly kind: import("./artifact-reader").ArtifactKind;
+  readonly path: string;
+}
+
 export interface CollaborationBrowserState {
   readonly model: CollaborationModel | null;
-  readonly selectedPath: string | null;
-  readonly trail: readonly string[];
+  readonly selectedArtifact: ArtifactSelection | null;
+  readonly trail: readonly ArtifactSelection[];
 }
 
 type Listener = (state: CollaborationBrowserState) => void;
@@ -38,7 +45,7 @@ function deepFreeze<T>(value: T): T {
 export class CollaborationBrowser {
   private state: CollaborationBrowserState = deepFreeze({
     model: null,
-    selectedPath: null,
+    selectedArtifact: null,
     trail: [],
   });
   private readonly listeners = new Set<Listener>();
@@ -55,14 +62,15 @@ export class CollaborationBrowser {
   /** Explicit re-read of available artifacts (user action only). */
   async refresh(source: CollaborationArtifactSource): Promise<void> {
     const model = await buildCollaborationModel(source);
-    this.update({ model, selectedPath: null, trail: [] });
+    this.update({ model, selectedArtifact: null, trail: [] });
   }
 
-  /** List → detail navigation (exact path). */
-  select(path: string): void {
+  /** List → detail navigation (explicit kind + exact path). */
+  select(kind: import("./artifact-reader").ArtifactKind, path: string): void {
+    const selection: ArtifactSelection = { kind, path };
     this.update({
-      selectedPath: path,
-      trail: [...this.state.trail, path],
+      selectedArtifact: selection,
+      trail: [...this.state.trail, selection],
     });
   }
 
@@ -71,7 +79,7 @@ export class CollaborationBrowser {
     const trail = this.state.trail.slice(0, -1);
     this.update({
       trail,
-      selectedPath: trail.length > 0 ? trail[trail.length - 1] : null,
+      selectedArtifact: trail.length > 0 ? trail[trail.length - 1] : null,
     });
   }
 
@@ -85,7 +93,11 @@ export class CollaborationBrowser {
   }
 }
 
-const EMPTY_TEXT = "No contribution records found.";
+const EMPTY_TEXTS: Readonly<Record<import("./artifact-reader").ArtifactKind, string>> = Object.freeze({
+  contribution: "No contribution records found.",
+  proposal: "No proposal records found.",
+  "organization-proposal": "No organization proposal records found.",
+});
 
 function metaLine(label: string, value: string | null): string {
   return `${label}: ${value ?? "not declared"}`;
@@ -94,11 +106,11 @@ function metaLine(label: string, value: string | null): string {
 function renderRow(
   list: HTMLElement,
   row: ArtifactRow,
-  onSelect: (path: string) => void,
+  onSelect: (kind: import("./artifact-reader").ArtifactKind, path: string) => void,
 ): void {
   const item = createChild(list, "button", { cls: "rdcol-row" });
   item.setAttribute("aria-label", `inspect ${row.id ?? row.path}`);
-  item.addEventListener("click", () => onSelect(row.path));
+  item.addEventListener("click", () => onSelect(row.kind, row.path));
   const head = createChild(item, "div", { cls: "rdcol-row-head" });
   head.textContent =
     `${row.id ?? "(no id declared)"} · ${row.authorAgent ?? "author not declared"}`
@@ -120,15 +132,17 @@ function renderSection(
   title: string,
   rows: readonly ArtifactRow[],
   dirState: string,
-  onSelect: (path: string) => void,
+  emptyText: string,
+  onSelect: (kind: import("./artifact-reader").ArtifactKind, path: string) => void,
 ): void {
   const details = createChild(parent, "details", { cls: "rdcol-section" });
   details.setAttribute("open", "open");
   createChild(details, "summary", { cls: "rdcol-section-title", text: `${title} (${rows.length})` });
   const body = createChild(details, "div", { cls: "rdcol-section-body" });
   if (dirState !== "available") {
-    const note = createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
-    void note;
+    // Honest per-kind empty state; a missing artifact directory is
+    // an absence of records, not an error and not a knowledge claim.
+    createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
     createChild(body, "div", {
       cls: "rdcol-dir-state",
       text: `artifact directory state: ${dirState}`,
@@ -136,7 +150,7 @@ function renderSection(
     return;
   }
   if (rows.length === 0) {
-    createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
+    createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
     return;
   }
   for (const row of rows) renderRow(body, row, onSelect);
@@ -206,14 +220,14 @@ export function renderCollaboration(
   state: CollaborationBrowserState,
   detail: ArtifactDetail | null,
   handlers: {
-    onSelect: (path: string) => void;
+    onSelect: (kind: import("./artifact-reader").ArtifactKind, path: string) => void;
     onBack: () => void;
   },
 ): void {
   emptyEl(container);
   const root = createChild(container, "div", { cls: "rd-collaboration" });
 
-  if (state.selectedPath !== null && detail !== null) {
+  if (state.selectedArtifact !== null && detail !== null) {
     const bar = createChild(root, "div", { cls: "rdcol-nav" });
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "◀ Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
@@ -227,22 +241,21 @@ export function renderCollaboration(
     return;
   }
   renderSection(root, "Agent Contributions", state.model.contributions,
-    state.model.dirs.contribution, handlers.onSelect);
+    state.model.dirs.contribution, EMPTY_TEXTS.contribution, handlers.onSelect);
   renderSection(root, "Proposals", state.model.proposals,
-    state.model.dirs.proposal, handlers.onSelect);
+    state.model.dirs.proposal, EMPTY_TEXTS.proposal, handlers.onSelect);
   renderSection(root, "Organization Proposals", state.model.organizationProposals,
-    state.model.dirs["organization-proposal"], handlers.onSelect);
+    state.model.dirs["organization-proposal"], EMPTY_TEXTS["organization-proposal"], handlers.onSelect);
 }
 
-/** Resolve the detail for the current selection (exact path). */
+/** Resolve the detail for the current selection using its EXPLICIT
+ * artifact identity (kind + exact path). No type guessing: the
+ * selection states what it is; resolution reads exactly that. */
 export async function resolveDetail(
   source: CollaborationArtifactSource,
   state: CollaborationBrowserState,
 ): Promise<ArtifactDetail | null> {
-  if (state.selectedPath === null || state.model === null) return null;
-  for (const kind of ["proposal", "contribution", "organization-proposal"] as const) {
-    const detail = await loadArtifactDetail(source, kind, state.selectedPath);
-    if (detail !== null) return detail;
-  }
-  return null;
+  const selection = state.selectedArtifact;
+  if (selection === null || state.model === null) return null;
+  return loadArtifactDetail(source, selection.kind, selection.path);
 }

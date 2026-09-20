@@ -13840,7 +13840,7 @@ var CollaborationBrowser = class {
   constructor() {
     this.state = deepFreeze4({
       model: null,
-      selectedPath: null,
+      selectedArtifact: null,
       trail: []
     });
     this.listeners = /* @__PURE__ */ new Set();
@@ -13857,13 +13857,14 @@ var CollaborationBrowser = class {
   /** Explicit re-read of available artifacts (user action only). */
   async refresh(source) {
     const model = await buildCollaborationModel(source);
-    this.update({ model, selectedPath: null, trail: [] });
+    this.update({ model, selectedArtifact: null, trail: [] });
   }
-  /** List → detail navigation (exact path). */
-  select(path) {
+  /** List → detail navigation (explicit kind + exact path). */
+  select(kind, path) {
+    const selection = { kind, path };
     this.update({
-      selectedPath: path,
-      trail: [...this.state.trail, path]
+      selectedArtifact: selection,
+      trail: [...this.state.trail, selection]
     });
   }
   /** Detail → back along the browsing trail. */
@@ -13871,7 +13872,7 @@ var CollaborationBrowser = class {
     const trail = this.state.trail.slice(0, -1);
     this.update({
       trail,
-      selectedPath: trail.length > 0 ? trail[trail.length - 1] : null
+      selectedArtifact: trail.length > 0 ? trail[trail.length - 1] : null
     });
   }
   dispose() {
@@ -13882,11 +13883,15 @@ var CollaborationBrowser = class {
     for (const listener of [...this.listeners]) listener(this.state);
   }
 };
-var EMPTY_TEXT = "No contribution records found.";
+var EMPTY_TEXTS = Object.freeze({
+  contribution: "No contribution records found.",
+  proposal: "No proposal records found.",
+  "organization-proposal": "No organization proposal records found."
+});
 function renderRow(list2, row, onSelect) {
   const item = createChild(list2, "button", { cls: "rdcol-row" });
   item.setAttribute("aria-label", `inspect ${row.id ?? row.path}`);
-  item.addEventListener("click", () => onSelect(row.path));
+  item.addEventListener("click", () => onSelect(row.kind, row.path));
   const head = createChild(item, "div", { cls: "rdcol-row-head" });
   head.textContent = `${row.id ?? "(no id declared)"} \xB7 ${row.authorAgent ?? "author not declared"}${row.createdAt !== null ? ` \xB7 ${row.createdAt}` : ""}`;
   const summary = createChild(item, "div", { cls: "rdcol-row-summary" });
@@ -13900,13 +13905,13 @@ function renderRow(list2, row, onSelect) {
   if (row.malformed) parts.push("\u26A0 flagged: malformed");
   tail.textContent = parts.join(" \xB7 ");
 }
-function renderSection(parent, title, rows, dirState, onSelect) {
+function renderSection(parent, title, rows, dirState, emptyText, onSelect) {
   const details = createChild(parent, "details", { cls: "rdcol-section" });
   details.setAttribute("open", "open");
   createChild(details, "summary", { cls: "rdcol-section-title", text: `${title} (${rows.length})` });
   const body = createChild(details, "div", { cls: "rdcol-section-body" });
   if (dirState !== "available") {
-    const note = createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
+    createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
     createChild(body, "div", {
       cls: "rdcol-dir-state",
       text: `artifact directory state: ${dirState}`
@@ -13914,7 +13919,7 @@ function renderSection(parent, title, rows, dirState, onSelect) {
     return;
   }
   if (rows.length === 0) {
-    createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
+    createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
     return;
   }
   for (const row of rows) renderRow(body, row, onSelect);
@@ -13972,7 +13977,7 @@ function renderDetail(parent, detail) {
 function renderCollaboration(container, state, detail, handlers) {
   emptyEl(container);
   const root = createChild(container, "div", { cls: "rd-collaboration" });
-  if (state.selectedPath !== null && detail !== null) {
+  if (state.selectedArtifact !== null && detail !== null) {
     const bar = createChild(root, "div", { cls: "rdcol-nav" });
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "\u25C0 Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
@@ -13989,6 +13994,7 @@ function renderCollaboration(container, state, detail, handlers) {
     "Agent Contributions",
     state.model.contributions,
     state.model.dirs.contribution,
+    EMPTY_TEXTS.contribution,
     handlers.onSelect
   );
   renderSection(
@@ -13996,6 +14002,7 @@ function renderCollaboration(container, state, detail, handlers) {
     "Proposals",
     state.model.proposals,
     state.model.dirs.proposal,
+    EMPTY_TEXTS.proposal,
     handlers.onSelect
   );
   renderSection(
@@ -14003,16 +14010,14 @@ function renderCollaboration(container, state, detail, handlers) {
     "Organization Proposals",
     state.model.organizationProposals,
     state.model.dirs["organization-proposal"],
+    EMPTY_TEXTS["organization-proposal"],
     handlers.onSelect
   );
 }
 async function resolveDetail(source, state) {
-  if (state.selectedPath === null || state.model === null) return null;
-  for (const kind of ["proposal", "contribution", "organization-proposal"]) {
-    const detail = await loadArtifactDetail(source, kind, state.selectedPath);
-    if (detail !== null) return detail;
-  }
-  return null;
+  const selection = state.selectedArtifact;
+  if (selection === null || state.model === null) return null;
+  return loadArtifactDetail(source, selection.kind, selection.path);
 }
 
 // src/views/knowledge-panel-view.ts
@@ -14285,8 +14290,8 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     if (this.mode === "collaboration") {
       const host = createChild(layout, "div", { cls: "rdws-collaboration-host" });
       renderCollaboration(host, this.browser.getState(), this.collabDetail, {
-        onSelect: (path) => {
-          this.browser.select(path);
+        onSelect: (kind, path) => {
+          this.browser.select(kind, path);
           void this.refreshCollabDetail();
         },
         onBack: () => {

@@ -22,6 +22,7 @@ import {
 import {
   CollaborationBrowser,
   renderCollaboration,
+  resolveDetail,
 } from "../src/collaboration/collaboration-surface";
 
 const proposalMd = (id: string, status = "pending") => `# Proposal
@@ -200,9 +201,28 @@ describe("v1.7.4-A artifact loading", () => {
       onSelect: () => undefined, onBack: () => undefined,
     });
     const text = host.textContent ?? "";
+    // FIX 1: per-kind empty states, none implying no knowledge or error
     expect(text).toContain("No contribution records found.");
+    expect(text).toContain("No proposal records found.");
+    expect(text).toContain("No organization proposal records found.");
     expect(text).not.toContain("no knowledge exists"); // forbidden implication
-    expect((text.match(/No contribution records found\./g) ?? []).length).toBe(3);
+    expect((text.match(/No [a-z ]+ records found\./g) ?? []).length).toBe(3);
+  });
+
+  it("per-kind empty message matches its section (mixed availability)", async () => {
+    const partial = source({
+      [PROPOSALS_DIR]: [{ name: "prop-001.md", text: proposalMd("PROP-1") }],
+    });
+    const browser = new CollaborationBrowser();
+    await browser.refresh(partial);
+    const host = document.createElement("div");
+    renderCollaboration(host, browser.getState(), null, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    const text = host.textContent ?? "";
+    expect(text).not.toContain("No proposal records found."); // proposals exist
+    expect(text).toContain("No contribution records found.");
+    expect(text).toContain("No organization proposal records found.");
   });
 });
 
@@ -215,7 +235,7 @@ describe("v1.7.4-A detail view and navigation", () => {
     const host = document.createElement("div");
     const browser = new CollaborationBrowser();
     await browser.refresh(fullSource);
-    browser.select(`${PROPOSALS_DIR}/prop-001.md`);
+    browser.select("proposal", `${PROPOSALS_DIR}/prop-001.md`);
     renderCollaboration(host, browser.getState(), detail, {
       onSelect: () => undefined, onBack: () => undefined,
     });
@@ -232,19 +252,52 @@ describe("v1.7.4-A detail view and navigation", () => {
     expect(await loadArtifactDetail(fullSource, "proposal", ".proposals/nope.md")).toBeNull();
   });
 
-  it("browser state: select → detail mode, back → list mode", async () => {
+  it("browser state: select preserves kind/path identity; back → list", async () => {
     const browser = new CollaborationBrowser();
     await browser.refresh(fullSource);
-    expect(browser.getState().selectedPath).toBeNull();
-    browser.select(`${CONTRIBUTIONS_DIR}/contrib-001.md`);
-    expect(browser.getState().selectedPath).toBe(`${CONTRIBUTIONS_DIR}/contrib-001.md`);
+    expect(browser.getState().selectedArtifact).toBeNull();
+    browser.select("contribution", `${CONTRIBUTIONS_DIR}/contrib-001.md`);
+    const sel = browser.getState().selectedArtifact;
+    expect(sel).not.toBeNull();
+    if (sel !== null) {
+      expect(sel.kind).toBe("contribution");        // FIX 2: identity kept
+      expect(sel.path).toBe(`${CONTRIBUTIONS_DIR}/contrib-001.md`);
+    }
     browser.back();
-    expect(browser.getState().selectedPath).toBeNull();
+    expect(browser.getState().selectedArtifact).toBeNull();
     // emissions are frozen
     const state = browser.getState();
     expect(() => {
-      (state as { selectedPath: string | null }).selectedPath = "x";
+      (state as { selectedArtifact: unknown }).selectedArtifact = { kind: "proposal", path: "x" };
     }).toThrow();
+  });
+
+  it("detail resolution uses explicit identity, not type guessing", async () => {
+    // Same FILENAME in two artifact directories: resolution must
+    // follow the selection's declared kind, not a trial order.
+    const ambiguous = source({
+      [PROPOSALS_DIR]: [
+        { name: "same.md", text: proposalMd("PROP-SAME") },
+      ],
+      [ORGANIZATION_PROPOSALS_DIR]: [
+        { name: "same.md", text: orgPropMd("ORGPROP-SAME") },
+      ],
+    });
+    const browser = new CollaborationBrowser();
+    await browser.refresh(ambiguous);
+    browser.select("organization-proposal", `${ORGANIZATION_PROPOSALS_DIR}/same.md`);
+    const detail = await resolveDetail(ambiguous, browser.getState());
+    expect(detail).not.toBeNull();
+    if (detail !== null) {
+      expect(detail.kind).toBe("organization-proposal");
+      expect(detail.metadata.id).toBe("ORGPROP-SAME");
+    }
+    browser.select("proposal", `${PROPOSALS_DIR}/same.md`);
+    const detail2 = await resolveDetail(ambiguous, browser.getState());
+    if (detail2 !== null) {
+      expect(detail2.kind).toBe("proposal");
+      expect(detail2.metadata.id).toBe("PROP-SAME");
+    }
   });
 });
 

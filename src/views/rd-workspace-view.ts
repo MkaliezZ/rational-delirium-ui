@@ -26,8 +26,11 @@ import {
 import type { RDWorkspaceStore } from "../architecture/workspace-state";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
 import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
-import type { CollaborationArtifactSource } from "../collaboration/artifact-reader";
-import type { ArtifactDetail } from "../collaboration/artifact-reader";
+import type {
+  ArtifactDetail,
+  ArtifactKind,
+  CollaborationArtifactSource,
+} from "../collaboration/artifact-reader";
 import {
   CollaborationBrowser,
   renderCollaboration,
@@ -255,8 +258,8 @@ export class RDWorkspaceShellView extends ItemView {
     if (this.mode === "collaboration") {
       const host = createChild(layout, "div", { cls: "rdws-collaboration-host" });
       renderCollaboration(host, this.browser.getState(), this.collabDetail, {
-        onSelect: (path: string) => {
-          this.browser.select(path);
+        onSelect: (kind: ArtifactKind, path: string) => {
+          this.browser.select(kind, path);
           void this.refreshCollabDetail();
         },
         onBack: () => {
