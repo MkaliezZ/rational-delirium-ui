@@ -13797,6 +13797,8 @@ function parseArtifact(kind, file) {
       createdAt: metaField(metadataBody, "created_at"),
       relatedProposalId: metaField(metadataBody, "related_proposal_id"),
       relatedProposalDecision: metaField(metadataBody, "related_proposal_decision"),
+      performedOperation: metaField(metadataBody, "performed_operation"),
+      affectedObjects: metaField(metadataBody, "affected_objects"),
       targetObjectId: metaField(metadataBody, "target_object_id"),
       targetType: metaField(metadataBody, "target_object_type"),
       targetScope: metaField(metadataBody, "target_scope"),
@@ -13855,6 +13857,8 @@ function rowOf(kind, detail) {
     humanDecision: detail.metadata.humanDecision,
     relatedProposalId: detail.metadata.relatedProposalId,
     relatedProposalDecision: detail.metadata.relatedProposalDecision,
+    performedOperation: detail.metadata.performedOperation,
+    affectedObjects: detail.metadata.affectedObjects,
     malformed: detail.malformed
   });
 }
@@ -14010,16 +14014,27 @@ function renderSection(parent, title, rows, dirState, emptyText, onSelect) {
   }
   for (const row of rows) renderRow(body, row, onSelect);
 }
-function renderDetail(parent, detail, handlers) {
+function renderDetail(parent, detail, handlers, linkingContributions) {
   const box = createChild(parent, "div", { cls: "rdcol-detail" });
   const head = createChild(box, "div", { cls: "rdcol-detail-head" });
   head.textContent = `${detail.metadata.id ?? "(no id declared)"} \xB7 ${detail.metadata.authorAgent ?? "author not declared"} \xB7 source: ${detail.path} (read-only inspection)`;
+  if (detail.kind === "contribution" && detail.metadata.relatedProposalId !== null) {
+    const link = createChild(box, "div", { cls: "rdcol-linkage" });
+    link.textContent = `workflow: proposal ${detail.metadata.relatedProposalId} \u2192 decision ${detail.metadata.relatedProposalDecision ?? "not declared"} \u2192 this record`;
+  }
+  if (detail.kind === "proposal") {
+    const link = createChild(box, "div", { cls: "rdcol-linkage" });
+    link.textContent = linkingContributions.length > 0 ? `workflow: this proposal \u2192 Human decision \u2192 ${linkingContributions.length} contribution record(s) below` : "workflow: this proposal \u2192 Human decision \u2192 (no contribution records reference it yet)";
+  }
   const meta = createChild(box, "dl", { cls: "rdcol-meta" });
   const metaRows = [
     ["created_at", detail.metadata.createdAt],
     ["target", detail.kind === "organization-proposal" ? detail.metadata.targetScope : detail.metadata.targetObjectId],
     ["target type", detail.metadata.targetType],
     ["related proposal", detail.metadata.relatedProposalId],
+    ["proposal decision", detail.metadata.relatedProposalDecision],
+    ["performed operation", detail.metadata.performedOperation],
+    ["affected objects", detail.metadata.affectedObjects],
     ["status", detail.metadata.status !== null ? `${detail.metadata.status} (recorded human action; not a truth state)` : null],
     ["human decision", detail.metadata.humanDecision]
   ];
@@ -14086,6 +14101,17 @@ function renderDetail(parent, detail, handlers) {
     createChild(sec, "summary", { cls: "rdcol-section-title", text: label });
     createChild(sec, "div", { cls: "rdcol-detail-body", text: body === "" ? "(not declared)" : body });
   }
+  if (detail.kind === "proposal" && linkingContributions.length > 0) {
+    const refs = createChild(box, "details", { cls: "rdcol-detail-section" });
+    createChild(refs, "summary", {
+      cls: "rdcol-section-title",
+      text: `Referenced by contribution records (${linkingContributions.length})`
+    });
+    for (const c of linkingContributions) {
+      const line = createChild(refs, "div", { cls: "rdcol-linkage-row" });
+      line.textContent = `${c.id ?? c.path} \xB7 decision: ${c.relatedProposalDecision ?? "not declared"}` + (c.performedOperation !== null ? ` \xB7 ${c.performedOperation}` : "") + (c.affectedObjects !== null ? ` \xB7 affected: ${c.affectedObjects}` : "");
+    }
+  }
   createChild(box, "div", {
     cls: "rdcol-note",
     text: "This view displays what was proposed. Decisions are Human acts recorded in artifacts: Approve/Reject record your decision on a pending proposal. No apply or execute action exists in RD \u2014 approved work is performed outside RD, limited to the approved scope, and reported back via a Contribution Record."
@@ -14099,9 +14125,12 @@ function renderCollaboration(container, state, detail, handlers) {
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "\u25C0 Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
     back.addEventListener("click", handlers.onBack);
+    const linking = state.model !== null && detail.kind === "proposal" && detail.metadata.id !== null ? state.model.contributions.filter(
+      (c) => c.relatedProposalId === detail.metadata?.id
+    ) : [];
     renderDetail(root, detail, {
       onDecide: handlers.onDecide
-    });
+    }, linking);
     return;
   }
   if (state.model === null) {

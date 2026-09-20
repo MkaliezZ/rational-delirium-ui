@@ -12,6 +12,8 @@
 - created_at: "2026-09-20T08:20Z (host clock, UTC)"
 - related_proposal_id: "PROP-20260920-001"
 - related_proposal_decision: "approved (recorded human action — fictional example)"
+- performed_operation: "ADD_RELATION (fictional example)"
+- affected_objects: "FICT-KO-20260919-0007 (relation added), FICT-KO-20260918-0003 (referenced)"
 
 ## Contribution Summary
 

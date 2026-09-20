@@ -16,6 +16,8 @@
 - created_at: "YYYY-MM-DDTHH:MMZ (state the clock basis if known)"
 - related_proposal_id: "<PROP-… this contribution records, or null>"
 - related_proposal_decision: "<approved | rejected — the recorded Human decision on that proposal, if any>"
+- performed_operation: "<e.g. ADD_RELATION — the operation actually performed, if any>"
+- affected_objects: "<exact object_ids the performed operation touched or referenced>"
 
 ## Contribution Summary
 

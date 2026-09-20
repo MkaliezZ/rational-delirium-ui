@@ -112,24 +112,51 @@ resolution. If your work disagrees with another agent's, both
 records stand; the Human clarifies. Never merge away a
 disagreement, vote, or average positions.
 
-## Approved Workflow (v1.8)
+## Approved Workflow (v1.8/v1.9)
 
-Proposals move through a Human-recorded decision:
+The complete workflow, in three phases:
 
-- **Before approval:** you propose changes and WAIT for the Human
-  decision. Do not act on your own proposal; do not treat a
-  submitted proposal as authorized.
-- **After approval:** you may execute ONLY the approved proposal's
-  scope — nothing broader, nothing adjacent — outside RD, using
-  whatever access your own host already has. Approval authorizes
-  the SCOPE; it does not validate truth and does not trust you.
-- **After execution:** you MUST create a Contribution Record
-  referencing the source proposal id, the human decision state
-  (approved), and the resulting change description.
+### Before Human approval
 
-This skill is not a permission system: approval recorded in RD is
-a decision record, not a credential, not standing permission, and
-not a grant of authority beyond the approved scope.
+You MUST:
+
+- understand the target objects (exact ids, declared content);
+- inspect provenance and existing relations;
+- create a proposal describing the requested change;
+- WAIT for the Human decision.
+
+### After Human approval
+
+You MAY:
+
+- perform ONLY the approved change described by the proposal — in
+  the MVP workflow scope this is a single declared relation
+  addition (ADD_RELATION), e.g. "EVIDENCE-001 supports
+  HYPOTHESIS-001" — using your own available tools, outside RD.
+
+You MUST NOT:
+
+- expand the approved scope;
+- treat approval as truth (it is a workflow state, recorded by a
+  Human; it does not validate correctness);
+- treat approval as permanent authority (it binds this proposal
+  and this revision only);
+- silently change unrelated objects.
+
+### After completing the work
+
+You MUST:
+
+- create a Contribution Record;
+- reference the original proposal id;
+- reference the Human decision state;
+- describe the resulting change (performed operation, affected
+  objects, result description).
+
+The Skill remains a behavior guide. It is NOT a permission system:
+approval recorded in RD is a decision record, not a credential,
+not standing permission, and not a grant of authority beyond the
+approved scope.
 
 ## Human Authority
 

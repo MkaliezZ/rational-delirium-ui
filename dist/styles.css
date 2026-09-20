@@ -1025,3 +1025,17 @@
     animation: none !important;
   }
 }
+
+/* v1.9 workflow linkage display — scoped, semantic tokens. */
+.rd-workspace-shell .rdcol-linkage {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin: 2px 0 6px 0;
+}
+.rd-workspace-shell .rdcol-linkage-row {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding: 1px 0;
+}

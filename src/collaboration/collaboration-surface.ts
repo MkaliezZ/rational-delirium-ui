@@ -200,12 +200,28 @@ function renderDetail(
   handlers: {
     onDecide: (decision: ProposalDecision, path: string) => void;
   },
+  linkingContributions: readonly ArtifactRow[],
 ): void {
   const box = createChild(parent, "div", { cls: "rdcol-detail" });
   const head = createChild(box, "div", { cls: "rdcol-detail-head" });
   head.textContent =
     `${detail.metadata.id ?? "(no id declared)"} · ${detail.metadata.authorAgent ?? "author not declared"}`
     + ` · source: ${detail.path} (read-only inspection)`;
+  // v1.9 §4: workflow linkage — proposal → decision → record.
+  if (detail.kind === "contribution" && detail.metadata.relatedProposalId !== null) {
+    const link = createChild(box, "div", { cls: "rdcol-linkage" });
+    link.textContent =
+      `workflow: proposal ${detail.metadata.relatedProposalId} → decision ` +
+      `${detail.metadata.relatedProposalDecision ?? "not declared"} → this record`;
+  }
+  if (detail.kind === "proposal") {
+    const link = createChild(box, "div", { cls: "rdcol-linkage" });
+    link.textContent = linkingContributions.length > 0
+      ? "workflow: this proposal → Human decision → " +
+        `${linkingContributions.length} contribution record(s) below`
+      : "workflow: this proposal → Human decision → (no contribution records reference it yet)";
+  }
+
   const meta = createChild(box, "dl", { cls: "rdcol-meta" });
   const metaRows: readonly (readonly [string, string | null])[] = [
     ["created_at", detail.metadata.createdAt],
@@ -214,6 +230,9 @@ function renderDetail(
       : detail.metadata.targetObjectId],
     ["target type", detail.metadata.targetType],
     ["related proposal", detail.metadata.relatedProposalId],
+    ["proposal decision", detail.metadata.relatedProposalDecision],
+    ["performed operation", detail.metadata.performedOperation],
+    ["affected objects", detail.metadata.affectedObjects],
     ["status", detail.metadata.status !== null
       ? `${detail.metadata.status} (recorded human action; not a truth state)`
       : null],
@@ -293,6 +312,20 @@ function renderDetail(
     createChild(sec, "summary", { cls: "rdcol-section-title", text: label });
     createChild(sec, "div", { cls: "rdcol-detail-body", text: body === "" ? "(not declared)" : body });
   }
+  if (detail.kind === "proposal" && linkingContributions.length > 0) {
+    const refs = createChild(box, "details", { cls: "rdcol-detail-section" });
+    createChild(refs, "summary", {
+      cls: "rdcol-section-title",
+      text: `Referenced by contribution records (${linkingContributions.length})`,
+    });
+    for (const c of linkingContributions) {
+      const line = createChild(refs, "div", { cls: "rdcol-linkage-row" });
+      line.textContent =
+        `${c.id ?? c.path} · decision: ${c.relatedProposalDecision ?? "not declared"}` +
+        (c.performedOperation !== null ? ` · ${c.performedOperation}` : "") +
+        (c.affectedObjects !== null ? ` · affected: ${c.affectedObjects}` : "");
+    }
+  }
   createChild(box, "div", {
     cls: "rdcol-note",
     text:
@@ -323,9 +356,13 @@ export function renderCollaboration(
     const back = createChild(bar, "button", { cls: "rdcol-back", text: "◀ Back" });
     back.setAttribute("aria-label", "Back to collaboration list");
     back.addEventListener("click", handlers.onBack);
+    const linking = state.model !== null && detail.kind === "proposal" && detail.metadata.id !== null
+      ? state.model.contributions.filter(
+          (c) => c.relatedProposalId === detail.metadata?.id)
+      : [];
     renderDetail(root, detail, {
       onDecide: handlers.onDecide,
-    });
+    }, linking);
     return;
   }
 

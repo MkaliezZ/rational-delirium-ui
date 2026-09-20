@@ -41,6 +41,8 @@ export interface ArtifactMetadata {
   readonly createdAt: string | null;
   readonly relatedProposalId: string | null;
   readonly relatedProposalDecision: string | null;
+  readonly performedOperation: string | null;
+  readonly affectedObjects: string | null;
   readonly targetObjectId: string | null;
   readonly targetType: string | null;
   readonly targetScope: string | null;
@@ -75,6 +77,8 @@ export interface ArtifactRow {
   readonly humanDecision: string | null;
   readonly relatedProposalId: string | null;
   readonly relatedProposalDecision: string | null;
+  readonly performedOperation: string | null;
+  readonly affectedObjects: string | null;
   readonly malformed: boolean;
 }
 
@@ -156,6 +160,8 @@ export function parseArtifact(kind: ArtifactKind, file: ArtifactFile): ArtifactD
       createdAt: metaField(metadataBody, "created_at"),
       relatedProposalId: metaField(metadataBody, "related_proposal_id"),
       relatedProposalDecision: metaField(metadataBody, "related_proposal_decision"),
+      performedOperation: metaField(metadataBody, "performed_operation"),
+      affectedObjects: metaField(metadataBody, "affected_objects"),
       targetObjectId: metaField(metadataBody, "target_object_id"),
       targetType: metaField(metadataBody, "target_object_type"),
       targetScope: metaField(metadataBody, "target_scope"),
@@ -204,6 +210,8 @@ function rowOf(kind: ArtifactKind, detail: ArtifactDetail): ArtifactRow {
     humanDecision: detail.metadata.humanDecision,
     relatedProposalId: detail.metadata.relatedProposalId,
     relatedProposalDecision: detail.metadata.relatedProposalDecision,
+    performedOperation: detail.metadata.performedOperation,
+    affectedObjects: detail.metadata.affectedObjects,
     malformed: detail.malformed,
   });
 }

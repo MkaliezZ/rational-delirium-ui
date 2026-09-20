@@ -198,8 +198,8 @@ describe("v1.8 execution and mutation boundaries", () => {
     const norm = skill.replace(/\s+/g, " ");
     expect(norm).toContain("Approved Workflow");
     expect(norm).toContain("WAIT for the Human decision");
-    expect(norm).toContain("ONLY the approved proposal's scope");
-    expect(norm).toContain("MUST create a Contribution Record");
-    expect(norm).toContain("not a permission system");
+    expect(norm).toContain("perform ONLY the approved change described by the proposal");
+    expect(norm).toContain("create a Contribution Record");
+    expect(norm).toContain("NOT a permission system");
   });
 });
