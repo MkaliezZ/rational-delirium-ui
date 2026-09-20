@@ -147,9 +147,7 @@ export function parseArtifact(kind: ArtifactKind, file: ArtifactFile): ArtifactD
   const status = kind === "proposal"
     ? metaField(section(file.text, "Status"), "status") ?? firstLine(section(file.text, "Status"))
     : null;
-  const humanDecision = kind === "organization-proposal" || kind === "contribution"
-    ? firstLine(section(file.text, "Human Decision"))
-    : null;
+  const humanDecision = firstLine(section(file.text, "Human Decision")) || null;
   return deepFreeze({
     kind,
     path: file.path,

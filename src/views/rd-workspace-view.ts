@@ -180,7 +180,8 @@ export class RDWorkspaceShellView extends ItemView {
         this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
         collab.setAttribute("aria-pressed", String(this.mode === "collaboration"));
         if (this.mode === "collaboration") {
-          void this.browser.refresh(this.deps.collaborationSource as CollaborationArtifactSource);
+          void this.browser.refresh(this.deps.collaborationSource as CollaborationArtifactSource)
+            .then(() => this.renderBody());
         }
         this.renderBody();
       });

@@ -94,9 +94,9 @@ export class ObsidianCollaborationSourceImpl implements CollaborationArtifactSou
     try {
       const listing = await adapter.list(dir);
       const files: { path: string; text: string }[] = [];
-      for (const name of listing.files) {
-        if (!name.toLowerCase().endsWith(".md")) continue;
-        const path = dir + "/" + name;
+      // DataAdapter.list returns vault-relative paths, not basenames.
+      for (const path of listing.files) {
+        if (!path.toLowerCase().endsWith(".md")) continue;
         try {
           files.push({ path, text: await adapter.read(path) });
         } catch {

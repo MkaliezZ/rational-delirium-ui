@@ -13786,7 +13786,7 @@ function parseArtifact(kind, file) {
     sections[logical] = body;
   }
   const status = kind === "proposal" ? metaField(section2(file.text, "Status"), "status") ?? firstLine(section2(file.text, "Status")) : null;
-  const humanDecision = kind === "organization-proposal" || kind === "contribution" ? firstLine(section2(file.text, "Human Decision")) : null;
+  const humanDecision = firstLine(section2(file.text, "Human Decision")) || null;
   return deepFreeze3({
     kind,
     path: file.path,
@@ -14366,7 +14366,7 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
         this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
         collab.setAttribute("aria-pressed", String(this.mode === "collaboration"));
         if (this.mode === "collaboration") {
-          void this.browser.refresh(this.deps.collaborationSource);
+          void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
         }
         this.renderBody();
       });
@@ -16077,9 +16077,8 @@ var ObsidianCollaborationSourceImpl = class {
     try {
       const listing = await adapter.list(dir);
       const files = [];
-      for (const name of listing.files) {
-        if (!name.toLowerCase().endsWith(".md")) continue;
-        const path = dir + "/" + name;
+      for (const path of listing.files) {
+        if (!path.toLowerCase().endsWith(".md")) continue;
         try {
           files.push({ path, text: await adapter.read(path) });
         } catch {
