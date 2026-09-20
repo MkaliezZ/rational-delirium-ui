@@ -7,6 +7,7 @@ import type { Plugin } from "obsidian";
 import type { GraphSource } from "../semantic-graph/graph-loader";
 import { DEFAULT_SEMANTIC_GRAPH_PATH } from "../semantic-graph/graph-loader";
 import type { KoDetailResult, KoSourceReader } from "../semantic-graph/ko-detail-reader";
+import type { CollaborationArtifactSource, DirReadResult } from "../collaboration/artifact-reader";
 import { extractFrontmatterBlock, koDetailFromNote, parseKoFrontmatter } from "../semantic-graph/ko-detail-reader";
 
 /** v1.3.1 §1: read-only source over the derived semantic-graph
@@ -72,6 +73,33 @@ export class ObsidianKoSourceReaderImpl implements KoSourceReader {
       return koDetailFromNote(paths[0], text);
     } catch (err) {
       return { state: "unavailable", reason: String(err) };
+    }
+  }
+}
+
+/** v1.7.4-A: read-only source over a vault artifact directory
+ * (adapter.list + adapter.read only — no write verb). Markdown
+ * files only; subdirectories are not descended into. */
+export class ObsidianCollaborationSourceImpl implements CollaborationArtifactSource {
+  constructor(private readonly plugin: Plugin) {}
+  async readDir(dir: string): Promise<DirReadResult> {
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      const listing = await adapter.list(dir);
+      const files: { path: string; text: string }[] = [];
+      for (const name of listing.files) {
+        if (!name.toLowerCase().endsWith(".md")) continue;
+        const path = dir + "/" + name;
+        try {
+          files.push({ path, text: await adapter.read(path) });
+        } catch {
+          // unreadable artifact file: skipped
+        }
+      }
+      return { state: "available", files };
+    } catch {
+      // adapter errors on missing directories: honest empty state
+      return { state: "missing" };
     }
   }
 }

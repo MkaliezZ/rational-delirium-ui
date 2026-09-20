@@ -243,10 +243,10 @@ describe("v1.6.1 §1 workspace shell boundary", () => {
     for (const banned of ["setInterval", "setTimeout", "registerInterval", "onLayoutReady"]) {
       expect(src).not.toContain(banned);
     }
-    // v1.6.3: honest placeholders now target the not-yet-existing
-    // collaboration/agent record surfaces, not the intelligence areas.
-    expect(src).toContain("available when collaboration records exist");
-    expect(src).toContain("available when contribution records exist");
+    // v1.7.4-A: collaboration/agent areas are live in the workspace;
+    // the honest empty state lives in the collaboration surface.
+    expect(src).toContain("rdws-collab-toggle");
+    expect(src).toContain("browser.refresh");
     expect(src).toContain("does not mean no knowledge exists"); // missing-artifact honesty
   });
 

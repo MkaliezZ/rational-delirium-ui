@@ -13673,6 +13673,348 @@ var RDThemeController = class {
   }
 };
 
+// src/collaboration/artifact-reader.ts
+var PROPOSALS_DIR = ".proposals";
+var CONTRIBUTIONS_DIR = ".contributions";
+var ORGANIZATION_PROPOSALS_DIR = ".organization-proposals";
+function section2(text3, title) {
+  const re = new RegExp(`^##\\s+${title}\\s*$`, "m");
+  const m = re.exec(text3);
+  if (m === null) return "";
+  const start = m.index + m[0].length;
+  const rest = text3.slice(start);
+  const next = /^##\s+/m.exec(rest);
+  const body = (next === null ? rest : rest.slice(0, next.index)).trim();
+  return body;
+}
+function metaField(metadataBody, key) {
+  const m = new RegExp(`^-\\s*${key}\\s*:\\s*(.+)$`, "m").exec(metadataBody);
+  if (m === null) return null;
+  let v = m[1].trim();
+  if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) v = v.slice(1, -1);
+  return v === "" ? null : v;
+}
+function firstLine(body) {
+  const line = body.split("\n").map((l) => l.trim()).find((l) => l !== "" && !l.startsWith("<!--"));
+  return line ?? "";
+}
+function deepFreeze3(value) {
+  if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) deepFreeze3(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+var ID_KEYS = Object.freeze({
+  proposal: "proposal_id",
+  contribution: "contribution_id",
+  "organization-proposal": "organization_proposal_id"
+});
+function parseArtifact(kind, file) {
+  const problems = [];
+  const metadataBody = section2(file.text, "Metadata");
+  const id = metaField(metadataBody, ID_KEYS[kind]);
+  if (id === null) problems.push(`no ${ID_KEYS[kind]} declared`);
+  const authorAgent = metaField(metadataBody, "author_agent");
+  if (authorAgent === null) problems.push("no author_agent declared");
+  const titles = SECTION_TITLES[kind];
+  const sections = {};
+  for (const logical of titles) {
+    const body = section2(file.text, logical);
+    if (body === "") problems.push(`missing section: ${logical}`);
+    sections[logical] = body;
+  }
+  const status = kind === "proposal" ? metaField(section2(file.text, "Status"), "status") ?? firstLine(section2(file.text, "Status")) : null;
+  const humanDecision = kind === "organization-proposal" || kind === "contribution" ? firstLine(section2(file.text, "Human Decision")) : null;
+  return deepFreeze3({
+    kind,
+    path: file.path,
+    metadata: deepFreeze3({
+      id,
+      authorAgent,
+      createdAt: metaField(metadataBody, "created_at"),
+      relatedProposalId: metaField(metadataBody, "related_proposal_id"),
+      targetObjectId: metaField(metadataBody, "target_object_id"),
+      targetType: metaField(metadataBody, "target_object_type"),
+      targetScope: metaField(metadataBody, "target_scope"),
+      status,
+      humanDecision
+    }),
+    sections: deepFreeze3(sections),
+    malformed: problems.length > 0,
+    problems: deepFreeze3(problems)
+  });
+}
+var SECTION_TITLES = Object.freeze({
+  proposal: Object.freeze([
+    "Metadata",
+    "Requested Change",
+    "Evidence",
+    "Reasoning",
+    "Expected Impact",
+    "Status",
+    "History"
+  ]),
+  contribution: Object.freeze([
+    "Metadata",
+    "Contribution Summary",
+    "Evidence Used",
+    "Change Description",
+    "Human Decision",
+    "History"
+  ]),
+  "organization-proposal": Object.freeze([
+    "Metadata",
+    "Observed Structure",
+    "Proposed Organization Change",
+    "Evidence",
+    "Reasoning",
+    "Expected Impact",
+    "Human Decision",
+    "History"
+  ])
+});
+function summaryOf(kind, detail) {
+  if (kind === "proposal") return firstLine(detail.sections["Requested Change"] ?? "");
+  if (kind === "contribution") return firstLine(detail.sections["Contribution Summary"] ?? "");
+  return firstLine(detail.sections["Proposed Organization Change"] ?? "");
+}
+function rowOf(kind, detail) {
+  return deepFreeze3({
+    kind,
+    id: detail.metadata.id,
+    path: detail.path,
+    authorAgent: detail.metadata.authorAgent,
+    createdAt: detail.metadata.createdAt,
+    summary: summaryOf(kind, detail),
+    status: detail.metadata.status,
+    target: kind === "organization-proposal" ? detail.metadata.targetScope : detail.metadata.targetObjectId,
+    humanDecision: detail.metadata.humanDecision,
+    relatedProposalId: detail.metadata.relatedProposalId,
+    malformed: detail.malformed
+  });
+}
+function rowsFor(kind, result) {
+  if (result.state !== "available") return { rows: [], state: result.state };
+  const rows = result.files.map((f) => parseArtifact(kind, f)).map((d) => rowOf(kind, d)).sort((a, b) => (a.id ?? a.path).localeCompare(b.id ?? b.path));
+  return { rows, state: "available" };
+}
+async function buildCollaborationModel(source) {
+  const [proposals, contributions, orgProps] = await Promise.all([
+    source.readDir(PROPOSALS_DIR),
+    source.readDir(CONTRIBUTIONS_DIR),
+    source.readDir(ORGANIZATION_PROPOSALS_DIR)
+  ]);
+  const p = rowsFor("proposal", proposals);
+  const c = rowsFor("contribution", contributions);
+  const o = rowsFor("organization-proposal", orgProps);
+  return deepFreeze3({
+    proposals: p.rows,
+    contributions: c.rows,
+    organizationProposals: o.rows,
+    dirs: deepFreeze3({
+      proposal: p.state,
+      contribution: c.state,
+      "organization-proposal": o.state
+    })
+  });
+}
+async function loadArtifactDetail(source, kind, path) {
+  const dir = kind === "proposal" ? PROPOSALS_DIR : kind === "contribution" ? CONTRIBUTIONS_DIR : ORGANIZATION_PROPOSALS_DIR;
+  const result = await source.readDir(dir);
+  if (result.state !== "available") return null;
+  const file = result.files.find((f) => f.path === path);
+  if (file === void 0) return null;
+  return parseArtifact(kind, file);
+}
+
+// src/collaboration/collaboration-surface.ts
+function deepFreeze4(value) {
+  if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) deepFreeze4(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+var CollaborationBrowser = class {
+  constructor() {
+    this.state = deepFreeze4({
+      model: null,
+      selectedPath: null,
+      trail: []
+    });
+    this.listeners = /* @__PURE__ */ new Set();
+  }
+  getState() {
+    return this.state;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  /** Explicit re-read of available artifacts (user action only). */
+  async refresh(source) {
+    const model = await buildCollaborationModel(source);
+    this.update({ model, selectedPath: null, trail: [] });
+  }
+  /** List → detail navigation (exact path). */
+  select(path) {
+    this.update({
+      selectedPath: path,
+      trail: [...this.state.trail, path]
+    });
+  }
+  /** Detail → back along the browsing trail. */
+  back() {
+    const trail = this.state.trail.slice(0, -1);
+    this.update({
+      trail,
+      selectedPath: trail.length > 0 ? trail[trail.length - 1] : null
+    });
+  }
+  dispose() {
+    this.listeners.clear();
+  }
+  update(patch) {
+    this.state = deepFreeze4({ ...this.state, ...patch });
+    for (const listener of [...this.listeners]) listener(this.state);
+  }
+};
+var EMPTY_TEXT = "No contribution records found.";
+function renderRow(list2, row, onSelect) {
+  const item = createChild(list2, "button", { cls: "rdcol-row" });
+  item.setAttribute("aria-label", `inspect ${row.id ?? row.path}`);
+  item.addEventListener("click", () => onSelect(row.path));
+  const head = createChild(item, "div", { cls: "rdcol-row-head" });
+  head.textContent = `${row.id ?? "(no id declared)"} \xB7 ${row.authorAgent ?? "author not declared"}${row.createdAt !== null ? ` \xB7 ${row.createdAt}` : ""}`;
+  const summary = createChild(item, "div", { cls: "rdcol-row-summary" });
+  summary.textContent = row.summary !== "" ? row.summary : "(no summary section)";
+  const tail = createChild(item, "div", { cls: "rdcol-row-tail" });
+  const parts = [];
+  if (row.target !== null) parts.push(`target: ${row.target}`);
+  if (row.status !== null) parts.push(`status: ${row.status} (descriptive)`);
+  if (row.relatedProposalId !== null) parts.push(`proposal: ${row.relatedProposalId}`);
+  if (row.humanDecision !== null) parts.push(`decision: ${row.humanDecision}`);
+  if (row.malformed) parts.push("\u26A0 flagged: malformed");
+  tail.textContent = parts.join(" \xB7 ");
+}
+function renderSection(parent, title, rows, dirState, onSelect) {
+  const details = createChild(parent, "details", { cls: "rdcol-section" });
+  details.setAttribute("open", "open");
+  createChild(details, "summary", { cls: "rdcol-section-title", text: `${title} (${rows.length})` });
+  const body = createChild(details, "div", { cls: "rdcol-section-body" });
+  if (dirState !== "available") {
+    const note = createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
+    createChild(body, "div", {
+      cls: "rdcol-dir-state",
+      text: `artifact directory state: ${dirState}`
+    });
+    return;
+  }
+  if (rows.length === 0) {
+    createChild(body, "div", { cls: "rdcol-empty", text: EMPTY_TEXT });
+    return;
+  }
+  for (const row of rows) renderRow(body, row, onSelect);
+}
+function renderDetail(parent, detail) {
+  const box = createChild(parent, "div", { cls: "rdcol-detail" });
+  const head = createChild(box, "div", { cls: "rdcol-detail-head" });
+  head.textContent = `${detail.metadata.id ?? "(no id declared)"} \xB7 ${detail.metadata.authorAgent ?? "author not declared"} \xB7 source: ${detail.path} (read-only inspection)`;
+  const meta = createChild(box, "dl", { cls: "rdcol-meta" });
+  const metaRows = [
+    ["created_at", detail.metadata.createdAt],
+    ["target", detail.kind === "organization-proposal" ? detail.metadata.targetScope : detail.metadata.targetObjectId],
+    ["target type", detail.metadata.targetType],
+    ["related proposal", detail.metadata.relatedProposalId],
+    ["status", detail.metadata.status !== null ? `${detail.metadata.status} (descriptive only)` : null],
+    ["human decision", detail.metadata.humanDecision]
+  ];
+  for (const [label, value] of metaRows) {
+    createChild(meta, "dt", { text: label });
+    const dd = createChild(meta, "dd", { text: value ?? "not declared" });
+    dd.setAttribute("data-state", value !== null ? "available" : "not-declared");
+  }
+  if (detail.malformed) {
+    createChild(box, "div", {
+      cls: "rdcol-flag",
+      text: `\u26A0 flagged (shown, not hidden): ${detail.problems.join("; ")}`
+    });
+  }
+  const SECTION_LABELS = [
+    ["Requested Change", "Requested / Proposed Change"],
+    ["Contribution Summary", "Contribution Summary"],
+    ["Observed Structure", "Observed Structure"],
+    ["Proposed Organization Change", "Proposed Organization Change"],
+    ["Evidence", "Evidence"],
+    ["Evidence Used", "Evidence Used"],
+    ["Change Description", "Change Description"],
+    ["Reasoning", "Reasoning"],
+    ["Expected Impact", "Expected Impact"],
+    ["Status", "Status"],
+    ["Human Decision", "Human Decision"],
+    ["History", "History (append-only)"]
+  ];
+  for (const [key, label] of SECTION_LABELS) {
+    const body = detail.sections[key];
+    if (body === void 0) continue;
+    const sec = createChild(box, "details", { cls: "rdcol-detail-section" });
+    createChild(sec, "summary", { cls: "rdcol-section-title", text: label });
+    createChild(sec, "div", { cls: "rdcol-detail-body", text: body === "" ? "(not declared)" : body });
+  }
+  createChild(box, "div", {
+    cls: "rdcol-note",
+    text: "This view displays what was proposed. Decisions are Human acts recorded in artifacts; no approve, reject or apply action exists here."
+  });
+}
+function renderCollaboration(container, state, detail, handlers) {
+  emptyEl(container);
+  const root = createChild(container, "div", { cls: "rd-collaboration" });
+  if (state.selectedPath !== null && detail !== null) {
+    const bar = createChild(root, "div", { cls: "rdcol-nav" });
+    const back = createChild(bar, "button", { cls: "rdcol-back", text: "\u25C0 Back" });
+    back.setAttribute("aria-label", "Back to collaboration list");
+    back.addEventListener("click", handlers.onBack);
+    renderDetail(root, detail);
+    return;
+  }
+  if (state.model === null) {
+    createChild(root, "div", { cls: "rdcol-empty", text: "loading artifact directories\u2026" });
+    return;
+  }
+  renderSection(
+    root,
+    "Agent Contributions",
+    state.model.contributions,
+    state.model.dirs.contribution,
+    handlers.onSelect
+  );
+  renderSection(
+    root,
+    "Proposals",
+    state.model.proposals,
+    state.model.dirs.proposal,
+    handlers.onSelect
+  );
+  renderSection(
+    root,
+    "Organization Proposals",
+    state.model.organizationProposals,
+    state.model.dirs["organization-proposal"],
+    handlers.onSelect
+  );
+}
+async function resolveDetail(source, state) {
+  if (state.selectedPath === null || state.model === null) return null;
+  for (const kind of ["proposal", "contribution", "organization-proposal"]) {
+    const detail = await loadArtifactDetail(source, kind, state.selectedPath);
+    if (detail !== null) return detail;
+  }
+  return null;
+}
+
 // src/views/knowledge-panel-view.ts
 var import_obsidian2 = require("obsidian");
 var RD_KNOWLEDGE_PANEL_VIEW_TYPE = "rd-knowledge-panel";
@@ -13767,12 +14109,12 @@ var AREAS = [
   {
     key: "Collaboration View",
     question: "Who worked on this and what happened?",
-    state: "surface available when collaboration records exist"
+    state: "live in workspace"
   },
   {
     key: "Agent Contribution View",
     question: "What did Agents do here?",
-    state: "surface available when contribution records exist"
+    state: "live in workspace"
   }
 ];
 var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
@@ -13782,6 +14124,9 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
     this.sourceDetail = void 0;
     this.observer = null;
+    this.mode = "investigation";
+    this.browser = new CollaborationBrowser();
+    this.collabDetail = null;
     this.deps = deps;
   }
   getViewType() {
@@ -13817,6 +14162,7 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.browser.dispose();
     emptyEl(this.contentEl);
   }
   /** v1.6.2 §5: explicit, session-only theme selection. */
@@ -13856,6 +14202,31 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
     const back = createChild(bar, "button", { cls: "rdws-button", text: "\u25C0 Back" });
     back.setAttribute("aria-label", "Back along investigation trail");
     back.addEventListener("click", () => this.deps.store.back());
+    if (this.deps.collaborationSource !== void 0) {
+      const collab = createChild(bar, "button", {
+        cls: "rdws-button rdws-collab-toggle",
+        text: "Collaboration"
+      });
+      collab.setAttribute("aria-pressed", "false");
+      collab.addEventListener("click", () => {
+        this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
+        collab.setAttribute("aria-pressed", String(this.mode === "collaboration"));
+        if (this.mode === "collaboration") {
+          void this.browser.refresh(this.deps.collaborationSource);
+        }
+        this.renderBody();
+      });
+    }
+  }
+  /** v1.7.4-A: load the detail for the current collaboration
+   * selection (exact path), then re-render. Read-only. */
+  async refreshCollabDetail() {
+    if (this.deps.collaborationSource === void 0) return;
+    this.collabDetail = await resolveDetail(
+      this.deps.collaborationSource,
+      this.browser.getState()
+    );
+    this.renderBody();
   }
   /** Explicit re-read of derived-state availability and snapshot.
    * No rebuild, no sync, no spawn — reads available data only. */
@@ -13911,6 +14282,20 @@ var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
       });
     }
     const layout = createChild(body, "div", { cls: "rdws-layout" });
+    if (this.mode === "collaboration") {
+      const host = createChild(layout, "div", { cls: "rdws-collaboration-host" });
+      renderCollaboration(host, this.browser.getState(), this.collabDetail, {
+        onSelect: (path) => {
+          this.browser.select(path);
+          void this.refreshCollabDetail();
+        },
+        onBack: () => {
+          this.browser.back();
+          void this.refreshCollabDetail();
+        }
+      });
+      return;
+    }
     if (this.graphLoad.state === "available" && selected !== null) {
       this.renderInspection(layout, selected);
       this.renderObjectRail(layout, selected);
@@ -14075,13 +14460,13 @@ function renderRelationList(container, data, expanded, callbacks) {
     return;
   }
   container.removeAttribute("aria-busy");
-  for (const section2 of data.sections) {
+  for (const section3 of data.sections) {
     const sectionEl = createChild(container, "div", { cls: "rdc-section" });
     const title = createChild(sectionEl, "button", {
       cls: "rdc-section-title",
-      text: section2.title
+      text: section3.title
     });
-    const isOpen = expanded.has(section2.key);
+    const isOpen = expanded.has(section3.key);
     title.setAttribute("aria-expanded", isOpen ? "true" : "false");
     const body = createChild(sectionEl, "div", { cls: "rdc-section-body" });
     body.style.display = isOpen ? "" : "none";
@@ -14089,9 +14474,9 @@ function renderRelationList(container, data, expanded, callbacks) {
       const nowOpen = body.style.display === "none";
       body.style.display = nowOpen ? "" : "none";
       title.setAttribute("aria-expanded", nowOpen ? "true" : "false");
-      callbacks.onToggleSection(section2.key, nowOpen);
+      callbacks.onToggleSection(section3.key, nowOpen);
     });
-    for (const row of section2.rows) {
+    for (const row of section3.rows) {
       const btn = createChild(body, "button", { cls: "rdc-rel" });
       const label = createChild(btn, "span", { cls: "rdc-pred" });
       label.textContent = (row.direction === "incoming" ? "\u2190 " : "\u2192 ") + row.predicate + (row.ordinary ? " (" + (row.direction === "incoming" ? "backlink" : "linked") + ")" : "");
@@ -14322,7 +14707,7 @@ function buildInvestigationProjection(index2) {
     if (states.includes("AMBIGUOUS")) counts.ambiguous += 1;
   }
   const relationSummary2 = /* @__PURE__ */ new Map();
-  const summaryOf = (path) => {
+  const summaryOf2 = (path) => {
     let entry2 = relationSummary2.get(path);
     if (entry2 === void 0) {
       entry2 = { resolved: 0, unresolved: 0, contradiction: 0 };
@@ -14335,9 +14720,9 @@ function buildInvestigationProjection(index2) {
     const unresolved = endpointNeedsAttention(relationResolution(relation));
     for (const endpoint of [relation.source, relation.target]) {
       if (endpoint.path === null) continue;
-      if (isContradiction) summaryOf(endpoint.path).contradiction += 1;
-      if (unresolved) summaryOf(endpoint.path).unresolved += 1;
-      if (!isContradiction && !unresolved) summaryOf(endpoint.path).resolved += 1;
+      if (isContradiction) summaryOf2(endpoint.path).contradiction += 1;
+      if (unresolved) summaryOf2(endpoint.path).unresolved += 1;
+      if (!isContradiction && !unresolved) summaryOf2(endpoint.path).resolved += 1;
     }
   }
   const cases = objects.filter((object) => object.type === "case").sort(compareByMtimeDescPathAsc).map((object) => ({
@@ -14464,8 +14849,8 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
   }
   /** §7: canonical object type counts + logical relation state counts. */
   renderKnowledgeState(shell, data) {
-    const section2 = this.section(shell, "Knowledge State");
-    const grid = createChild(section2, "div", { cls: "rdi-counts" });
+    const section3 = this.section(shell, "Knowledge State");
+    const grid = createChild(section3, "div", { cls: "rdi-counts" });
     const entries = [
       ["CASE", data.counts.case],
       ["EVIDENCE", data.counts.evidence],
@@ -14485,13 +14870,13 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
    * fields only. Click opens the EXISTING file via the established
    * navigation path; never creates a file. */
   renderCases(shell, data) {
-    const section2 = this.section(shell, "Cases");
+    const section3 = this.section(shell, "Cases");
     if (data.cases.length === 0) {
-      createChild(section2, "div", { cls: "rdi-state", text: "No cases in the current index." });
+      createChild(section3, "div", { cls: "rdi-state", text: "No cases in the current index." });
       return;
     }
     for (const row of data.cases) {
-      const btn = createChild(section2, "button", { cls: "rdi-case" });
+      const btn = createChild(section3, "button", { cls: "rdi-case" });
       btn.setAttribute(
         "aria-label",
         `Open case ${row.title}${row.id !== null ? " (" + row.id + ")" : ""}`
@@ -14509,7 +14894,7 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
    * §22 invariants: E != F, raw labels visible, logical dedup already
    * done by the index. */
   renderAttention(shell, data) {
-    const section2 = this.section(shell, "Attention");
+    const section3 = this.section(shell, "Attention");
     const items = data.attention.filter((item) => {
       const unresolved = item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS";
       if (this.filter === "unresolved") return unresolved;
@@ -14517,16 +14902,16 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
       return true;
     });
     if (items.length === 0) {
-      createChild(section2, "div", { cls: "rdi-state", text: "Nothing requires attention." });
+      createChild(section3, "div", { cls: "rdi-state", text: "Nothing requires attention." });
       return;
     }
     for (const item of items) {
-      this.renderAttentionRow(section2, item);
+      this.renderAttentionRow(section3, item);
     }
   }
-  renderAttentionRow(section2, item) {
+  renderAttentionRow(section3, item) {
     const navigable = item.targetPath !== null && item.targetResolution === "RESOLVED";
-    const row = createChild(section2, navigable ? "button" : "div", { cls: "rdi-att" });
+    const row = createChild(section3, navigable ? "button" : "div", { cls: "rdi-att" });
     if (!navigable) row.setAttribute("aria-disabled", "true");
     const line = createChild(row, "span", { cls: "rdi-att-line" });
     line.textContent = `${item.sourceLabel} ${item.predicate} ${item.targetLabel}`;
@@ -14550,13 +14935,13 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
   }
   /** §12: current filesystem metadata only; no history, no log. */
   renderRecent(shell, data) {
-    const section2 = this.section(shell, "Recent");
+    const section3 = this.section(shell, "Recent");
     if (data.recent.length === 0) {
-      createChild(section2, "div", { cls: "rdi-state", text: "No recent objects." });
+      createChild(section3, "div", { cls: "rdi-state", text: "No recent objects." });
       return;
     }
     for (const object of data.recent) {
-      const btn = createChild(section2, "button", { cls: "rdi-recent" });
+      const btn = createChild(section3, "button", { cls: "rdi-recent" });
       btn.setAttribute("aria-label", `Open ${object.title}`);
       const line = createChild(btn, "span", { cls: "rdi-recent-line" });
       line.textContent = `${object.type} \xB7 ${object.title}`;
@@ -14568,9 +14953,9 @@ var RDInvestigationView = class extends import_obsidian5.ItemView {
     }
   }
   section(shell, title) {
-    const section2 = createChild(shell, "section", { cls: "rdi-section" });
-    createChild(section2, "h3", { cls: "rdi-section-title", text: title });
-    return section2;
+    const section3 = createChild(shell, "section", { cls: "rdi-section" });
+    createChild(section3, "h3", { cls: "rdi-section-title", text: title });
+    return section3;
   }
 };
 
@@ -14741,13 +15126,13 @@ var RDLoopView = class extends import_obsidian6.ItemView {
       return;
     }
     if (data.phase === "NO_LOOP_SELECTED" || data.phase === "NO_SUCH_LOOP") {
-      const section2 = this.section(shell, "Loops");
+      const section3 = this.section(shell, "Loops");
       if (data.loops.length === 0) {
         createChild(shell, "div", { cls: "rdl-state", text: "No LOOP selected." });
         return;
       }
       for (const entry2 of data.loops) {
-        const btn = createChild(section2, "button", { cls: "rdl-loop-pick" });
+        const btn = createChild(section3, "button", { cls: "rdl-loop-pick" });
         btn.setAttribute("aria-label", `Select loop ${entry2.title}`);
         createChild(btn, "span", { cls: "rdl-loop-pick-title", text: entry2.title });
         const meta = createChild(btn, "span", { cls: "rdl-meta" });
@@ -14770,8 +15155,8 @@ var RDLoopView = class extends import_obsidian6.ItemView {
   renderIdentity(shell, data) {
     const identity = data.selectedLoop;
     if (identity === null) return;
-    const section2 = this.section(shell, "Identity");
-    const idEl = createChild(section2, "div", { cls: "rdl-identity" });
+    const section3 = this.section(shell, "Identity");
+    const idEl = createChild(section3, "div", { cls: "rdl-identity" });
     createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
     const meta = createChild(idEl, "span", { cls: "rdl-meta" });
     const bits = [
@@ -14783,18 +15168,18 @@ var RDLoopView = class extends import_obsidian6.ItemView {
     meta.textContent = bits.join(" \xB7 ");
   }
   renderRows(shell, title, rows, emptyText) {
-    const section2 = this.section(shell, title);
+    const section3 = this.section(shell, title);
     if (rows.length === 0) {
-      createChild(section2, "div", { cls: "rdl-state", text: emptyText });
+      createChild(section3, "div", { cls: "rdl-state", text: emptyText });
       return;
     }
     for (const row of rows) {
-      this.renderRow(section2, row);
+      this.renderRow(section3, row);
     }
   }
-  renderRow(section2, row) {
+  renderRow(section3, row) {
     const navigable = row.otherPath !== null && row.resolution === "RESOLVED";
-    const el = createChild(section2, navigable ? "button" : "div", { cls: "rdl-rel" });
+    const el = createChild(section3, navigable ? "button" : "div", { cls: "rdl-rel" });
     if (!navigable) el.setAttribute("aria-disabled", "true");
     const line = createChild(el, "span", { cls: "rdl-rel-line" });
     line.textContent = `${row.direction === "outgoing" ? "\u2192" : "\u2190"} ${row.predicate} ${row.otherLabel}`;
@@ -14810,9 +15195,9 @@ var RDLoopView = class extends import_obsidian6.ItemView {
     }
   }
   section(shell, title) {
-    const section2 = createChild(shell, "section", { cls: "rdl-section" });
-    createChild(section2, "h3", { cls: "rdl-section-title", text: title });
-    return section2;
+    const section3 = createChild(shell, "section", { cls: "rdl-section" });
+    createChild(section3, "h3", { cls: "rdl-section-title", text: title });
+    return section3;
   }
 };
 
@@ -15040,13 +15425,13 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
       return;
     }
     if (data.phase !== "READY" || data.selectedObject === null) {
-      const section2 = this.section(shell, "RD Objects");
+      const section3 = this.section(shell, "RD Objects");
       if (data.selectableObjects.length === 0) {
         createChild(shell, "div", { cls: "rdg-state", text: "No RD object selected." });
         return;
       }
       for (const entry2 of data.selectableObjects) {
-        const btn = createChild(section2, "button", { cls: "rdg-pick" });
+        const btn = createChild(section3, "button", { cls: "rdg-pick" });
         btn.setAttribute("aria-label", `Select ${entry2.type} ${entry2.title}`);
         const line = createChild(btn, "span", { cls: "rdg-pick-title" });
         line.textContent = `${entry2.type} \xB7 ${entry2.title}`;
@@ -15065,8 +15450,8 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
   }
   /** §6: canonical identity fields only. */
   renderIdentity(shell, identity) {
-    const section2 = this.section(shell, "Identity");
-    const idEl = createChild(section2, "div", { cls: "rdg-identity" });
+    const section3 = this.section(shell, "Identity");
+    const idEl = createChild(section3, "div", { cls: "rdg-identity" });
     createChild(idEl, "span", { cls: "rdg-identity-title", text: identity.title });
     const meta = createChild(idEl, "span", { cls: "rdg-meta" });
     const bits = [
@@ -15079,21 +15464,21 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
     meta.textContent = bits.join(" \xB7 ");
   }
   renderFirstHop(shell, data) {
-    const section2 = this.section(shell, "Semantic Relations");
+    const section3 = this.section(shell, "Semantic Relations");
     if (data.firstHop.length === 0) {
-      createChild(section2, "div", { cls: "rdg-state", text: "No semantic relations recorded." });
+      createChild(section3, "div", { cls: "rdg-state", text: "No semantic relations recorded." });
       return;
     }
     for (const edge of data.firstHop) {
-      this.renderEdge(section2, edge, true);
+      this.renderEdge(section3, edge, true);
     }
   }
   /** §12: second-hop branch, direction relative to the NEIGHBOR. */
   renderSecondHop(shell, rootPath) {
-    const section2 = this.section(shell, "Second Hop");
+    const section3 = this.section(shell, "Second Hop");
     for (const neighbor of [...this.expandedNeighbors].sort()) {
       const rows = buildSecondHop(this.deps.index, neighbor, rootPath);
-      const branch = createChild(section2, "div", { cls: "rdg-branch" });
+      const branch = createChild(section3, "div", { cls: "rdg-branch" });
       const branchTitle = createChild(branch, "div", { cls: "rdg-branch-title" });
       branchTitle.textContent = `Second hop via ${neighbor}`;
       if (rows.length === 0) {
@@ -15166,8 +15551,8 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
    * and a generation token; a root switch invalidates both, so a
    * stale async completion can never overwrite the new root's UI. */
   renderNativeGraph(shell, path) {
-    const section2 = this.section(shell, "Native Graph");
-    const btn = createChild(section2, "button", { cls: "rdg-native" });
+    const section3 = this.section(shell, "Native Graph");
+    const btn = createChild(section3, "button", { cls: "rdg-native" });
     btn.textContent = "Open Native Local Graph";
     btn.setAttribute("aria-label", "Open Obsidian local graph for the selected object");
     btn.addEventListener("click", () => {
@@ -15191,13 +15576,13 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
       });
     });
     if (this.nativeGraphState === "UNAVAILABLE" && this.nativeGraphRoot === path) {
-      createChild(section2, "div", { cls: "rdg-state", text: "Native Local Graph unavailable." });
+      createChild(section3, "div", { cls: "rdg-state", text: "Native Local Graph unavailable." });
     }
   }
   section(shell, title) {
-    const section2 = createChild(shell, "section", { cls: "rdg-section" });
-    createChild(section2, "h3", { cls: "rdg-section-title", text: title });
-    return section2;
+    const section3 = createChild(shell, "section", { cls: "rdg-section" });
+    createChild(section3, "h3", { cls: "rdg-section-title", text: title });
+    return section3;
   }
 };
 
@@ -15322,6 +15707,7 @@ function buildRDViewRegistry() {
       store: services.workspaceStore,
       source: services.graphSource,
       sourceReader: services.koSourceReader,
+      collaborationSource: services.collaborationSource,
       openView: services.openView,
       themeController: services.themeController
     })
@@ -15510,6 +15896,29 @@ var ObsidianKoSourceReaderImpl = class {
     }
   }
 };
+var ObsidianCollaborationSourceImpl = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+  }
+  async readDir(dir) {
+    const adapter = this.plugin.app.vault.adapter;
+    try {
+      const listing = await adapter.list(dir);
+      const files = [];
+      for (const name of listing.files) {
+        if (!name.toLowerCase().endsWith(".md")) continue;
+        const path = dir + "/" + name;
+        try {
+          files.push({ path, text: await adapter.read(path) });
+        } catch {
+        }
+      }
+      return { state: "available", files };
+    } catch {
+      return { state: "missing" };
+    }
+  }
+};
 
 // src/main.ts
 var ObsidianReadAdapterImpl = class {
@@ -15579,7 +15988,8 @@ var RationalDeliriumPlugin = class extends import_obsidian8.Plugin {
       },
       navigation,
       graphSource: new ObsidianGraphSourceImpl(this),
-      koSourceReader: new ObsidianKoSourceReaderImpl(this)
+      koSourceReader: new ObsidianKoSourceReaderImpl(this),
+      collaborationSource: new ObsidianCollaborationSourceImpl(this)
     });
     await this.wiring.start();
   }

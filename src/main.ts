@@ -6,7 +6,7 @@ import { RuntimeWiring } from "./runtime/runtime-wiring";
 import type { ReadAdapter } from "./platform/obsidian-read-adapter";
 import type { WorkspaceLike, VaultLike } from "./runtime/runtime-wiring";
 import { registerRDViews } from "./architecture/rd-view-setup";
-import { ObsidianGraphSourceImpl, ObsidianKoSourceReaderImpl } from "./architecture/obsidian-graph-ports";
+import { ObsidianGraphSourceImpl, ObsidianKoSourceReaderImpl, ObsidianCollaborationSourceImpl } from "./architecture/obsidian-graph-ports";
 
 /** Read-only adapter over the real Vault. */
 class ObsidianReadAdapterImpl {
@@ -78,6 +78,7 @@ export default class RationalDeliriumPlugin extends Plugin {
       navigation,
       graphSource: new ObsidianGraphSourceImpl(this),
       koSourceReader: new ObsidianKoSourceReaderImpl(this),
+      collaborationSource: new ObsidianCollaborationSourceImpl(this),
     });
 
     await this.wiring.start();

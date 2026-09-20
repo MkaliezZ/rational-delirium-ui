@@ -26,6 +26,13 @@ import {
 import type { RDWorkspaceStore } from "../architecture/workspace-state";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
 import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
+import type { CollaborationArtifactSource } from "../collaboration/artifact-reader";
+import type { ArtifactDetail } from "../collaboration/artifact-reader";
+import {
+  CollaborationBrowser,
+  renderCollaboration,
+  resolveDetail,
+} from "../collaboration/collaboration-surface";
 import { createChild, emptyEl } from "./dom-helpers";
 import { RD_KNOWLEDGE_PANEL_VIEW_TYPE } from "./knowledge-panel-view";
 
@@ -40,6 +47,8 @@ export interface RDWorkspaceShellDeps {
   readonly openView: (viewType: string) => Promise<void>;
   /** v1.6.2: explicit, session-only theme selection. */
   readonly themeController?: RDThemeController;
+  /** v1.7.4-A: read-only collaboration artifact source. */
+  readonly collaborationSource?: CollaborationArtifactSource;
 }
 
 /** The six information-architecture areas (v1.6.0 §4). The four
@@ -53,12 +62,12 @@ const AREAS: readonly { key: string; question: string; state: string }[] = [
   {
     key: "Collaboration View",
     question: "Who worked on this and what happened?",
-    state: "surface available when collaboration records exist",
+    state: "live in workspace",
   },
   {
     key: "Agent Contribution View",
     question: "What did Agents do here?",
-    state: "surface available when contribution records exist",
+    state: "live in workspace",
   },
 ];
 
@@ -68,6 +77,9 @@ export class RDWorkspaceShellView extends ItemView {
   private graphLoad: GraphLoadResult = { state: "unavailable", reason: "not loaded yet" };
   private sourceDetail: KoDetailResult | undefined = undefined;
   private observer: ResizeObserver | null = null;
+  private mode: "investigation" | "collaboration" = "investigation";
+  private readonly browser = new CollaborationBrowser();
+  private collabDetail: ArtifactDetail | null = null;
 
   constructor(leaf: WorkspaceLeaf, deps: RDWorkspaceShellDeps) {
     super(leaf);
@@ -105,6 +117,7 @@ export class RDWorkspaceShellView extends ItemView {
     this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.browser.dispose();
     emptyEl(this.contentEl);
   }
 
@@ -150,6 +163,31 @@ export class RDWorkspaceShellView extends ItemView {
     const back = createChild(bar, "button", { cls: "rdws-button", text: "◀ Back" });
     back.setAttribute("aria-label", "Back along investigation trail");
     back.addEventListener("click", () => this.deps.store.back());
+    // v1.7.4-A: explicit collaboration section toggle (session-only).
+    if (this.deps.collaborationSource !== undefined) {
+      const collab = createChild(bar, "button", {
+        cls: "rdws-button rdws-collab-toggle",
+        text: "Collaboration",
+      });
+      collab.setAttribute("aria-pressed", "false");
+      collab.addEventListener("click", () => {
+        this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
+        collab.setAttribute("aria-pressed", String(this.mode === "collaboration"));
+        if (this.mode === "collaboration") {
+          void this.browser.refresh(this.deps.collaborationSource as CollaborationArtifactSource);
+        }
+        this.renderBody();
+      });
+    }
+  }
+
+  /** v1.7.4-A: load the detail for the current collaboration
+   * selection (exact path), then re-render. Read-only. */
+  private async refreshCollabDetail(): Promise<void> {
+    if (this.deps.collaborationSource === undefined) return;
+    this.collabDetail = await resolveDetail(
+      this.deps.collaborationSource, this.browser.getState());
+    this.renderBody();
   }
 
   /** Explicit re-read of derived-state availability and snapshot.
@@ -213,6 +251,21 @@ export class RDWorkspaceShellView extends ItemView {
     }
 
     const layout = createChild(body, "div", { cls: "rdws-layout" });
+
+    if (this.mode === "collaboration") {
+      const host = createChild(layout, "div", { cls: "rdws-collaboration-host" });
+      renderCollaboration(host, this.browser.getState(), this.collabDetail, {
+        onSelect: (path: string) => {
+          this.browser.select(path);
+          void this.refreshCollabDetail();
+        },
+        onBack: () => {
+          this.browser.back();
+          void this.refreshCollabDetail();
+        },
+      });
+      return;
+    }
 
     if (this.graphLoad.state === "available" && selected !== null) {
       this.renderInspection(layout, selected);

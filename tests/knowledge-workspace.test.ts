@@ -116,8 +116,10 @@ describe("v1.6.3 honesty and neutrality", () => {
   it("workspace source: neutral object list, honest placeholders, no ranking language", () => {
     const src = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
     expect(src).toContain("neutral id order");
-    expect(src).toContain("available when collaboration records exist");
-    expect(src).toContain("available when contribution records exist");
+    // v1.7.4-A: collaboration and agent-contribution areas are live;
+    // honesty now lives in the empty-state wording of the surface.
+    expect(src).toContain("Collaboration");
+    expect(src).toContain("live in workspace");
     expect(src).toContain("not a lifecycle state");
     expect(src).toContain("no ranking, no recommendation");
     // no fake AI surface
