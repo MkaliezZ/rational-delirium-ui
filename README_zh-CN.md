@@ -1,80 +1,36 @@
 # Rational Delirium（理性谵妄）
 
-[Obsidian](https://obsidian.md) 内的**人类治理知识工作区**——一间安静的研究档案室：
-你在这里调查知识对象（溯源、谱系、关系），追踪 agent 的贡献，
-而知识的一切演进都保持为**明确的人类决定**。
+一个面向 [Obsidian](https://obsidian.md) 的人类主导知识工作区。
 
-Rational Delirium **不是** agent 平台，**不是** agent 运行时，
-也**不是**自主 AI 系统。它是一个 Obsidian 插件加一份行为技能契约：
-外部 agent（Codex / Claude / Kimi / 任何其他）提案，人类决定，RD 展示。
+Rational Delirium 帮助用户在研究、分析和知识整理过程中使用 AI Agent，同时保持人的判断、决定和变化历史可见。
+
+它记录：
+
+- Agent 提出了什么建议；
+- 人类批准或拒绝了什么；
+- 知识如何随着时间发生变化。
+
+Rational Delirium **不是** Agent 平台，**不是** Agent 运行时，也**不是**自主 AI 系统。
+
+它由两部分组成：
+
+- Obsidian 插件：负责知识展示、关系探索和工作流记录；
+- Agent Skill 契约：指导外部 Agent 如何参与协作。
+
+外部 Agent 提案，人类决定，RD 展示过程。
 
 [English](README.md)
 
-## 架构总览
+## 为什么需要 Rational Delirium？
 
-```text
-KO Markdown + frontmatter          工作流工件
-   （知识对象）                      （提案、记录）
-        |                                   |
-        | v1.2.1 投影器（仓库工具,只读）      | 由外部 agent 写入
-        v                                   v
-派生语义图工件 graph.json           .proposals / .contributions /
-        |                            .organization-proposals
-        | 只读                                |
-        +----> Rational Delirium 插件 <------+
-                    |  （Obsidian,除唯一受控写路径
-                    |   〔人类决定记录〕外全部只读）
-                    v
-        人类调查与决策
-                    |
-                    v
-        外部 agent 在 RD 之外执行已批准范围
-                    |
-                    v
-        贡献记录 → RD 展示完整链条
-```
+AI Agent 可以帮助研究、分析和整理知识，但长期使用时还需要：
 
-## 工作流
+- 清晰的推理历史；
+- 可见的人类判断；
+- 建议与最终决定的分离；
+- 对实际发生变化的记录。
 
-```text
-Agent 阅读 RD 技能
-  → 检查知识对象（精确 id、溯源、关系）
-  → 创建提案（markdown 工件）
-  → 等待
-人类在 Obsidian 中审阅 → 记录批准 / 拒绝
-  （RD 唯一的写：.proposals/*.md 决定记录）
-agent 仅执行已批准的范围,在 RD 之外
-  → 创建贡献记录（溯源,不是证明）
-RD 展示：提案 → 人类决定 → 贡献记录
-```
-
-批准授权的是一个范围。批准从不验证真相。
-
-## 核心特性
-
-- **知识工作区**——调查界面：身份、溯源（观察 → 证据 → 推断 → 结论）、
-  谱系（前驱/后继、revises/supersedes）、关系、诊断；
-  对象间导航带回退轨迹。
-- **语义图投影**（`semantic-graph/projector.py`）——把声明的
-  frontmatter 关系确定性地投影为派生图工件（可重建、无数据库）。
-- **协作面**——只读浏览 agent 贡献、提案与组织提案；
-  畸形工件保持可见；诚实的空态。
-- **人类决定记录**——对 pending 提案显式 批准/拒绝；
-  插件中唯一的受控写路径。
-- **Agent 技能**（`skills/rational-delirium-agent-skill.md`）——
-  外部 agent 的行为契约：提案、等待、仅执行已批准范围、然后记录。
-- **主题系统**——语义 token，Rational Archive 默认；
-  动效解释结构，从不表达含义。
-
-## 设计原则
-
-- **Knowledge ≠ Truth（知识 ≠ 真相）**——存储的对象记录主张与溯源。
-- **Projection ≠ Authority（投影 ≠ 权威）**——出现在图中不证明任何事。
-- **Agent Contribution ≠ Human Decision（Agent 贡献 ≠ 人类决定）**——提案是人类判断的输入。
-- **Relationship ≠ Confidence（关系 ≠ 置信）**——声明的边不携带权重。
-- **Visibility ≠ Validation（可见 ≠ 已验证）**——被展示不等于被背书。
-
-没有真相评分、没有置信度表、没有排序、没有自动合并。
+Rational Delirium 将这一层带入 Obsidian。
 
 ## 截图
 
@@ -88,80 +44,152 @@ RD 展示：提案 → 人类决定 → 贡献记录
 | --- | --- | --- |
 | ![协作](docs/images/03-collaboration.png) | ![决定](docs/images/04-human-decision.png) | ![贡献](docs/images/05-contribution-record.png) |
 
-## 五分钟快速开始（Obsidian）
+## 工作流程
 
-1. **安装插件**
-   ```bash
-   git clone https://github.com/MkaliezZ/rational-delirium-ui
-   cd rational-delirium-ui
-   npm ci && npm run build
-   ```
-   把 `dist/`（main.js、manifest.json、styles.css、
-   tokens-rational-archive.css）复制到
-   `<vault>/.obsidian/plugins/rational-delirium/`，
-   然后在 Obsidian 设置 → 第三方插件中启用 **Rational Delirium**。
+```text
+外部 Agent
+    |
+    v
+RD Skill 契约
+    |
+    v
+创建 Proposal（提案）
+    |
+    v
+人类审核决定
+    |
+    v
+外部 Agent 执行批准范围
+    |
+    v
+Contribution Record（贡献记录）
+    |
+    v
+RD 展示完整历史
+```
 
-2. **生成语义图快照**（插件只读，从不构建）：
-   ```bash
-   python semantic-graph/projector.py <vault> -o <vault>/semantic-graph/graph.json
-   ```
+提案不是执行。批准不代表真相判断。贡献记录描述发生过什么，而不是证明什么正确。
 
-3. **打开工作区**——侧边栏图标 📚 或命令 *Open RD Workspace*。
-   查询精确的 `object_id`，或在中性快照列表中点击对象；
-   检查身份、溯源、谱系、关系。
+## 架构概览
 
-4. **可选——agent 工作流**：把技能
-   （`skills/rational-delirium-agent-skill.md`）交给你的 agent。
-   它向 `.proposals/` 提案；你在协作区审阅并决定；
-   它用自己的工具执行已批准范围，并向 `.contributions/` 记录。
+```text
+知识对象（Knowledge Object, KO）
+          |
+          v
+只读语义投影
+          |
+          v
+Rational Delirium 插件
+          |
+          +---- 知识工作区
+          +---- 图谱展示
+          +---- 协作面
+          +---- 人类决定记录
+
+外部 Agent 通过工件协作：
+.proposals/
+.contributions/
+```
+
+知识对象（KO）指带有身份、溯源和关系信息的笔记或知识工件。
+
+## 核心功能
+
+- **知识工作区** —— 查看身份、溯源、谱系、关系和上下文。
+- **语义图投影** —— 将声明关系确定性投影为只读知识图。
+- **协作面** —— 查看 Agent 提案、人类决定和贡献历史。
+- **人类决定记录** —— 明确记录批准或拒绝。
+- **Agent Skill 契约** —— 指导外部 Agent：提案、等待、执行批准范围、记录结果。
+- **主题系统** —— Rational Archive 视觉系统与语义化 UI。
+
+## 设计原则
+
+- **Knowledge ≠ Truth（知识 ≠ 真相）** —— 知识对象记录主张与溯源。
+- **Projection ≠ Authority（投影 ≠ 权威）** —— 出现在图中不代表正确。
+- **Agent Contribution ≠ Human Decision（Agent 贡献 ≠ 人类决定）** —— Agent 输出只是判断输入。
+- **Relationship ≠ Confidence（关系 ≠ 置信度）** —— 关系不携带评分或权重。
+- **Visibility ≠ Validation（可见 ≠ 已验证）** —— 展示不等于背书。
+
+没有真相评分，没有置信度排名，没有自动合并。
+
+## 五分钟快速开始
+
+### 普通 Obsidian 用户
+
+1. 安装 Rational Delirium 插件。
+2. 在 Obsidian 设置中启用插件。
+3. 打开 Rational Delirium 工作区。
+4. 查看知识对象、关系和工作流记录。
+
+### 从源码构建
+
+```bash
+git clone https://github.com/MkaliezZ/rational-delirium-ui
+cd rational-delirium-ui
+npm ci
+npm run build
+```
+
+将生成的插件文件复制到：
+
+```text
+<vault>/.obsidian/plugins/rational-delirium/
+```
 
 ## Agent 工作流示例
 
-完整的 MVP 生命周期（见
-[examples/agent-workflow-example.md](examples/agent-workflow-example.md)，
-虚构标识符）：
+1. Agent 阅读 RD Skill。
+2. Agent 检查知识对象。
+3. Agent 创建 Proposal。
+4. 人类在 Obsidian 中审核。
+5. Agent 仅执行批准范围外的实际操作。
+6. Agent 创建 Contribution Record。
+7. RD 展示完整链路。
+
+示例：
 
 ```text
-提案（agent）   ：ADD_RELATION——FICT-EVIDENCE-001 supports FICT-HYPOTHESIS-001
-决定（人类,在 Obsidian）：approved ← 记录的人类行为,
-                          非真相验证,非对 agent 的信任
-执行（agent,在 RD 外）：恰好添加声明的那一条关系
-记录（agent）   ：贡献记录 → 提案 id、决定、执行的操作、受影响对象
-展示（RD）      ：提案 → 决定 → 贡献 的完整链条
+提案：
+Evidence supports Hypothesis
+
+决定：
+Human Approved
+
+执行：
+External Agent 完成批准范围
+
+记录：
+Contribution Record 保存过程信息
 ```
 
-## 当前状态——已冻结（v1.10 检查点）
+## 当前状态——已冻结
 
-开发**暂停**，等待真实使用反馈
-（[冻结检查点](docs/RD_FREEZE_CHECKPOINT_V1_10.md)）。
+开发在验证里程碑完成后暂停。
 
 | 里程碑 | 状态 |
 | --- | --- |
-| v1.2.1 语义图投影 MVP | RELEASED |
-| v1.3.x 呈现设计 / 智能面 / 视觉系统 / 动效 | FROZEN |
-| v1.4–v1.5 协作与 Agent 工作流设计 | FROZEN |
-| v1.6.x 插件架构、主题系统、知识工作区、打磨 | FROZEN |
-| v1.7.x Agent 技能契约、工件、协作面 | FROZEN |
-| v1.8 人类批准 Agent 工作流（首条受控写路径） | FROZEN |
-| v1.9 Agent 技能工作流验证 | FROZEN |
-| v1.10 真实 Agent 使用验证（DSH,5/5 PASS） | PASSED → 项目暂停 |
+| v1.9 Agent Skill Workflow Validation | FROZEN |
+| v1.10 Real Agent Usage Validation（DSH 5/5 PASS） | PASSED |
 
-冻结时验证：434/434 测试全绿，tsc 干净，构建通过。
+冻结时验证：
+
+- 434/434 测试通过；
+- TypeScript 检查通过；
+- 构建通过。
 
 ## 局限
 
-出于设计，Rational Delirium **没有**：
+Rational Delirium 有意不提供：
 
-- Agent 运行时——RD 从不运行、调度或调用 agent
-- Agent 执行器——已批准的工作由外部 agent 用自己的工具完成
-- Agent 调度器 / 后台进程
-- 自动知识管理器——不自动组织、不自动晋升
-- 自主 vault 变异——插件唯一的写是对 `.proposals/*.md` 的人类决定记录
-- AI 裁判——没有真相评估、评分、排序或置信度
+- Agent 运行和调度；
+- AI 模型调用；
+- 替代人类判断；
+- 自动整理 Vault；
+- 自动判断真相；
+- 自主修改 Vault。
 
-暂停期政策：仅允许 bug 修复、文档修正与安全修复。
-重启需要真实使用反馈、明确的用户痛点或具体的验证需求。
+未来开发仅由真实使用反馈、明确用户痛点或具体验证需求触发。
 
-## 许可证
+## License
 
 [MIT](LICENSE)
