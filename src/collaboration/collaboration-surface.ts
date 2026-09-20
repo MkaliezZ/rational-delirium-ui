@@ -99,6 +99,38 @@ const EMPTY_TEXTS: Readonly<Record<import("./artifact-reader").ArtifactKind, str
   "organization-proposal": "No organization proposal records found.",
 });
 
+/** v1.7.4-B: honest explainer under each empty state. */
+const EMPTY_EXPLAINER =
+  "Artifact records appear here when agents create contribution or proposal records.";
+
+/** v1.7.4-B §1: what this area is — and is not. */
+function renderIntro(parent: HTMLElement): void {
+  const intro = createChild(parent, "div", { cls: "rdcol-intro" });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-line",
+    text:
+      "Collaboration displays contributions and proposals created by external agents.",
+  });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-line",
+    text:
+      "These records describe proposed work. They do not validate knowledge, " +
+      "approve changes, or modify the vault automatically.",
+  });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-principles",
+    text: "proposal ≠ approval · contribution ≠ truth · visibility ≠ validation",
+  });
+  // §2: statuses are recorded human actions, not truth states.
+  createChild(intro, "div", {
+    cls: "rdcol-intro-status",
+    text:
+      "Statuses (pending / approved / rejected / applied) record human actions — " +
+      "they are not system truth states: approved does not mean correct; " +
+      "applied does not mean verified.",
+  });
+}
+
 function metaLine(label: string, value: string | null): string {
   return `${label}: ${value ?? "not declared"}`;
 }
@@ -120,7 +152,7 @@ function renderRow(
   const tail = createChild(item, "div", { cls: "rdcol-row-tail" });
   const parts: string[] = [];
   if (row.target !== null) parts.push(`target: ${row.target}`);
-  if (row.status !== null) parts.push(`status: ${row.status} (descriptive)`);
+  if (row.status !== null) parts.push(`status: ${row.status} (recorded human action)`);
   if (row.relatedProposalId !== null) parts.push(`proposal: ${row.relatedProposalId}`);
   if (row.humanDecision !== null) parts.push(`decision: ${row.humanDecision}`);
   if (row.malformed) parts.push("⚠ flagged: malformed");
@@ -143,6 +175,7 @@ function renderSection(
     // Honest per-kind empty state; a missing artifact directory is
     // an absence of records, not an error and not a knowledge claim.
     createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
+    createChild(body, "div", { cls: "rdcol-empty-explain", text: EMPTY_EXPLAINER });
     createChild(body, "div", {
       cls: "rdcol-dir-state",
       text: `artifact directory state: ${dirState}`,
@@ -151,6 +184,7 @@ function renderSection(
   }
   if (rows.length === 0) {
     createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
+    createChild(body, "div", { cls: "rdcol-empty-explain", text: EMPTY_EXPLAINER });
     return;
   }
   for (const row of rows) renderRow(body, row, onSelect);
@@ -170,7 +204,9 @@ function renderDetail(parent: HTMLElement, detail: ArtifactDetail): void {
       : detail.metadata.targetObjectId],
     ["target type", detail.metadata.targetType],
     ["related proposal", detail.metadata.relatedProposalId],
-    ["status", detail.metadata.status !== null ? `${detail.metadata.status} (descriptive only)` : null],
+    ["status", detail.metadata.status !== null
+      ? `${detail.metadata.status} (recorded human action; not a truth state)`
+      : null],
     ["human decision", detail.metadata.humanDecision],
   ];
   for (const [label, value] of metaRows) {
@@ -184,21 +220,38 @@ function renderDetail(parent: HTMLElement, detail: ArtifactDetail): void {
       text: `⚠ flagged (shown, not hidden): ${detail.problems.join("; ")}`,
     });
   }
-  const SECTION_LABELS: readonly [string, string][] = [
-    ["Requested Change", "Requested / Proposed Change"],
-    ["Contribution Summary", "Contribution Summary"],
-    ["Observed Structure", "Observed Structure"],
-    ["Proposed Organization Change", "Proposed Organization Change"],
-    ["Evidence", "Evidence"],
-    ["Evidence Used", "Evidence Used"],
-    ["Change Description", "Change Description"],
-    ["Reasoning", "Reasoning"],
-    ["Expected Impact", "Expected Impact"],
-    ["Status", "Status"],
-    ["Human Decision", "Human Decision"],
-    ["History", "History (append-only)"],
-  ];
-  for (const [key, label] of SECTION_LABELS) {
+  // v1.7.4-B §3: per-kind reading order — Target/Metadata (the dl
+  // above) → Proposed Change → Evidence → Reasoning → Human
+  // Decision → History. Org proposals open with their observations
+  // before the suggested change (observation precedes suggestion).
+  const ORDERS: Readonly<Record<import("./artifact-reader").ArtifactKind,
+    readonly (readonly [string, string])[]>> = Object.freeze({
+    proposal: Object.freeze([
+      ["Requested Change", "Requested / Proposed Change"],
+      ["Evidence", "Evidence"],
+      ["Reasoning", "Reasoning"],
+      ["Expected Impact", "Expected Impact"],
+      ["Status", "Status (recorded human action)"],
+      ["History", "History (append-only)"],
+    ] as const),
+    contribution: Object.freeze([
+      ["Contribution Summary", "Contribution Summary"],
+      ["Change Description", "Change Description"],
+      ["Evidence Used", "Evidence Used"],
+      ["Human Decision", "Human Decision (recorded human action)"],
+      ["History", "History (append-only)"],
+    ] as const),
+    "organization-proposal": Object.freeze([
+      ["Observed Structure", "Observed Structure"],
+      ["Proposed Organization Change", "Proposed Organization Change"],
+      ["Evidence", "Evidence"],
+      ["Reasoning", "Reasoning"],
+      ["Expected Impact", "Expected Impact"],
+      ["Human Decision", "Human Decision (recorded human action)"],
+      ["History", "History (append-only)"],
+    ] as const),
+  });
+  for (const [key, label] of ORDERS[detail.kind]) {
     const body = detail.sections[key];
     if (body === undefined) continue;
     const sec = createChild(box, "details", { cls: "rdcol-detail-section" });
@@ -240,6 +293,7 @@ export function renderCollaboration(
     createChild(root, "div", { cls: "rdcol-empty", text: "loading artifact directories…" });
     return;
   }
+  renderIntro(root);
   renderSection(root, "Agent Contributions", state.model.contributions,
     state.model.dirs.contribution, EMPTY_TEXTS.contribution, handlers.onSelect);
   renderSection(root, "Proposals", state.model.proposals,

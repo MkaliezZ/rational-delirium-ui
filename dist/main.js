@@ -13888,6 +13888,26 @@ var EMPTY_TEXTS = Object.freeze({
   proposal: "No proposal records found.",
   "organization-proposal": "No organization proposal records found."
 });
+var EMPTY_EXPLAINER = "Artifact records appear here when agents create contribution or proposal records.";
+function renderIntro(parent) {
+  const intro = createChild(parent, "div", { cls: "rdcol-intro" });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-line",
+    text: "Collaboration displays contributions and proposals created by external agents."
+  });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-line",
+    text: "These records describe proposed work. They do not validate knowledge, approve changes, or modify the vault automatically."
+  });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-principles",
+    text: "proposal \u2260 approval \xB7 contribution \u2260 truth \xB7 visibility \u2260 validation"
+  });
+  createChild(intro, "div", {
+    cls: "rdcol-intro-status",
+    text: "Statuses (pending / approved / rejected / applied) record human actions \u2014 they are not system truth states: approved does not mean correct; applied does not mean verified."
+  });
+}
 function renderRow(list2, row, onSelect) {
   const item = createChild(list2, "button", { cls: "rdcol-row" });
   item.setAttribute("aria-label", `inspect ${row.id ?? row.path}`);
@@ -13899,7 +13919,7 @@ function renderRow(list2, row, onSelect) {
   const tail = createChild(item, "div", { cls: "rdcol-row-tail" });
   const parts = [];
   if (row.target !== null) parts.push(`target: ${row.target}`);
-  if (row.status !== null) parts.push(`status: ${row.status} (descriptive)`);
+  if (row.status !== null) parts.push(`status: ${row.status} (recorded human action)`);
   if (row.relatedProposalId !== null) parts.push(`proposal: ${row.relatedProposalId}`);
   if (row.humanDecision !== null) parts.push(`decision: ${row.humanDecision}`);
   if (row.malformed) parts.push("\u26A0 flagged: malformed");
@@ -13912,6 +13932,7 @@ function renderSection(parent, title, rows, dirState, emptyText, onSelect) {
   const body = createChild(details, "div", { cls: "rdcol-section-body" });
   if (dirState !== "available") {
     createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
+    createChild(body, "div", { cls: "rdcol-empty-explain", text: EMPTY_EXPLAINER });
     createChild(body, "div", {
       cls: "rdcol-dir-state",
       text: `artifact directory state: ${dirState}`
@@ -13920,6 +13941,7 @@ function renderSection(parent, title, rows, dirState, emptyText, onSelect) {
   }
   if (rows.length === 0) {
     createChild(body, "div", { cls: "rdcol-empty", text: emptyText });
+    createChild(body, "div", { cls: "rdcol-empty-explain", text: EMPTY_EXPLAINER });
     return;
   }
   for (const row of rows) renderRow(body, row, onSelect);
@@ -13934,7 +13956,7 @@ function renderDetail(parent, detail) {
     ["target", detail.kind === "organization-proposal" ? detail.metadata.targetScope : detail.metadata.targetObjectId],
     ["target type", detail.metadata.targetType],
     ["related proposal", detail.metadata.relatedProposalId],
-    ["status", detail.metadata.status !== null ? `${detail.metadata.status} (descriptive only)` : null],
+    ["status", detail.metadata.status !== null ? `${detail.metadata.status} (recorded human action; not a truth state)` : null],
     ["human decision", detail.metadata.humanDecision]
   ];
   for (const [label, value] of metaRows) {
@@ -13948,21 +13970,33 @@ function renderDetail(parent, detail) {
       text: `\u26A0 flagged (shown, not hidden): ${detail.problems.join("; ")}`
     });
   }
-  const SECTION_LABELS = [
-    ["Requested Change", "Requested / Proposed Change"],
-    ["Contribution Summary", "Contribution Summary"],
-    ["Observed Structure", "Observed Structure"],
-    ["Proposed Organization Change", "Proposed Organization Change"],
-    ["Evidence", "Evidence"],
-    ["Evidence Used", "Evidence Used"],
-    ["Change Description", "Change Description"],
-    ["Reasoning", "Reasoning"],
-    ["Expected Impact", "Expected Impact"],
-    ["Status", "Status"],
-    ["Human Decision", "Human Decision"],
-    ["History", "History (append-only)"]
-  ];
-  for (const [key, label] of SECTION_LABELS) {
+  const ORDERS = Object.freeze({
+    proposal: Object.freeze([
+      ["Requested Change", "Requested / Proposed Change"],
+      ["Evidence", "Evidence"],
+      ["Reasoning", "Reasoning"],
+      ["Expected Impact", "Expected Impact"],
+      ["Status", "Status (recorded human action)"],
+      ["History", "History (append-only)"]
+    ]),
+    contribution: Object.freeze([
+      ["Contribution Summary", "Contribution Summary"],
+      ["Change Description", "Change Description"],
+      ["Evidence Used", "Evidence Used"],
+      ["Human Decision", "Human Decision (recorded human action)"],
+      ["History", "History (append-only)"]
+    ]),
+    "organization-proposal": Object.freeze([
+      ["Observed Structure", "Observed Structure"],
+      ["Proposed Organization Change", "Proposed Organization Change"],
+      ["Evidence", "Evidence"],
+      ["Reasoning", "Reasoning"],
+      ["Expected Impact", "Expected Impact"],
+      ["Human Decision", "Human Decision (recorded human action)"],
+      ["History", "History (append-only)"]
+    ])
+  });
+  for (const [key, label] of ORDERS[detail.kind]) {
     const body = detail.sections[key];
     if (body === void 0) continue;
     const sec = createChild(box, "details", { cls: "rdcol-detail-section" });
@@ -13989,6 +14023,7 @@ function renderCollaboration(container, state, detail, handlers) {
     createChild(root, "div", { cls: "rdcol-empty", text: "loading artifact directories\u2026" });
     return;
   }
+  renderIntro(root);
   renderSection(
     root,
     "Agent Contributions",

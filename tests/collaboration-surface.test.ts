@@ -361,3 +361,111 @@ describe("v1.7.4-A read-only boundary", () => {
     }
   });
 });
+
+describe("v1.7.4-B usability polish", () => {
+  it("introduction appears with the three boundary principles and no AI wording", async () => {
+    const browser = new CollaborationBrowser();
+    await browser.refresh(fullSource);
+    const host = document.createElement("div");
+    renderCollaboration(host, browser.getState(), null, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    const intro = host.querySelector(".rdcol-intro");
+    expect(intro).not.toBeNull();
+    const text = (intro as HTMLElement).textContent ?? "";
+    expect(text).toContain("contributions and proposals created by external agents");
+    expect(text).toContain("describe proposed work");
+    expect(text).toContain("proposal ≠ approval");
+    expect(text).toContain("contribution ≠ truth");
+    expect(text).toContain("visibility ≠ validation");
+    expect(text).toContain("record human actions");
+    expect(text).toContain("not system truth states");
+    expect(text).toContain("approved does not mean correct");
+    expect(text).toContain("applied does not mean verified");
+    for (const banned of ["intelligence", "confidence", "ranking", "recommend"]) {
+      expect(text.toLowerCase()).not.toContain(banned);
+    }
+  });
+
+  it("status wording marks recorded human action in rows and detail", async () => {
+    const browser = new CollaborationBrowser();
+    await browser.refresh(fullSource);
+    const host = document.createElement("div");
+    renderCollaboration(host, browser.getState(), null, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    expect(host.textContent).toContain("status: approved (recorded human action)");
+    const detail = await loadArtifactDetail(fullSource, "proposal", `${PROPOSALS_DIR}/prop-002.md`);
+    if (detail === null) throw new Error("detail must load");
+    const host2 = document.createElement("div");
+    browser.select("proposal", `${PROPOSALS_DIR}/prop-002.md`);
+    renderCollaboration(host2, browser.getState(), detail, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    expect(host2.textContent).toContain("approved (recorded human action; not a truth state)");
+  });
+
+  it("empty states explain where records come from, without failure wording", async () => {
+    const browser = new CollaborationBrowser();
+    await browser.refresh(source({}));
+    const host = document.createElement("div");
+    renderCollaboration(host, browser.getState(), null, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    const text = host.textContent ?? "";
+    expect((text.match(/Artifact records appear here when agents create contribution or proposal records\./g) ?? []).length).toBe(3);
+    for (const banned of ["vault is empty", "knowledge is missing", "failed", "error"]) {
+      expect(text.toLowerCase()).not.toContain(banned);
+    }
+  });
+
+  it("detail sections follow the per-kind reading order", async () => {
+    const orderOf = (host: HTMLElement): string[] =>
+      [...host.querySelectorAll(".rdcol-detail-section > summary")].map((s) => s.textContent ?? "");
+    const browser = new CollaborationBrowser();
+
+    const prop = await loadArtifactDetail(fullSource, "proposal", `${PROPOSALS_DIR}/prop-001.md`);
+    if (prop === null) throw new Error();
+    let host = document.createElement("div");
+    browser.select("proposal", `${PROPOSALS_DIR}/prop-001.md`);
+    renderCollaboration(host, browser.getState(), prop, { onSelect: () => undefined, onBack: () => undefined });
+    expect(orderOf(host)).toEqual([
+      "Requested / Proposed Change", "Evidence", "Reasoning",
+      "Expected Impact", "Status (recorded human action)", "History (append-only)",
+    ]);
+
+    const contrib = await loadArtifactDetail(fullSource, "contribution", `${CONTRIBUTIONS_DIR}/contrib-001.md`);
+    if (contrib === null) throw new Error();
+    host = document.createElement("div");
+    browser.select("contribution", `${CONTRIBUTIONS_DIR}/contrib-001.md`);
+    renderCollaboration(host, browser.getState(), contrib, { onSelect: () => undefined, onBack: () => undefined });
+    expect(orderOf(host)).toEqual([
+      "Contribution Summary", "Change Description", "Evidence Used",
+      "Human Decision (recorded human action)", "History (append-only)",
+    ]);
+
+    const org = await loadArtifactDetail(fullSource, "organization-proposal", `${ORGANIZATION_PROPOSALS_DIR}/orgprop-001.md`);
+    if (org === null) throw new Error();
+    host = document.createElement("div");
+    browser.select("organization-proposal", `${ORGANIZATION_PROPOSALS_DIR}/orgprop-001.md`);
+    renderCollaboration(host, browser.getState(), org, { onSelect: () => undefined, onBack: () => undefined });
+    expect(orderOf(host)).toEqual([
+      "Observed Structure", "Proposed Organization Change", "Evidence",
+      "Reasoning", "Expected Impact", "Human Decision (recorded human action)",
+      "History (append-only)",
+    ]);
+  });
+
+  it("polish adds no action controls: intro and status notes are text only", async () => {
+    const browser = new CollaborationBrowser();
+    await browser.refresh(fullSource);
+    const host = document.createElement("div");
+    renderCollaboration(host, browser.getState(), null, {
+      onSelect: () => undefined, onBack: () => undefined,
+    });
+    const buttons = [...host.querySelectorAll("button")];
+    for (const b of buttons) {
+      expect(b.classList.contains("rdcol-row")).toBe(true); // rows only
+    }
+  });
+});
