@@ -481,22 +481,28 @@ export class RDWorkspaceShellView extends ItemView {
 
     // Dossier head: context eyebrow → serif display title → exact
     // identity line → descriptive strip. Every value is declared
-    // data; the strip describes, it never scores.
+    // data; the strip describes, it never scores. Presentation band:
+    // the identity block sits left; a decorative archive mark sits
+    // right (aria-hidden, purely ornamental, carries no meaning).
     const dossier = createChild(host, "header", { cls: "rdws-dossier" });
-    createChild(dossier, "div", {
+    const head = createChild(dossier, "div", { cls: "rdws-dossier-head" });
+    createChild(head, "div", {
       cls: "rdws-dossier-eyebrow",
       text: node !== undefined
         ? `Knowledge Object · ${node.kind} (declared classification)`
         : "Knowledge Object · not in snapshot",
     });
-    createChild(dossier, "h2", {
+    createChild(head, "h2", {
       cls: "rdws-ko-title",
       text: node !== undefined && node.title !== "" ? node.title : selected,
     });
-    const idLine = createChild(dossier, "div", { cls: "rdws-ko-identity" });
+    const idLine = createChild(head, "div", { cls: "rdws-ko-identity" });
     idLine.textContent = node !== undefined
       ? `${node.object_id} · ${node.status} (declared lifecycle; not a validity badge)`
       : `${selected} · not in snapshot (declared data unavailable here)`;
+    const mark = createChild(dossier, "div", { cls: "rdws-dossier-mark" });
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = "§";
 
     // Identity strip — horizontal, monospace, hairline-ruled. Real
     // fields only: kind, lifecycle, snapshot, source read, declared
@@ -552,12 +558,15 @@ export class RDWorkspaceShellView extends ItemView {
       // the panel composes the reading content beneath it.
       composedInDossier: true,
     });
-    createChild(host, "div", {
-      cls: "rdws-reading-note",
+    // Colophon: the honesty note on the left, the exact object id on
+    // the right — an archival footer for the dossier page.
+    const note = createChild(host, "div", { cls: "rdws-reading-note" });
+    createChild(note, "span", {
       text:
         "declared data only — projection eligibility is not Knowledge Object validity; " +
         "no ranking, no recommendation",
     });
+    createChild(note, "span", { cls: "rdws-reading-note-id", text: selected });
   }
 
   /** CENTER — the desk home when nothing is selected. */

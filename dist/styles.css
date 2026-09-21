@@ -1987,3 +1987,258 @@
   dd[data-state="not_loaded"] {
   color: var(--rd-identity-meta-text, #A19C92);
 }
+
+/* ============================================================
+   RD Case Dossier — visual fidelity pass (Kimi)
+   Presentation only — no DOM contract changes live here. The
+   dossier reads closer to the archival case-file art direction:
+   an editorial head with a decorative archive mark, mono
+   small-cap section labels with a long rule, provenance as a
+   two-column layer grid with a full-width conclusion band,
+   relations as a ruled cross-reference ledger, an index-marked
+   left rail, a label/value inspector, and a colophon footer.
+   Every color rides a semantic token (var fallback form); no new
+   palette, no loops, no new keyframes.
+   ============================================================ */
+
+/* Reading measure — the dossier dominates the center plane; a
+   barely-there archival light falls on the page (radial, token
+   hue at trace opacity). */
+.rd-workspace-shell .rdws-reading { max-width: 1040px; }
+.rd-workspace-shell .rdws-plane-center {
+  padding-left: 40px;
+  padding-right: 40px;
+  background: radial-gradient(1000px 600px at 28% 0%, rgba(216, 200, 157, 0.03), rgba(0, 0, 0, 0) 55%);
+}
+
+/* Dossier head — editorial band: declared identity on the left,
+   a faint archive mark on the right (decorative only); the
+   identity strip keeps its full-width ruled row below. */
+.rd-workspace-shell .rdws-dossier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  column-gap: 32px;
+}
+.rd-workspace-shell .rdws-dossier-head { flex: 1 1 auto; min-width: 0; }
+.rd-workspace-shell .rdws-dossier .rdws-identity-strip { flex: 1 1 100%; }
+.rd-workspace-shell .rdws-dossier-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  font-family: var(--rd-font-serif);
+  font-size: 120px;
+  line-height: 96px;
+  color: rgba(216, 200, 157, 0.08);
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+/* Display-scale dossier title (an additional, more specific rule;
+   the Phase 1 30/38 declaration above stays in place). */
+.rd-workspace-shell .rdws-reading .rdws-dossier .rdws-ko-title {
+  font-size: 40px;
+  line-height: 48px;
+  margin: 10px 0 6px 0;
+}
+
+/* Section labels — mono small caps with the § marker (the pinned
+   content rule above is unchanged) and a long hairline running to
+   the right edge, like an archival index heading. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel details {
+  border-top: none;
+  margin-top: 26px;
+  padding-top: 0;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--rd-identity-rule, #34322D);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel details:not([open]) > .rdkp-section-title {
+  color: var(--rd-identity-meta-text, #77736B);
+}
+
+/* Provenance — two-column layer grid; the conclusion spans both
+   columns as an editorial band ruled top and bottom. The evidence
+   layer sits on a faint raised block, denser than the prose
+   layers. Declared text keeps its pinned italic excerpt style. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-section-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 36px;
+  row-gap: 20px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-source-label,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-consistency {
+  grid-column: 1 / -1;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-layer {
+  margin: 0;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="evidence"] {
+  background: var(--rd-surface-raised, #1D1C19);
+  padding: 10px 14px 12px 14px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"] {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"][data-state="available"] .rdkp-layer-text {
+  font-size: 17px;
+  line-height: 28px;
+}
+
+/* Relations — an archival cross-reference ledger: ruled rows on a
+   shared baseline; the relation type is a small mono label, the
+   direction stays quiet, the declaration keeps the measure, and
+   the endpoint state sits at the right edge. Every string is the
+   declared text, unchanged. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-relation-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  column-gap: 12px;
+  row-gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 4px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-type-label + .rdkp-relation-row,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-type-label + .rdkp-unresolved {
+  border-top: none;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-type {
+  flex: 0 0 96px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-dir {
+  flex: 0 0 76px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-path {
+  flex: 1 1 auto;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-rel-endpoint {
+  flex: 0 0 auto;
+  text-align: right;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-unresolved {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 4px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* Left archive index — kind headings carry the name left and the
+   count right; a tiny outline-square index mark precedes each id
+   (filled for the current selection). Pure decoration; the row
+   anatomy and its pinned rhythm are unchanged. */
+.rd-workspace-shell .rdws-nav-kind { justify-content: space-between; }
+.rd-workspace-shell .rdws-object-row {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.rd-workspace-shell .rdws-object-row-meta { font-size: 11px; }
+.rd-workspace-shell .rdws-object-row-id::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  vertical-align: baseline;
+}
+.rd-workspace-shell .rdws-object-row[aria-pressed="true"] .rdws-object-row-id::before {
+  background: var(--rd-surface-focus-rule, #D8C89D);
+  border-color: var(--rd-surface-focus-rule, #D8C89D);
+}
+
+/* Inspector — archival properties: label left, value right, ruled
+   rows; linked objects stack type over id like ledger entries. */
+.rd-workspace-shell .rdws-insp-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 16px;
+  align-items: baseline;
+}
+.rd-workspace-shell .rdws-insp-meta dt {
+  margin-top: 0;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-insp-meta dd {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+  text-align: right;
+}
+.rd-workspace-shell .rdws-link-row {
+  display: block;
+  padding: 7px 6px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-insp-group .rdws-insp-label + .rdws-link-row {
+  border-top: none;
+}
+.rd-workspace-shell .rdws-link-type {
+  display: block;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rd-workspace-shell .rdws-link-id { display: block; }
+.rd-workspace-shell .rdws-link-state { display: block; }
+
+/* Colophon — the honesty note on the left, the exact object id on
+   the right; the dossier page ends like an archival record. */
+.rd-workspace-shell .rdws-reading-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 16px;
+  row-gap: 2px;
+  margin-top: 28px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-reading-note-id {
+  flex: 0 0 auto;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.1em;
+  color: var(--rd-identity-meta-text, #77736B);
+}
+
+/* Narrow — one column, compact title (matching the pinned narrow
+   scale), the archive mark steps aside. */
+.rd-workspace-shell.rdws-narrow .rdws-reading .rdws-dossier .rdws-ko-title {
+  font-size: 26px;
+  line-height: 34px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-dossier-mark { display: none; }
+.rd-workspace-shell.rdws-narrow .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-section-body {
+  grid-template-columns: 1fr;
+}

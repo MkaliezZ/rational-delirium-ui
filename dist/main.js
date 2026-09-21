@@ -15604,16 +15604,20 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     const node2 = graph.nodes.find((n) => n.object_id === selected);
     const host = createChild(center, "div", { cls: "rdws-reading" });
     const dossier = createChild(host, "header", { cls: "rdws-dossier" });
-    createChild(dossier, "div", {
+    const head = createChild(dossier, "div", { cls: "rdws-dossier-head" });
+    createChild(head, "div", {
       cls: "rdws-dossier-eyebrow",
       text: node2 !== void 0 ? `Knowledge Object \xB7 ${node2.kind} (declared classification)` : "Knowledge Object \xB7 not in snapshot"
     });
-    createChild(dossier, "h2", {
+    createChild(head, "h2", {
       cls: "rdws-ko-title",
       text: node2 !== void 0 && node2.title !== "" ? node2.title : selected
     });
-    const idLine = createChild(dossier, "div", { cls: "rdws-ko-identity" });
+    const idLine = createChild(head, "div", { cls: "rdws-ko-identity" });
     idLine.textContent = node2 !== void 0 ? `${node2.object_id} \xB7 ${node2.status} (declared lifecycle; not a validity badge)` : `${selected} \xB7 not in snapshot (declared data unavailable here)`;
+    const mark = createChild(dossier, "div", { cls: "rdws-dossier-mark" });
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = "\xA7";
     const strip = createChild(dossier, "dl", { cls: "rdws-identity-strip" });
     const stripItem = (label, text3, state) => {
       const item = createChild(strip, "div", { cls: "rdws-strip-item" });
@@ -15660,10 +15664,11 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
       // the panel composes the reading content beneath it.
       composedInDossier: true
     });
-    createChild(host, "div", {
-      cls: "rdws-reading-note",
+    const note = createChild(host, "div", { cls: "rdws-reading-note" });
+    createChild(note, "span", {
       text: "declared data only \u2014 projection eligibility is not Knowledge Object validity; no ranking, no recommendation"
     });
+    createChild(note, "span", { cls: "rdws-reading-note-id", text: selected });
   }
   /** CENTER — the desk home when nothing is selected. */
   renderDeskHome(center) {
