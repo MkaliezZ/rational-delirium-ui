@@ -548,6 +548,9 @@ export class RDWorkspaceShellView extends ItemView {
       onSelectObject: (objectId) => {
         this.deps.store.setSelectedObject(objectId);
       },
+      // Phase 2.2: the dossier shell carries scope/status/identity;
+      // the panel composes the reading content beneath it.
+      composedInDossier: true,
     });
     createChild(host, "div", {
       cls: "rdws-reading-note",
