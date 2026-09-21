@@ -15230,7 +15230,15 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     super(leaf);
     this.unsubscribe = null;
     this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
+    /** Source-read ownership (review fix): a resolved detail belongs
+     * to exactly one object id; reads carry a generation token so a
+     * late completion from an older selection can never apply, and a
+     * stable selection is read at most once (rerenders reuse the
+     * completed detail instead of rereading). */
     this.sourceDetail = void 0;
+    this.sourceDetailObjectId = null;
+    this.sourceReadInFlightFor = null;
+    this.sourceReadToken = 0;
     this.observer = null;
     this.mode = "investigation";
     this.browser = new CollaborationBrowser();
@@ -15375,11 +15383,32 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
       });
     }
   }
-  async resolveSourceAndRender(objectId) {
-    if (this.deps.sourceReader === void 0) return;
-    const detail = await this.deps.sourceReader.resolve(objectId);
-    this.sourceDetail = detail;
-    this.renderBody();
+  /** Source detail usable ONLY for the object it was read for. A
+   * detail that belongs to another object is never reused — B
+   * never displays A's provenance (declared-data boundary). */
+  sourceDetailFor(objectId) {
+    return this.sourceDetailObjectId === objectId ? this.sourceDetail : void 0;
+  }
+  /** One source read per selection change. Rerenders of the same
+   * selection reuse the completed detail; a read in flight for the
+   * same object is not duplicated; a completion superseded by a
+   * newer selection's read is dropped. No timers, no retries —
+   * state ownership only. Explicit future reread actions may call
+   * this again after ownership changes. */
+  ensureSourceDetail(objectId) {
+    const reader = this.deps.sourceReader;
+    if (reader === void 0) return;
+    if (this.sourceDetailObjectId === objectId && this.sourceDetail !== void 0) return;
+    if (this.sourceReadInFlightFor === objectId) return;
+    this.sourceReadInFlightFor = objectId;
+    const token = ++this.sourceReadToken;
+    void reader.resolve(objectId).then((detail) => {
+      if (this.sourceReadInFlightFor === objectId) this.sourceReadInFlightFor = null;
+      if (token !== this.sourceReadToken) return;
+      this.sourceDetail = detail;
+      this.sourceDetailObjectId = objectId;
+      this.renderBody();
+    });
   }
   /** Enter collaboration mode focused on one proposal (from the
    * review-attention list). Explicit navigation, read-only. */
@@ -15428,7 +15457,7 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     }
     if (this.graphLoad.state === "available" && state.selectedObjectId !== null) {
       this.renderReading(center, state.selectedObjectId);
-      void this.resolveSourceAndRender(state.selectedObjectId);
+      this.ensureSourceDetail(state.selectedObjectId);
     } else {
       this.renderDeskHome(center);
     }
@@ -15555,11 +15584,11 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     if (node2 !== void 0) {
       stripItem("kind", node2.kind);
       stripItem("lifecycle", node2.status);
-      stripItem("snapshot", "declared (freshness unverified)");
+      stripItem("snapshot", "derived projection \xB7 freshness unverified");
       const relationCount = graph.edges.filter((e) => e.source === selected || e.target === selected).length;
       const unresolvedCount = graph.unresolved.filter((e) => e.source === selected || e.target === selected).length;
       stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` \xB7 ${unresolvedCount} unresolved` : ""}`);
-      const source = this.sourceDetail;
+      const source = this.sourceDetailFor(selected);
       if (source !== void 0 && source.state === "available") {
         stripItem("source", "resolved \xB7 current-source read", "available");
         const p = source.frontmatter.provenance;
@@ -15581,7 +15610,7 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
       load: this.graphLoad,
       workspace: this.deps.store.getState().workspaceLabel,
       objectId: selected,
-      sourceDetail: this.sourceDetail
+      sourceDetail: this.sourceDetailFor(selected)
     });
     renderKnowledgePanel(reading, model, {
       onSelectObject: (objectId) => {

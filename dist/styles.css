@@ -1096,7 +1096,7 @@
   padding: 8px 20px;
   border-bottom: 1px solid var(--rd-surface-rule, #34322D);
 }
-.rd-workspace-shell .rdws-statusline[data-state="missing"] .rdws-statusline,
+.rd-workspace-shell .rdws-statusline[data-state="missing"],
 .rd-workspace-shell .rdws-statusline[data-state="invalid"],
 .rd-workspace-shell .rdws-statusline[data-state="unavailable"] {
   color: var(--rd-availability-missing-text, #D0B77C);
