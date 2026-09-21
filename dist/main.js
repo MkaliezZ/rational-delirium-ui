@@ -13386,16 +13386,21 @@ function section(parent, cls, title, open) {
 }
 function renderKnowledgePanel(container, model, options) {
   emptyEl(container);
-  const root = createChild(container, "div", { cls: "rd-knowledge-panel" });
-  const head = createChild(root, "div", { cls: "rdkp-head" });
-  createChild(head, "span", { cls: "rdkp-scope", text: `workspace: ${model.workspace}` });
-  createChild(head, "span", {
-    cls: "rdkp-snapshot-state",
-    text: `snapshot: ${model.snapshotState}`
+  const composed = options?.composedInDossier === true;
+  const root = createChild(container, "div", {
+    cls: composed ? "rd-knowledge-panel rdkp-composed" : "rd-knowledge-panel"
   });
-  createChild(root, "div", { cls: "rdkp-message", text: model.snapshotMessage });
-  if (model.queryObjectId !== null) {
-    createChild(root, "div", { cls: "rdkp-query", text: `query: ${model.queryObjectId}` });
+  if (!composed) {
+    const head = createChild(root, "div", { cls: "rdkp-head" });
+    createChild(head, "span", { cls: "rdkp-scope", text: `workspace: ${model.workspace}` });
+    createChild(head, "span", {
+      cls: "rdkp-snapshot-state",
+      text: `snapshot: ${model.snapshotState}`
+    });
+    createChild(root, "div", { cls: "rdkp-message", text: model.snapshotMessage });
+    if (model.queryObjectId !== null) {
+      createChild(root, "div", { cls: "rdkp-query", text: `query: ${model.queryObjectId}` });
+    }
   }
   if (model.resolveState === "missing") {
     createChild(root, "div", {
@@ -13408,14 +13413,6 @@ function renderKnowledgePanel(container, model, options) {
       text: `object: AMBIGUOUS (${model.ambiguousMatches.length} matches: ${model.ambiguousMatches.join(", ")}) \u2014 no silent selection`
     });
   }
-  if (model.fields.length > 0) {
-    const list2 = createChild(root, "dl", { cls: "rdkp-fields" });
-    for (const f of model.fields) {
-      createChild(list2, "dt", { text: f.label });
-      const dd = createChild(list2, "dd", { text: f.text });
-      dd.setAttribute("data-state", f.state);
-    }
-  }
   if (model.provenance !== null) {
     const prov = section(root, "rdkp-provenance", "Provenance (declared, four layers)", true);
     createChild(prov, "div", { cls: "rdkp-source-label", text: model.provenance.sourceLabel });
@@ -13425,17 +13422,75 @@ function renderKnowledgePanel(container, model, options) {
       const line = createChild(prov, "div", { cls: "rdkp-layer" });
       line.setAttribute("data-state", l.state);
       line.setAttribute("data-layer", l.label.toLowerCase());
-      const head2 = createChild(line, "div", { cls: "rdkp-layer-head" });
-      createChild(head2, "span", {
+      const head = createChild(line, "div", { cls: "rdkp-layer-head" });
+      createChild(head, "span", {
         cls: "rdkp-layer-marker",
         text: String(layerIndex).padStart(2, "0")
       });
-      createChild(head2, "span", { cls: "rdkp-layer-label", text: l.label });
-      createChild(head2, "span", { cls: "rdkp-layer-state", text: l.state });
+      createChild(head, "span", { cls: "rdkp-layer-label", text: l.label });
+      createChild(head, "span", { cls: "rdkp-layer-state", text: l.state });
       createChild(line, "div", { cls: "rdkp-layer-text", text: l.text });
     }
     for (const c of model.provenance.consistency) {
       createChild(prov, "div", { cls: "rdkp-consistency", text: c });
+    }
+  }
+  const rel = section(
+    root,
+    "rdkp-relations",
+    `Relations (${model.relations.length} declared; snapshot counts only)`,
+    true
+  );
+  if (model.relations.length === 0 && model.unresolvedFrom.length === 0) {
+    createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
+  } else {
+    const groups = /* @__PURE__ */ new Map();
+    for (const row of model.relations) {
+      const list2 = groups.get(row.edge.relation) ?? [];
+      list2.push(row);
+      groups.set(row.edge.relation, list2);
+    }
+    for (const relationType of [...groups.keys()].sort((a, b) => a.localeCompare(b))) {
+      const groupEl = createChild(rel, "div", { cls: "rdkp-rel-group" });
+      groupEl.setAttribute("data-relation", relationType);
+      createChild(groupEl, "div", { cls: "rdkp-rel-type-label", text: relationType });
+      for (const row of groups.get(relationType) ?? []) {
+        const navigate = options?.onSelectObject;
+        const line = navigate === void 0 ? createChild(groupEl, "div", { cls: "rdkp-relation-row" }) : createChild(groupEl, "button", { cls: "rdkp-relation-row rdkp-nav" });
+        line.setAttribute("data-direction", row.direction);
+        line.setAttribute("data-endpoint", row.endpointState);
+        line.setAttribute("data-relation", row.edge.relation);
+        if (navigate !== void 0) {
+          line.setAttribute("aria-label", `inspect ${row.otherId}`);
+          line.addEventListener("click", () => navigate(row.otherId));
+        }
+        createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
+        createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
+        createChild(line, "span", {
+          cls: "rdkp-rel-path",
+          text: `source: ${row.edge.source} \u2192 target: ${row.edge.target}`
+        });
+        createChild(line, "span", {
+          cls: "rdkp-rel-endpoint",
+          text: `[endpoint: ${row.endpointState}]`
+        });
+      }
+    }
+    if (model.unresolvedFrom.length > 0) {
+      const unresolvedGroup = createChild(rel, "div", { cls: "rdkp-rel-group rdkp-rel-unresolved" });
+      createChild(unresolvedGroup, "div", {
+        cls: "rdkp-rel-type-label",
+        text: "unresolved declarations"
+      });
+      for (const u of model.unresolvedFrom) {
+        const navigate = options?.onSelectObject;
+        const line = navigate === void 0 ? createChild(unresolvedGroup, "div", { cls: "rdkp-unresolved" }) : createChild(unresolvedGroup, "button", { cls: "rdkp-unresolved rdkp-nav" });
+        if (navigate !== void 0) {
+          line.setAttribute("aria-label", `inspect ${u.target}`);
+          line.addEventListener("click", () => navigate(u.target));
+        }
+        line.textContent = `unresolved declaration: ${u.relation} \u2192 ${u.target} (target not in snapshot)`;
+      }
     }
   }
   if (model.lineage !== null) {
@@ -13469,45 +13524,14 @@ function renderKnowledgePanel(container, model, options) {
       createChild(lin, "div", { cls: "rdkp-lineage-note", text: `note: ${n}` });
     }
   }
-  const rel = section(
-    root,
-    "rdkp-relations",
-    `Relations (${model.relations.length} declared; snapshot counts only)`,
-    true
-  );
-  if (model.relations.length === 0) {
-    createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
-  } else {
-    for (const row of model.relations) {
-      const navigate = options?.onSelectObject;
-      const line = navigate === void 0 ? createChild(rel, "div", { cls: "rdkp-relation-row" }) : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
-      line.setAttribute("data-direction", row.direction);
-      line.setAttribute("data-endpoint", row.endpointState);
-      line.setAttribute("data-relation", row.edge.relation);
-      if (navigate !== void 0) {
-        line.setAttribute("aria-label", `inspect ${row.otherId}`);
-        line.addEventListener("click", () => navigate(row.otherId));
-      }
-      createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
-      createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
-      createChild(line, "span", {
-        cls: "rdkp-rel-path",
-        text: `source: ${row.edge.source} \u2192 target: ${row.edge.target}`
-      });
-      createChild(line, "span", {
-        cls: "rdkp-rel-endpoint",
-        text: `[endpoint: ${row.endpointState}]`
-      });
+  if (model.fields.length > 0) {
+    const record = section(root, "rdkp-record", "Declared record (exact declared values)", false);
+    const list2 = createChild(record, "dl", { cls: "rdkp-fields" });
+    for (const f of model.fields) {
+      createChild(list2, "dt", { text: f.label });
+      const dd = createChild(list2, "dd", { text: f.text });
+      dd.setAttribute("data-state", f.state);
     }
-  }
-  for (const u of model.unresolvedFrom) {
-    const navigate = options?.onSelectObject;
-    const line = navigate === void 0 ? createChild(rel, "div", { cls: "rdkp-unresolved" }) : createChild(rel, "button", { cls: "rdkp-unresolved rdkp-nav" });
-    if (navigate !== void 0) {
-      line.setAttribute("aria-label", `inspect ${u.target}`);
-      line.addEventListener("click", () => navigate(u.target));
-    }
-    line.textContent = `unresolved declaration: ${u.relation} \u2192 ${u.target} (target not in snapshot)`;
   }
   if (model.diagnosticsGroups !== null) {
     const diag = section(root, "rdkp-diagnostics", "Diagnostics (observations, not repair requests)", false);
@@ -15631,7 +15655,10 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     renderKnowledgePanel(reading, model, {
       onSelectObject: (objectId) => {
         this.deps.store.setSelectedObject(objectId);
-      }
+      },
+      // Phase 2.2: the dossier shell carries scope/status/identity;
+      // the panel composes the reading content beneath it.
+      composedInDossier: true
     });
     createChild(host, "div", {
       cls: "rdws-reading-note",

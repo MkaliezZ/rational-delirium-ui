@@ -1906,3 +1906,84 @@
 }
 .rd-workspace-shell.rdws-narrow .rdws-dossier { margin-bottom: 12px; }
 .rd-workspace-shell.rdws-narrow .rdws-reading-inner { margin-top: 16px; }
+
+/* ============================================================
+   RD Product Surface Refactor Phase 2.2 — case dossier content
+   composition. Root-cause fix: Obsidian gives every <button> a
+   FIXED height (30px input height) with visible overflow, so RD
+   buttons whose text wraps painted past the button rectangle —
+   the wrapped left-nav title collided with the next kind heading
+   while row-rect checks still passed. Every RD row button now
+   owns its full content height. Then: the central dossier reads
+   as content — provenance prose rhythm, relation groups, the raw
+   declared record folded secondary.
+   ============================================================ */
+
+/* Left archive index — button height ownership (root cause).
+   Wrapped titles now contribute to the row's real height. */
+.rd-workspace-shell .rdws-object-row,
+.rd-workspace-shell .rdws-surface-row,
+.rd-workspace-shell .rdws-link-row,
+.rd-workspace-shell .rdws-review-row,
+.rd-workspace-shell .rdws-contrib-row,
+.rd-workspace-shell .rdws-button,
+.rd-knowledge-panel .rdkp-nav,
+.rd-knowledge-panel .rdkp-relation-row,
+.rd-knowledge-panel .rdkp-lineage-row,
+.rd-knowledge-panel .rdkp-unresolved {
+  height: auto;
+  min-height: 0;
+}
+
+/* Dossier provenance — the reading rhythm. The layer head (number,
+   label, state) is quiet and subordinate; the declared prose
+   breathes as the main reading content of the case file. */
+.rd-workspace-shell .rdws-reading .rdkp-provenance { margin-top: 4px; }
+.rd-workspace-shell .rdws-reading .rdkp-source-label { margin-bottom: 14px; }
+.rd-workspace-shell .rdws-reading .rdkp-layer { margin: 0 0 20px 0; }
+.rd-workspace-shell .rdws-reading .rdkp-layer-head { margin-bottom: 6px; }
+.rd-knowledge-panel .rdkp-layer[data-state="available"] .rdkp-layer-text {
+  font-size: 16px;
+  line-height: 26px;
+  padding-left: 14px;
+}
+
+/* Relation groups — a group is an archival index of declarations:
+   quiet mono type label, rows beneath. contradicts keeps only the
+   restrained conflict accent on its label. */
+.rd-knowledge-panel .rdkp-rel-group { margin: 0 0 14px 0; }
+.rd-knowledge-panel .rdkp-rel-type-label {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rd-relation-type-text, #D0B77C);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-knowledge-panel .rdkp-rel-group[data-relation="contradicts"] .rdkp-rel-type-label {
+  color: var(--rd-conflict-marker-text, #C78683);
+}
+.rd-knowledge-panel .rdkp-rel-unresolved .rdkp-rel-type-label {
+  color: var(--rd-relation-unresolved-text, #D0B77C);
+}
+
+/* Declared record — exact raw values, deliberately secondary:
+   compact monospace inside a folded block. Nothing is removed;
+   the record simply stops competing with the reading content. */
+.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dt {
+  font-size: 10px;
+  line-height: 16px;
+  margin-top: 8px;
+}
+.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dd {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel.rdkp-composed .rdkp-fields
+  dd[data-state="not_loaded"] {
+  color: var(--rd-identity-meta-text, #A19C92);
+}

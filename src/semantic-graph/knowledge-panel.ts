@@ -350,29 +350,46 @@ export interface PanelRenderOptions {
    * investigation flow. Pure rendering; the callback fires only on
    * user action. */
   readonly onSelectObject?: (objectId: string) => void;
+  /** Phase 2.2: the panel is composed inside the workspace dossier.
+   * The dossier shell already carries workspace scope, snapshot
+   * status and object identity, so the panel's own head, message
+   * and query lines are omitted and the raw declared record folds
+   * into a secondary closed block. Presentation composition only —
+   * every value and availability state still renders. */
+  readonly composedInDossier?: boolean;
 }
 
 /** Render the panel model into a container using the plugin's
- * safe-DOM helpers (createChild/textContent only). Pure output. */
+ * safe-DOM helpers (createChild/textContent only). Pure output.
+ *
+ * Phase 2.2 composition order — the case-file reading rhythm:
+ * provenance layers first (the declared reading content), then
+ * declared relations (grouped by relation type), lineage, the raw
+ * declared record (secondary, exact values), and diagnostics. The
+ * order is presentation; every section keeps its frozen semantics
+ * and availability states. */
 export function renderKnowledgePanel(
   container: HTMLElement,
   model: KnowledgePanelModel,
   options?: PanelRenderOptions,
 ): void {
   emptyEl(container);
-  const root = createChild(container, "div", { cls: "rd-knowledge-panel" });
-
-  const head = createChild(root, "div", { cls: "rdkp-head" });
-  createChild(head, "span", { cls: "rdkp-scope", text: `workspace: ${model.workspace}` });
-  createChild(head, "span", {
-    cls: "rdkp-snapshot-state",
-    text: `snapshot: ${model.snapshotState}`,
+  const composed = options?.composedInDossier === true;
+  const root = createChild(container, "div", {
+    cls: composed ? "rd-knowledge-panel rdkp-composed" : "rd-knowledge-panel",
   });
 
-  createChild(root, "div", { cls: "rdkp-message", text: model.snapshotMessage });
-
-  if (model.queryObjectId !== null) {
-    createChild(root, "div", { cls: "rdkp-query", text: `query: ${model.queryObjectId}` });
+  if (!composed) {
+    const head = createChild(root, "div", { cls: "rdkp-head" });
+    createChild(head, "span", { cls: "rdkp-scope", text: `workspace: ${model.workspace}` });
+    createChild(head, "span", {
+      cls: "rdkp-snapshot-state",
+      text: `snapshot: ${model.snapshotState}`,
+    });
+    createChild(root, "div", { cls: "rdkp-message", text: model.snapshotMessage });
+    if (model.queryObjectId !== null) {
+      createChild(root, "div", { cls: "rdkp-query", text: `query: ${model.queryObjectId}` });
+    }
   }
 
   if (model.resolveState === "missing") {
@@ -386,15 +403,6 @@ export function renderKnowledgePanel(
       text: `object: AMBIGUOUS (${model.ambiguousMatches.length} matches: ` +
         `${model.ambiguousMatches.join(", ")}) — no silent selection`,
     });
-  }
-
-  if (model.fields.length > 0) {
-    const list = createChild(root, "dl", { cls: "rdkp-fields" });
-    for (const f of model.fields) {
-      createChild(list, "dt", { text: f.label });
-      const dd = createChild(list, "dd", { text: f.text });
-      dd.setAttribute("data-state", f.state);
-    }
   }
 
   if (model.provenance !== null) {
@@ -421,6 +429,77 @@ export function renderKnowledgePanel(
     }
     for (const c of model.provenance.consistency) {
       createChild(prov, "div", { cls: "rdkp-consistency", text: c });
+    }
+  }
+
+  const rel = section(
+    root,
+    "rdkp-relations",
+    `Relations (${model.relations.length} declared; snapshot counts only)`,
+    true,
+  );
+  if (model.relations.length === 0 && model.unresolvedFrom.length === 0) {
+    createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
+  } else {
+    // Declared relations grouped by relation type — a group is an
+    // archival index of declarations, never a claim about what the
+    // relation proves. contradicts carries only the restrained
+    // conflict accent; the declaration text stays exact.
+    const groups = new Map<string, (typeof model.relations)[number][]>();
+    for (const row of model.relations) {
+      const list = groups.get(row.edge.relation) ?? [];
+      list.push(row);
+      groups.set(row.edge.relation, list);
+    }
+    for (const relationType of [...groups.keys()].sort((a, b) => a.localeCompare(b))) {
+      const groupEl = createChild(rel, "div", { cls: "rdkp-rel-group" });
+      groupEl.setAttribute("data-relation", relationType);
+      createChild(groupEl, "div", { cls: "rdkp-rel-type-label", text: relationType });
+      for (const row of groups.get(relationType) ?? []) {
+        const navigate = options?.onSelectObject;
+        const line = navigate === undefined
+          ? createChild(groupEl, "div", { cls: "rdkp-relation-row" })
+          : createChild(groupEl, "button", { cls: "rdkp-relation-row rdkp-nav" });
+        line.setAttribute("data-direction", row.direction);
+        line.setAttribute("data-endpoint", row.endpointState);
+        line.setAttribute("data-relation", row.edge.relation);
+        if (navigate !== undefined) {
+          line.setAttribute("aria-label", `inspect ${row.otherId}`);
+          line.addEventListener("click", () => navigate(row.otherId));
+        }
+        // Structure only — every element of the declaration stays
+        // visible: relation type, direction, source, target, endpoint
+        // availability. No weight, no confidence, no ranking.
+        createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
+        createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
+        createChild(line, "span", {
+          cls: "rdkp-rel-path",
+          text: `source: ${row.edge.source} → target: ${row.edge.target}`,
+        });
+        createChild(line, "span", {
+          cls: "rdkp-rel-endpoint",
+          text: `[endpoint: ${row.endpointState}]`,
+        });
+      }
+    }
+    if (model.unresolvedFrom.length > 0) {
+      const unresolvedGroup = createChild(rel, "div", { cls: "rdkp-rel-group rdkp-rel-unresolved" });
+      createChild(unresolvedGroup, "div", {
+        cls: "rdkp-rel-type-label",
+        text: "unresolved declarations",
+      });
+      for (const u of model.unresolvedFrom) {
+        const navigate = options?.onSelectObject;
+        const line = navigate === undefined
+          ? createChild(unresolvedGroup, "div", { cls: "rdkp-unresolved" })
+          : createChild(unresolvedGroup, "button", { cls: "rdkp-unresolved rdkp-nav" });
+        if (navigate !== undefined) {
+          line.setAttribute("aria-label", `inspect ${u.target}`);
+          line.addEventListener("click", () => navigate(u.target));
+        }
+        line.textContent =
+          `unresolved declaration: ${u.relation} → ${u.target} (target not in snapshot)`;
+      }
     }
   }
 
@@ -464,53 +543,18 @@ export function renderKnowledgePanel(
     }
   }
 
-  const rel = section(
-    root,
-    "rdkp-relations",
-    `Relations (${model.relations.length} declared; snapshot counts only)`,
-    true,
-  );
-  if (model.relations.length === 0) {
-    createChild(rel, "div", { cls: "rdkp-empty", text: "no declared relations in this snapshot" });
-  } else {
-    for (const row of model.relations) {
-      const navigate = options?.onSelectObject;
-      const line = navigate === undefined
-        ? createChild(rel, "div", { cls: "rdkp-relation-row" })
-        : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
-      line.setAttribute("data-direction", row.direction);
-      line.setAttribute("data-endpoint", row.endpointState);
-      line.setAttribute("data-relation", row.edge.relation);
-      if (navigate !== undefined) {
-        line.setAttribute("aria-label", `inspect ${row.otherId}`);
-        line.addEventListener("click", () => navigate(row.otherId));
-      }
-      // Structure only — every element of the declaration stays
-      // visible: relation type, direction, source, target, endpoint
-      // availability. No weight, no confidence, no ranking.
-      createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
-      createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
-      createChild(line, "span", {
-        cls: "rdkp-rel-path",
-        text: `source: ${row.edge.source} → target: ${row.edge.target}`,
-      });
-      createChild(line, "span", {
-        cls: "rdkp-rel-endpoint",
-        text: `[endpoint: ${row.endpointState}]`,
-      });
+  // Declared record — the exact raw field values, deliberately
+  // secondary to the reading content above. Never removed, never
+  // reordered semantically; folded closed by default in both
+  // contexts so the dossier reads as content first.
+  if (model.fields.length > 0) {
+    const record = section(root, "rdkp-record", "Declared record (exact declared values)", false);
+    const list = createChild(record, "dl", { cls: "rdkp-fields" });
+    for (const f of model.fields) {
+      createChild(list, "dt", { text: f.label });
+      const dd = createChild(list, "dd", { text: f.text });
+      dd.setAttribute("data-state", f.state);
     }
-  }
-  for (const u of model.unresolvedFrom) {
-    const navigate = options?.onSelectObject;
-    const line = navigate === undefined
-      ? createChild(rel, "div", { cls: "rdkp-unresolved" })
-      : createChild(rel, "button", { cls: "rdkp-unresolved rdkp-nav" });
-    if (navigate !== undefined) {
-      line.setAttribute("aria-label", `inspect ${u.target}`);
-      line.addEventListener("click", () => navigate(u.target));
-    }
-    line.textContent =
-      `unresolved declaration: ${u.relation} → ${u.target} (target not in snapshot)`;
   }
 
   if (model.diagnosticsGroups !== null) {
