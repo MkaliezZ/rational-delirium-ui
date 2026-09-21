@@ -123,7 +123,7 @@ describe("phase2 dossier header", () => {
     const values = [...strip!.querySelectorAll("dd")].map((el) => el.textContent);
     expect(values).toContain("hypothesis");
     expect(values).toContain("active");
-    expect(values).toContain("declared (freshness unverified)");
+    expect(values).toContain("derived projection · freshness unverified");
     expect(values).toContain("2 declared · 1 unresolved");
     expect(values).toContain("3 of 4 layers carry text");
   });
@@ -201,10 +201,17 @@ describe("phase2 inspector", () => {
 
   it("Human review stays separate from object knowledge state", async () => {
     const view = await openWorkspace("FICT-CASE-0001");
-    const review = [...view.contentEl.querySelectorAll(".rdws-insp-group")]
-      .find((g) => g.querySelector(".rdws-insp-label")?.textContent === "Human review");
-    expect(review).toBeDefined();
-    expect(review?.textContent).toContain("No proposal records found.");
+    // the collaboration model lands asynchronously on open and each
+    // landing rebuilds the inspector — re-query the live node and
+    // wait for the settled empty state rather than the transient
+    // "reading proposal records…" placeholder
+    const reviewNow = () =>
+      [...view.contentEl.querySelectorAll(".rdws-insp-group")]
+        .find((g) => g.querySelector(".rdws-insp-label")?.textContent === "Human review");
+    expect(reviewNow()).toBeDefined();
+    await vi.waitFor(() => {
+      expect(reviewNow()?.textContent).toContain("No proposal records found.");
+    }, { timeout: 3000 });
   });
 });
 

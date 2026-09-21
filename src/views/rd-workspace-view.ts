@@ -95,7 +95,15 @@ export class RDWorkspaceShellView extends ItemView {
   private readonly deps: RDWorkspaceShellDeps;
   private unsubscribe: (() => void) | null = null;
   private graphLoad: GraphLoadResult = { state: "unavailable", reason: "not loaded yet" };
+  /** Source-read ownership (review fix): a resolved detail belongs
+   * to exactly one object id; reads carry a generation token so a
+   * late completion from an older selection can never apply, and a
+   * stable selection is read at most once (rerenders reuse the
+   * completed detail instead of rereading). */
   private sourceDetail: KoDetailResult | undefined = undefined;
+  private sourceDetailObjectId: string | null = null;
+  private sourceReadInFlightFor: string | null = null;
+  private sourceReadToken = 0;
   private observer: ResizeObserver | null = null;
   private mode: "investigation" | "collaboration" = "investigation";
   private readonly browser = new CollaborationBrowser();
@@ -255,11 +263,33 @@ export class RDWorkspaceShellView extends ItemView {
     }
   }
 
-  private async resolveSourceAndRender(objectId: string): Promise<void> {
-    if (this.deps.sourceReader === undefined) return;
-    const detail = await this.deps.sourceReader.resolve(objectId);
-    this.sourceDetail = detail;
-    this.renderBody();
+  /** Source detail usable ONLY for the object it was read for. A
+   * detail that belongs to another object is never reused — B
+   * never displays A's provenance (declared-data boundary). */
+  private sourceDetailFor(objectId: string): KoDetailResult | undefined {
+    return this.sourceDetailObjectId === objectId ? this.sourceDetail : undefined;
+  }
+
+  /** One source read per selection change. Rerenders of the same
+   * selection reuse the completed detail; a read in flight for the
+   * same object is not duplicated; a completion superseded by a
+   * newer selection's read is dropped. No timers, no retries —
+   * state ownership only. Explicit future reread actions may call
+   * this again after ownership changes. */
+  private ensureSourceDetail(objectId: string): void {
+    const reader = this.deps.sourceReader;
+    if (reader === undefined) return;
+    if (this.sourceDetailObjectId === objectId && this.sourceDetail !== undefined) return;
+    if (this.sourceReadInFlightFor === objectId) return;
+    this.sourceReadInFlightFor = objectId;
+    const token = ++this.sourceReadToken;
+    void reader.resolve(objectId).then((detail) => {
+      if (this.sourceReadInFlightFor === objectId) this.sourceReadInFlightFor = null;
+      if (token !== this.sourceReadToken) return; // an older selection's read never applies
+      this.sourceDetail = detail;
+      this.sourceDetailObjectId = objectId;
+      this.renderBody();
+    });
   }
 
   /** Enter collaboration mode focused on one proposal (from the
@@ -317,7 +347,7 @@ export class RDWorkspaceShellView extends ItemView {
 
     if (this.graphLoad.state === "available" && state.selectedObjectId !== null) {
       this.renderReading(center, state.selectedObjectId);
-      void this.resolveSourceAndRender(state.selectedObjectId);
+      this.ensureSourceDetail(state.selectedObjectId);
     } else {
       this.renderDeskHome(center);
     }
@@ -465,13 +495,13 @@ export class RDWorkspaceShellView extends ItemView {
     if (node !== undefined) {
       stripItem("kind", node.kind);
       stripItem("lifecycle", node.status);
-      stripItem("snapshot", "declared (freshness unverified)");
+      stripItem("snapshot", "derived projection · freshness unverified");
       const relationCount = graph.edges
         .filter((e) => e.source === selected || e.target === selected).length;
       const unresolvedCount = graph.unresolved
         .filter((e) => e.source === selected || e.target === selected).length;
       stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` · ${unresolvedCount} unresolved` : ""}`);
-      const source = this.sourceDetail;
+      const source = this.sourceDetailFor(selected);
       if (source !== undefined && source.state === "available") {
         stripItem("source", "resolved · current-source read", "available");
         const p = source.frontmatter.provenance;
@@ -496,7 +526,7 @@ export class RDWorkspaceShellView extends ItemView {
       load: this.graphLoad,
       workspace: this.deps.store.getState().workspaceLabel,
       objectId: selected,
-      sourceDetail: this.sourceDetail,
+      sourceDetail: this.sourceDetailFor(selected),
     });
     renderKnowledgePanel(reading, model, {
       onSelectObject: (objectId) => {
