@@ -14,6 +14,7 @@ import { RDViewRegistry, activateRDView } from "./view-registry";
 import { RDWorkspaceStore } from "./workspace-state";
 import { GraphSnapshotCoordinator } from "./graph-snapshot-coordinator";
 import { RDShellController } from "./rd-shell-controller";
+import { RDKoLeafThemeController } from "./rd-ko-leaf-theme";
 import { RDWorkspaceShellView, RD_WORKSPACE_VIEW_TYPE } from "../views/rd-workspace-view";
 import { RDContextView, RD_CONTEXT_VIEW_TYPE } from "../views/context-view";
 import { RDInvestigationView, RD_INVESTIGATION_VIEW_TYPE } from "../views/investigation-view";
@@ -218,6 +219,11 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
   const shellController = new RDShellController(plugin.app, workspaceStore);
   plugin.register(() => shellController.dispose());
   plugin.register(() => collaborationBrowser.dispose());
+  // V2-05: the KO leaf presentation marker owner — one controller,
+  // plugin-scoped listeners, markers stripped on unload.
+  const koLeafTheme = new RDKoLeafThemeController(plugin);
+  plugin.register(() => koLeafTheme.dispose());
+  koLeafTheme.start();
   const openView = async (viewType: string): Promise<void> => {
     const reg = registry.get(viewType);
     if (reg === undefined) return;

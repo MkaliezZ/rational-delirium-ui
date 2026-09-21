@@ -16123,6 +16123,182 @@ var RDShellController = class {
   }
 };
 
+// src/semantic-graph/ko-detail-reader.ts
+function extractFrontmatterBlock(text3) {
+  const normalized = text3.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!normalized.startsWith("---\n")) return null;
+  const lines = normalized.split("\n");
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") return lines.slice(1, i).join("\n");
+  }
+  return null;
+}
+function scalar(raw) {
+  let v = raw.trim();
+  if (v === "" || v === "null" || v === "~") return void 0;
+  const q = v[0];
+  if (q === '"' || q === "'") {
+    const end = v.indexOf(q, 1);
+    if (end === -1) return void 0;
+    return v.slice(1, end) || void 0;
+  }
+  const comment = v.indexOf(" #");
+  if (comment !== -1) v = v.slice(0, comment).trim();
+  return v === "" || v === "null" ? void 0 : v;
+}
+function parseKoFrontmatter(block) {
+  const lines = block.split("\n");
+  const scalars = {};
+  const createdFrom = [];
+  const provenance = {};
+  let i = 0;
+  let inCreatedFrom = false;
+  let inProvenance = false;
+  while (i < lines.length) {
+    const line = lines[i];
+    const top = /^([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
+    const nested = /^\s+([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
+    const item = /^\s+-\s+(.*)$/.exec(line);
+    if (top) {
+      inCreatedFrom = false;
+      inProvenance = false;
+      const key = top[1];
+      if (key === "created_from") {
+        inCreatedFrom = true;
+        const rest = top[2].trim();
+        if (rest === "[]") {
+          inCreatedFrom = false;
+          i++;
+          continue;
+        }
+        if (rest !== "") {
+          inCreatedFrom = false;
+          i++;
+          continue;
+        }
+      } else if (key === "provenance") {
+        inProvenance = true;
+        i++;
+        continue;
+      } else {
+        scalars[key] = scalar(top[2]);
+      }
+    } else if (inProvenance && nested) {
+      provenance[nested[1]] = scalar(nested[2]);
+    } else if (inCreatedFrom && item) {
+      const v = scalar(item[1]);
+      if (v !== void 0) createdFrom.push(v);
+    }
+    i++;
+  }
+  const objectId = scalars.object_id;
+  if (objectId === void 0) return null;
+  const hasProvenanceKeys = provenance.observation !== void 0 || provenance.evidence !== void 0 || provenance.inference !== void 0 || provenance.conclusion !== void 0;
+  return {
+    object_id: objectId,
+    kind: scalars.kind,
+    status: scalars.status,
+    title: scalars.title,
+    workspace_context: scalars.workspace_context,
+    creator_role: scalars.creator_role,
+    created_from: createdFrom.length > 0 ? createdFrom : void 0,
+    provenance: hasProvenanceKeys ? provenance : void 0
+  };
+}
+function koDetailFromNote(path, text3) {
+  const block = extractFrontmatterBlock(text3);
+  if (block === null) return { state: "missing" };
+  const fm = parseKoFrontmatter(block);
+  if (fm === null) return { state: "missing" };
+  return { state: "available", path, frontmatter: fm };
+}
+
+// src/architecture/rd-ko-leaf-theme.ts
+var RD_KO_LEAF_CLASS = "rd-ko-leaf";
+var MARKDOWN_VIEW_TYPE = "markdown";
+function isKoMarkdownText(text3) {
+  const block = extractFrontmatterBlock(text3);
+  if (block === null) return false;
+  return parseKoFrontmatter(block) !== null;
+}
+var RDKoLeafThemeController = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+    /** Per-leaf generation counter: every (re)evaluation of a leaf
+     * bumps it; an awaited read whose generation is no longer current
+     * belongs to a dead evaluation and is dropped silently. */
+    this.generations = /* @__PURE__ */ new Map();
+    this.marked = /* @__PURE__ */ new Set();
+  }
+  /** Register the event listeners (plugin-scoped, removed on
+   * unload) and run the initial sweep over already-open leaves. */
+  start() {
+    const { workspace, vault } = this.plugin.app;
+    this.plugin.registerEvent(workspace.on("file-open", () => {
+      void this.refresh();
+    }));
+    this.plugin.registerEvent(workspace.on("active-leaf-change", () => {
+      void this.refresh();
+    }));
+    this.plugin.registerEvent(workspace.on("layout-change", () => {
+      void this.refresh();
+    }));
+    this.plugin.registerEvent(vault.on("modify", () => {
+      void this.refresh();
+    }));
+    this.plugin.app.workspace.onLayoutReady(() => {
+      void this.refresh();
+    });
+  }
+  /** Plugin unload path: strip every marker and drop all pending
+   * generations. Listener removal is handled by registerEvent. */
+  dispose() {
+    for (const leaf of [...this.marked]) this.unmark(leaf);
+    this.generations.clear();
+  }
+  /** Re-evaluate every open markdown leaf. Cheap and event-driven:
+   * KO opened ⇒ marker on; KO→ordinary ⇒ off; ordinary→KO ⇒ on;
+   * leaf closed ⇒ marker stripped from the (gone) element and the
+   * tracking sets. */
+  async refresh() {
+    const open = new Set(
+      this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE)
+    );
+    for (const leaf of [...this.marked]) {
+      if (!open.has(leaf)) this.unmark(leaf);
+    }
+    await Promise.all([...open].map((leaf) => this.evaluate(leaf)));
+  }
+  async evaluate(leaf) {
+    const generation = this.bumpGeneration(leaf);
+    const view = leaf.view;
+    const file = view.file;
+    if (file === null) {
+      this.unmark(leaf);
+      return;
+    }
+    const text3 = await this.plugin.app.vault.cachedRead(file);
+    if (this.generations.get(leaf) !== generation) return;
+    const current = leaf.view.file;
+    if (current === null || current.path !== file.path) return;
+    if (isKoMarkdownText(text3)) this.mark(leaf);
+    else this.unmark(leaf);
+  }
+  bumpGeneration(leaf) {
+    const generation = (this.generations.get(leaf) ?? 0) + 1;
+    this.generations.set(leaf, generation);
+    return generation;
+  }
+  mark(leaf) {
+    this.marked.add(leaf);
+    leaf.view.containerEl.classList.add(RD_KO_LEAF_CLASS);
+  }
+  unmark(leaf) {
+    this.marked.delete(leaf);
+    leaf.view.containerEl.classList.remove(RD_KO_LEAF_CLASS);
+  }
+};
+
 // src/views/context-view.ts
 var import_obsidian9 = require("obsidian");
 
@@ -16585,6 +16761,9 @@ function registerRDViews(plugin, services) {
   const shellController = new RDShellController(plugin.app, workspaceStore);
   plugin.register(() => shellController.dispose());
   plugin.register(() => collaborationBrowser.dispose());
+  const koLeafTheme = new RDKoLeafThemeController(plugin);
+  plugin.register(() => koLeafTheme.dispose());
+  koLeafTheme.start();
   const openView = async (viewType) => {
     const reg = registry.get(viewType);
     if (reg === void 0) return;
@@ -16603,96 +16782,6 @@ function registerRDViews(plugin, services) {
     }
   });
   return registry;
-}
-
-// src/semantic-graph/ko-detail-reader.ts
-function extractFrontmatterBlock(text3) {
-  const normalized = text3.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  if (!normalized.startsWith("---\n")) return null;
-  const lines = normalized.split("\n");
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") return lines.slice(1, i).join("\n");
-  }
-  return null;
-}
-function scalar(raw) {
-  let v = raw.trim();
-  if (v === "" || v === "null" || v === "~") return void 0;
-  const q = v[0];
-  if (q === '"' || q === "'") {
-    const end = v.indexOf(q, 1);
-    if (end === -1) return void 0;
-    return v.slice(1, end) || void 0;
-  }
-  const comment = v.indexOf(" #");
-  if (comment !== -1) v = v.slice(0, comment).trim();
-  return v === "" || v === "null" ? void 0 : v;
-}
-function parseKoFrontmatter(block) {
-  const lines = block.split("\n");
-  const scalars = {};
-  const createdFrom = [];
-  const provenance = {};
-  let i = 0;
-  let inCreatedFrom = false;
-  let inProvenance = false;
-  while (i < lines.length) {
-    const line = lines[i];
-    const top = /^([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const nested = /^\s+([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const item = /^\s+-\s+(.*)$/.exec(line);
-    if (top) {
-      inCreatedFrom = false;
-      inProvenance = false;
-      const key = top[1];
-      if (key === "created_from") {
-        inCreatedFrom = true;
-        const rest = top[2].trim();
-        if (rest === "[]") {
-          inCreatedFrom = false;
-          i++;
-          continue;
-        }
-        if (rest !== "") {
-          inCreatedFrom = false;
-          i++;
-          continue;
-        }
-      } else if (key === "provenance") {
-        inProvenance = true;
-        i++;
-        continue;
-      } else {
-        scalars[key] = scalar(top[2]);
-      }
-    } else if (inProvenance && nested) {
-      provenance[nested[1]] = scalar(nested[2]);
-    } else if (inCreatedFrom && item) {
-      const v = scalar(item[1]);
-      if (v !== void 0) createdFrom.push(v);
-    }
-    i++;
-  }
-  const objectId = scalars.object_id;
-  if (objectId === void 0) return null;
-  const hasProvenanceKeys = provenance.observation !== void 0 || provenance.evidence !== void 0 || provenance.inference !== void 0 || provenance.conclusion !== void 0;
-  return {
-    object_id: objectId,
-    kind: scalars.kind,
-    status: scalars.status,
-    title: scalars.title,
-    workspace_context: scalars.workspace_context,
-    creator_role: scalars.creator_role,
-    created_from: createdFrom.length > 0 ? createdFrom : void 0,
-    provenance: hasProvenanceKeys ? provenance : void 0
-  };
-}
-function koDetailFromNote(path, text3) {
-  const block = extractFrontmatterBlock(text3);
-  if (block === null) return { state: "missing" };
-  const fm = parseKoFrontmatter(block);
-  if (fm === null) return { state: "missing" };
-  return { state: "available", path, frontmatter: fm };
 }
 
 // src/architecture/obsidian-graph-ports.ts

@@ -1317,6 +1317,86 @@ body.rd-rational-archive-shell .workspace-leaf-content[data-type^="rd-"] ::-webk
   background-clip: padding-box;
 }
 
+/* ——— V2-05 — RD Knowledge Object markdown leaf presentation ———
+   A REAL RD Knowledge Object (its frontmatter declares object_id,
+   detected at runtime by src/architecture/rd-ko-leaf-theme.ts via
+   the existing ko-detail-reader primitives) opened in a markdown
+   leaf wears the Rational Archive material: that leaf's view
+   container carries the .rd-ko-leaf marker, and ONLY Obsidian's
+   native editor/property CSS variables are remapped here, gated
+   on the shell body scope + the marker. The native reading view,
+   source/live preview and the Properties panel pick the material
+   up natively — no markdown/editor class is ever targeted, no
+   generic interaction variable (--icon-color*, --interactive-*,
+   --background-modifier-hover/active) is redefined, so V2-03
+   isolation is intact and ordinary notes, the file explorer and
+   third-party views keep the host theme. Every value rides an
+   existing --rd-* token. */
+body.rd-rational-archive-shell .rd-ko-leaf {
+  /* surfaces */
+  --background-primary: var(--rd-surface-base, #11110F);
+  --background-primary-alt: var(--rd-surface-raised, #1D1C19);
+  --background-secondary: var(--rd-surface-base, #11110F);
+  --background-secondary-alt: var(--rd-surface-raised, #1D1C19);
+  --background-modifier-border: var(--rd-surface-rule, #34322D);
+  --divider-color: var(--rd-surface-rule, #34322D);
+  /* text */
+  --text-normal: var(--rd-identity-title-text, #D4D0C8);
+  --text-muted: var(--rd-identity-meta-text, #A19C92);
+  --text-faint: color-mix(in srgb, var(--rd-identity-meta-text, #A19C92) 62%, transparent);
+  --inline-title-color: var(--rd-identity-title-text, #D4D0C8);
+  /* headings */
+  --h1-color: var(--rd-identity-title-text, #D4D0C8);
+  --h2-color: var(--rd-identity-title-text, #D4D0C8);
+  --h3-color: var(--rd-identity-title-text, #D4D0C8);
+  --h4-color: var(--rd-identity-title-text, #D4D0C8);
+  --h5-color: var(--rd-identity-title-text, #D4D0C8);
+  --h6-color: var(--rd-identity-title-text, #D4D0C8);
+  /* links */
+  --link-color: var(--rd-provenance-evidence-text, #91B5B0);
+  --link-color-hover: var(--rd-identity-title-text, #D4D0C8);
+  --link-external-color: var(--rd-provenance-evidence-text, #91B5B0);
+  --link-external-color-hover: var(--rd-identity-title-text, #D4D0C8);
+  /* code */
+  --code-background: var(--rd-surface-raised, #1D1C19);
+  --code-normal: var(--rd-identity-title-text, #D4D0C8);
+  --code-comment: var(--rd-identity-meta-text, #A19C92);
+  /* rules and quotes */
+  --hr-color: var(--rd-surface-rule, #34322D);
+  --blockquote-background-color: transparent;
+  --blockquote-border-color: var(--rd-surface-rule, #34322D);
+  --blockquote-color: var(--rd-identity-meta-text, #A19C92);
+  /* lists */
+  --list-marker-color: var(--rd-identity-meta-text, #A19C92);
+  /* Properties panel — labels muted, values primary, hairline
+     dividers; native property behavior/editing untouched */
+  --metadata-label-text-color: var(--rd-identity-meta-text, #A19C92);
+  --metadata-input-text-color: var(--rd-identity-title-text, #D4D0C8);
+  --metadata-divider-color: var(--rd-surface-rule, #34322D);
+  --metadata-property-background: transparent;
+  background: var(--rd-surface-base, #11110F);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* KO leaf scrollbars join the archival frame (marker-gated only —
+   ordinary editor scrollbars keep the host theme). */
+body.rd-rational-archive-shell .rd-ko-leaf ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+body.rd-rational-archive-shell .rd-ko-leaf ::-webkit-scrollbar-thumb {
+  background: var(--rd-surface-rule, #34322D);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+body.rd-rational-archive-shell .rd-ko-leaf ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--rd-surface-focus-rule, #D8C89D) 22%, var(--rd-surface-rule, #34322D));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 /* ============================================================
    RD Product Surface Refactor Phase 2 — the archival reading
    surface (CASE / Knowledge Object dossier). The workspace reads
