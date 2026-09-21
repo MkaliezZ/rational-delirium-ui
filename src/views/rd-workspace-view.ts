@@ -361,22 +361,44 @@ export class RDWorkspaceShellView extends ItemView {
       if (nodes.length === 0) {
         createChild(objects, "div", { cls: "rdws-nav-empty", text: "no objects in this snapshot" });
       }
+      // Archival index: group by DECLARED kind only — kinds that do
+      // not exist in this snapshot never appear. Groups stay in
+      // neutral alphabetical order; ids stay in neutral id order
+      // within each group. Counts are snapshot counts, not weight.
+      const byKind = new Map<string, typeof nodes>();
       for (const node of nodes) {
-        const row = createChild(objects, "button", { cls: "rdws-object-row" });
-        row.setAttribute("aria-label", `inspect ${node.object_id}`);
-        if (node.object_id === selected) row.setAttribute("aria-pressed", "true");
-        createChild(row, "span", { cls: "rdws-object-row-id", text: node.object_id });
-        createChild(row, "span", {
-          cls: "rdws-object-row-meta",
-          text: `${node.kind} · ${node.status}`,
+        const list = byKind.get(node.kind) ?? [];
+        list.push(node);
+        byKind.set(node.kind, list);
+      }
+      const kinds = [...byKind.keys()].sort((a, b) => a.localeCompare(b));
+      for (const kind of kinds) {
+        const group = byKind.get(kind) ?? [];
+        const heading = createChild(objects, "div", { cls: "rdws-nav-kind" });
+        createChild(heading, "span", { cls: "rdws-nav-kind-name", text: kind });
+        createChild(heading, "span", {
+          cls: "rdws-nav-kind-count",
+          text: `· ${group.length}`,
         });
-        createChild(row, "span", {
-          cls: "rdws-object-row-title", text: node.title,
-        });
-        row.addEventListener("click", () => {
-          this.mode = "investigation";
-          this.deps.store.setSelectedObject(node.object_id);
-        });
+        for (const node of group) {
+          const row = createChild(objects, "button", { cls: "rdws-object-row" });
+          row.setAttribute("aria-label", `inspect ${node.object_id}`);
+          if (node.object_id === selected) row.setAttribute("aria-pressed", "true");
+          createChild(row, "span", { cls: "rdws-object-row-id", text: node.object_id });
+          createChild(row, "span", {
+            cls: "rdws-object-row-meta",
+            // kind lives in the group heading above — the row states
+            // lifecycle only, no duplicated classification
+            text: node.status,
+          });
+          createChild(row, "span", {
+            cls: "rdws-object-row-title", text: node.title,
+          });
+          row.addEventListener("click", () => {
+            this.mode = "investigation";
+            this.deps.store.setSelectedObject(node.object_id);
+          });
+        }
       }
     }
 
@@ -407,19 +429,67 @@ export class RDWorkspaceShellView extends ItemView {
   /** CENTER — dominant reading surface. */
   private renderReading(center: HTMLElement, selected: string): void {
     if (this.graphLoad.state !== "available") return;
-    const node = this.graphLoad.graph.nodes.find((n) => n.object_id === selected);
+    const graph = this.graphLoad.graph;
+    const node = graph.nodes.find((n) => n.object_id === selected);
     const host = createChild(center, "div", { cls: "rdws-reading" });
 
-    // Knowledge Object head: serif title + mono identity line.
-    const head = createChild(host, "div", { cls: "rdws-ko-head" });
-    createChild(head, "h2", {
+    // Dossier head: context eyebrow → serif display title → exact
+    // identity line → descriptive strip. Every value is declared
+    // data; the strip describes, it never scores.
+    const dossier = createChild(host, "header", { cls: "rdws-dossier" });
+    createChild(dossier, "div", {
+      cls: "rdws-dossier-eyebrow",
+      text: node !== undefined
+        ? `Knowledge Object · ${node.kind} (declared classification)`
+        : "Knowledge Object · not in snapshot",
+    });
+    createChild(dossier, "h2", {
       cls: "rdws-ko-title",
       text: node !== undefined && node.title !== "" ? node.title : selected,
     });
-    const idLine = createChild(head, "div", { cls: "rdws-ko-identity" });
+    const idLine = createChild(dossier, "div", { cls: "rdws-ko-identity" });
     idLine.textContent = node !== undefined
-      ? `${node.object_id} · ${node.kind} (declared classification) · ${node.status} (declared lifecycle; not a validity badge)`
+      ? `${node.object_id} · ${node.status} (declared lifecycle; not a validity badge)`
       : `${selected} · not in snapshot (declared data unavailable here)`;
+
+    // Identity strip — horizontal, monospace, hairline-ruled. Real
+    // fields only: kind, lifecycle, snapshot, source read, declared
+    // relation counts, provenance layer availability.
+    const strip = createChild(dossier, "dl", { cls: "rdws-identity-strip" });
+    const stripItem = (label: string, text: string, state?: string) => {
+      const item = createChild(strip, "div", { cls: "rdws-strip-item" });
+      if (state !== undefined) item.setAttribute("data-state", state);
+      createChild(item, "dt", { text: label });
+      createChild(item, "dd", { text });
+    };
+    if (node !== undefined) {
+      stripItem("kind", node.kind);
+      stripItem("lifecycle", node.status);
+      stripItem("snapshot", "declared (freshness unverified)");
+      const relationCount = graph.edges
+        .filter((e) => e.source === selected || e.target === selected).length;
+      const unresolvedCount = graph.unresolved
+        .filter((e) => e.source === selected || e.target === selected).length;
+      stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` · ${unresolvedCount} unresolved` : ""}`);
+      const source = this.sourceDetail;
+      if (source !== undefined && source.state === "available") {
+        stripItem("source", "resolved · current-source read", "available");
+        const p = source.frontmatter.provenance;
+        const withText = p === undefined ? 0
+          : [p.observation, p.evidence, p.inference, p.conclusion]
+              .filter((v) => v !== undefined && v !== "").length;
+        stripItem("provenance", `${withText} of 4 layers carry text`);
+      } else if (source !== undefined && source.state === "ambiguous") {
+        stripItem("source", `ambiguous (${source.paths.length} notes)`, "missing");
+      } else if (source !== undefined && source.state === "missing") {
+        stripItem("source", "no declaring note found", "missing");
+      } else {
+        stripItem("source", "not read in this session", "not_loaded");
+      }
+    } else {
+      stripItem("snapshot", "not in snapshot", "missing");
+      stripItem("source", "declared data unavailable here", "missing");
+    }
 
     const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
     const model = buildKnowledgePanelModel({
@@ -473,15 +543,87 @@ export class RDWorkspaceShellView extends ItemView {
     }
   }
 
-  /** RIGHT — inspection plane: Human review attention, recent
-   * contributions, diagnostics for the selection. 280–340px;
-   * collapses under 1100px. Collaboration summaries live here,
-   * visually separate from knowledge state. */
+  /** RIGHT — inspection plane: selected object metadata, linked
+   * objects, Human review attention, recent contributions,
+   * diagnostics for the selection. 280–340px; collapses under
+   * 1100px. Collaboration summaries live here, visually separate
+   * from knowledge state. */
   private renderInspectionPlane(layout: HTMLElement, selected: string | null): void {
     const plane = createChild(layout, "aside", { cls: "rdws-plane-right" });
     plane.setAttribute("aria-label", "RD inspection");
 
     const model = this.browser.getState().model;
+
+    // Object — declared identity of the current selection. Metadata
+    // only; nothing here validates the object.
+    if (this.graphLoad.state === "available" && selected !== null) {
+      const graph = this.graphLoad.graph;
+      const node = graph.nodes.find((n) => n.object_id === selected);
+      const obj = createChild(plane, "section", { cls: "rdws-insp-group" });
+      createChild(obj, "div", { cls: "rdws-insp-label", text: "Object" });
+      if (node === undefined) {
+        createChild(obj, "div", {
+          cls: "rdws-nav-empty", text: `${selected} — not in snapshot`,
+        });
+      } else {
+        const meta = createChild(obj, "dl", { cls: "rdws-insp-meta" });
+        const metaRow = (k: string, v: string) => {
+          createChild(meta, "dt", { text: k });
+          createChild(meta, "dd", { text: v });
+        };
+        metaRow("id", node.object_id);
+        metaRow("kind", node.kind);
+        metaRow("lifecycle", node.status);
+        if (node.predecessor !== null) metaRow("predecessor", node.predecessor);
+        if (node.successor !== null) metaRow("successor", node.successor);
+      }
+    }
+
+    // Linked objects — declared relations touching the selection.
+    // Navigation only; the listing carries no evaluation.
+    if (this.graphLoad.state === "available" && selected !== null) {
+      const graph = this.graphLoad.graph;
+      const linked = createChild(plane, "section", { cls: "rdws-insp-group" });
+      createChild(linked, "div", { cls: "rdws-insp-label", text: "Linked objects" });
+      const edges = graph.edges
+        .filter((e) => e.source === selected || e.target === selected);
+      const unresolved = graph.unresolved
+        .filter((e) => e.source === selected || e.target === selected);
+      if (edges.length === 0 && unresolved.length === 0) {
+        createChild(linked, "div", {
+          cls: "rdws-nav-empty", text: "no declared relations in this snapshot",
+        });
+      } else {
+        for (const edge of edges) {
+          const outgoing = edge.source === selected;
+          const otherId = outgoing ? edge.target : edge.source;
+          const row = createChild(linked, "button", { cls: "rdws-link-row" });
+          row.setAttribute("data-relation", edge.relation);
+          row.setAttribute("aria-label", `inspect ${otherId}`);
+          createChild(row, "span", {
+            cls: "rdws-link-type",
+            text: outgoing ? `${edge.relation} →` : `← ${edge.relation}`,
+          });
+          createChild(row, "span", { cls: "rdws-link-id", text: otherId });
+          row.addEventListener("click", () => {
+            this.mode = "investigation";
+            this.deps.store.setSelectedObject(otherId);
+          });
+        }
+        for (const u of unresolved) {
+          const outgoing = u.source === selected;
+          const target = outgoing ? u.target : u.source;
+          const row = createChild(linked, "div", { cls: "rdws-link-row rdws-link-unresolved" });
+          row.setAttribute("data-relation", u.relation);
+          createChild(row, "span", {
+            cls: "rdws-link-type",
+            text: outgoing ? `${u.relation} →` : `← ${u.relation}`,
+          });
+          createChild(row, "span", { cls: "rdws-link-id", text: target });
+          createChild(row, "span", { cls: "rdws-link-state", text: "unresolved" });
+        }
+      }
+    }
 
     // Human review attention — pending proposals, existing data only.
     const review = createChild(plane, "section", { cls: "rdws-insp-group" });

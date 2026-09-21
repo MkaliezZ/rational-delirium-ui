@@ -13419,10 +13419,20 @@ function renderKnowledgePanel(container, model, options) {
   if (model.provenance !== null) {
     const prov = section(root, "rdkp-provenance", "Provenance (declared, four layers)", true);
     createChild(prov, "div", { cls: "rdkp-source-label", text: model.provenance.sourceLabel });
+    let layerIndex = 0;
     for (const l of model.provenance.layers) {
+      layerIndex += 1;
       const line = createChild(prov, "div", { cls: "rdkp-layer" });
       line.setAttribute("data-state", l.state);
-      line.textContent = `${l.label}: ${l.state} \u2014 ${l.text}`;
+      line.setAttribute("data-layer", l.label.toLowerCase());
+      const head2 = createChild(line, "div", { cls: "rdkp-layer-head" });
+      createChild(head2, "span", {
+        cls: "rdkp-layer-marker",
+        text: String(layerIndex).padStart(2, "0")
+      });
+      createChild(head2, "span", { cls: "rdkp-layer-label", text: l.label });
+      createChild(head2, "span", { cls: "rdkp-layer-state", text: l.state });
+      createChild(line, "div", { cls: "rdkp-layer-text", text: l.text });
     }
     for (const c of model.provenance.consistency) {
       createChild(prov, "div", { cls: "rdkp-consistency", text: c });
@@ -13473,11 +13483,21 @@ function renderKnowledgePanel(container, model, options) {
       const line = navigate === void 0 ? createChild(rel, "div", { cls: "rdkp-relation-row" }) : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
       line.setAttribute("data-direction", row.direction);
       line.setAttribute("data-endpoint", row.endpointState);
+      line.setAttribute("data-relation", row.edge.relation);
       if (navigate !== void 0) {
         line.setAttribute("aria-label", `inspect ${row.otherId}`);
         line.addEventListener("click", () => navigate(row.otherId));
       }
-      line.textContent = `${row.edge.relation} [${row.direction}] source: ${row.edge.source} \u2192 target: ${row.edge.target} [endpoint: ${row.endpointState}]`;
+      createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
+      createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
+      createChild(line, "span", {
+        cls: "rdkp-rel-path",
+        text: `source: ${row.edge.source} \u2192 target: ${row.edge.target}`
+      });
+      createChild(line, "span", {
+        cls: "rdkp-rel-endpoint",
+        text: `[endpoint: ${row.endpointState}]`
+      });
     }
   }
   for (const u of model.unresolvedFrom) {
@@ -15448,23 +15468,41 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
       if (nodes.length === 0) {
         createChild(objects, "div", { cls: "rdws-nav-empty", text: "no objects in this snapshot" });
       }
+      const byKind = /* @__PURE__ */ new Map();
       for (const node2 of nodes) {
-        const row = createChild(objects, "button", { cls: "rdws-object-row" });
-        row.setAttribute("aria-label", `inspect ${node2.object_id}`);
-        if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
-        createChild(row, "span", { cls: "rdws-object-row-id", text: node2.object_id });
-        createChild(row, "span", {
-          cls: "rdws-object-row-meta",
-          text: `${node2.kind} \xB7 ${node2.status}`
+        const list2 = byKind.get(node2.kind) ?? [];
+        list2.push(node2);
+        byKind.set(node2.kind, list2);
+      }
+      const kinds = [...byKind.keys()].sort((a, b) => a.localeCompare(b));
+      for (const kind of kinds) {
+        const group = byKind.get(kind) ?? [];
+        const heading = createChild(objects, "div", { cls: "rdws-nav-kind" });
+        createChild(heading, "span", { cls: "rdws-nav-kind-name", text: kind });
+        createChild(heading, "span", {
+          cls: "rdws-nav-kind-count",
+          text: `\xB7 ${group.length}`
         });
-        createChild(row, "span", {
-          cls: "rdws-object-row-title",
-          text: node2.title
-        });
-        row.addEventListener("click", () => {
-          this.mode = "investigation";
-          this.deps.store.setSelectedObject(node2.object_id);
-        });
+        for (const node2 of group) {
+          const row = createChild(objects, "button", { cls: "rdws-object-row" });
+          row.setAttribute("aria-label", `inspect ${node2.object_id}`);
+          if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
+          createChild(row, "span", { cls: "rdws-object-row-id", text: node2.object_id });
+          createChild(row, "span", {
+            cls: "rdws-object-row-meta",
+            // kind lives in the group heading above — the row states
+            // lifecycle only, no duplicated classification
+            text: node2.status
+          });
+          createChild(row, "span", {
+            cls: "rdws-object-row-title",
+            text: node2.title
+          });
+          row.addEventListener("click", () => {
+            this.mode = "investigation";
+            this.deps.store.setSelectedObject(node2.object_id);
+          });
+        }
       }
     }
     const surfaces = createChild(rail, "div", { cls: "rdws-nav-group" });
@@ -15493,15 +15531,51 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
   /** CENTER — dominant reading surface. */
   renderReading(center, selected) {
     if (this.graphLoad.state !== "available") return;
-    const node2 = this.graphLoad.graph.nodes.find((n) => n.object_id === selected);
+    const graph = this.graphLoad.graph;
+    const node2 = graph.nodes.find((n) => n.object_id === selected);
     const host = createChild(center, "div", { cls: "rdws-reading" });
-    const head = createChild(host, "div", { cls: "rdws-ko-head" });
-    createChild(head, "h2", {
+    const dossier = createChild(host, "header", { cls: "rdws-dossier" });
+    createChild(dossier, "div", {
+      cls: "rdws-dossier-eyebrow",
+      text: node2 !== void 0 ? `Knowledge Object \xB7 ${node2.kind} (declared classification)` : "Knowledge Object \xB7 not in snapshot"
+    });
+    createChild(dossier, "h2", {
       cls: "rdws-ko-title",
       text: node2 !== void 0 && node2.title !== "" ? node2.title : selected
     });
-    const idLine = createChild(head, "div", { cls: "rdws-ko-identity" });
-    idLine.textContent = node2 !== void 0 ? `${node2.object_id} \xB7 ${node2.kind} (declared classification) \xB7 ${node2.status} (declared lifecycle; not a validity badge)` : `${selected} \xB7 not in snapshot (declared data unavailable here)`;
+    const idLine = createChild(dossier, "div", { cls: "rdws-ko-identity" });
+    idLine.textContent = node2 !== void 0 ? `${node2.object_id} \xB7 ${node2.status} (declared lifecycle; not a validity badge)` : `${selected} \xB7 not in snapshot (declared data unavailable here)`;
+    const strip = createChild(dossier, "dl", { cls: "rdws-identity-strip" });
+    const stripItem = (label, text3, state) => {
+      const item = createChild(strip, "div", { cls: "rdws-strip-item" });
+      if (state !== void 0) item.setAttribute("data-state", state);
+      createChild(item, "dt", { text: label });
+      createChild(item, "dd", { text: text3 });
+    };
+    if (node2 !== void 0) {
+      stripItem("kind", node2.kind);
+      stripItem("lifecycle", node2.status);
+      stripItem("snapshot", "declared (freshness unverified)");
+      const relationCount = graph.edges.filter((e) => e.source === selected || e.target === selected).length;
+      const unresolvedCount = graph.unresolved.filter((e) => e.source === selected || e.target === selected).length;
+      stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` \xB7 ${unresolvedCount} unresolved` : ""}`);
+      const source = this.sourceDetail;
+      if (source !== void 0 && source.state === "available") {
+        stripItem("source", "resolved \xB7 current-source read", "available");
+        const p = source.frontmatter.provenance;
+        const withText = p === void 0 ? 0 : [p.observation, p.evidence, p.inference, p.conclusion].filter((v) => v !== void 0 && v !== "").length;
+        stripItem("provenance", `${withText} of 4 layers carry text`);
+      } else if (source !== void 0 && source.state === "ambiguous") {
+        stripItem("source", `ambiguous (${source.paths.length} notes)`, "missing");
+      } else if (source !== void 0 && source.state === "missing") {
+        stripItem("source", "no declaring note found", "missing");
+      } else {
+        stripItem("source", "not read in this session", "not_loaded");
+      }
+    } else {
+      stripItem("snapshot", "not in snapshot", "missing");
+      stripItem("source", "declared data unavailable here", "missing");
+    }
     const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
     const model = buildKnowledgePanelModel({
       load: this.graphLoad,
@@ -15544,14 +15618,80 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
       });
     }
   }
-  /** RIGHT — inspection plane: Human review attention, recent
-   * contributions, diagnostics for the selection. 280–340px;
-   * collapses under 1100px. Collaboration summaries live here,
-   * visually separate from knowledge state. */
+  /** RIGHT — inspection plane: selected object metadata, linked
+   * objects, Human review attention, recent contributions,
+   * diagnostics for the selection. 280–340px; collapses under
+   * 1100px. Collaboration summaries live here, visually separate
+   * from knowledge state. */
   renderInspectionPlane(layout, selected) {
     const plane = createChild(layout, "aside", { cls: "rdws-plane-right" });
     plane.setAttribute("aria-label", "RD inspection");
     const model = this.browser.getState().model;
+    if (this.graphLoad.state === "available" && selected !== null) {
+      const graph = this.graphLoad.graph;
+      const node2 = graph.nodes.find((n) => n.object_id === selected);
+      const obj = createChild(plane, "section", { cls: "rdws-insp-group" });
+      createChild(obj, "div", { cls: "rdws-insp-label", text: "Object" });
+      if (node2 === void 0) {
+        createChild(obj, "div", {
+          cls: "rdws-nav-empty",
+          text: `${selected} \u2014 not in snapshot`
+        });
+      } else {
+        const meta = createChild(obj, "dl", { cls: "rdws-insp-meta" });
+        const metaRow = (k, v) => {
+          createChild(meta, "dt", { text: k });
+          createChild(meta, "dd", { text: v });
+        };
+        metaRow("id", node2.object_id);
+        metaRow("kind", node2.kind);
+        metaRow("lifecycle", node2.status);
+        if (node2.predecessor !== null) metaRow("predecessor", node2.predecessor);
+        if (node2.successor !== null) metaRow("successor", node2.successor);
+      }
+    }
+    if (this.graphLoad.state === "available" && selected !== null) {
+      const graph = this.graphLoad.graph;
+      const linked = createChild(plane, "section", { cls: "rdws-insp-group" });
+      createChild(linked, "div", { cls: "rdws-insp-label", text: "Linked objects" });
+      const edges = graph.edges.filter((e) => e.source === selected || e.target === selected);
+      const unresolved = graph.unresolved.filter((e) => e.source === selected || e.target === selected);
+      if (edges.length === 0 && unresolved.length === 0) {
+        createChild(linked, "div", {
+          cls: "rdws-nav-empty",
+          text: "no declared relations in this snapshot"
+        });
+      } else {
+        for (const edge of edges) {
+          const outgoing = edge.source === selected;
+          const otherId = outgoing ? edge.target : edge.source;
+          const row = createChild(linked, "button", { cls: "rdws-link-row" });
+          row.setAttribute("data-relation", edge.relation);
+          row.setAttribute("aria-label", `inspect ${otherId}`);
+          createChild(row, "span", {
+            cls: "rdws-link-type",
+            text: outgoing ? `${edge.relation} \u2192` : `\u2190 ${edge.relation}`
+          });
+          createChild(row, "span", { cls: "rdws-link-id", text: otherId });
+          row.addEventListener("click", () => {
+            this.mode = "investigation";
+            this.deps.store.setSelectedObject(otherId);
+          });
+        }
+        for (const u of unresolved) {
+          const outgoing = u.source === selected;
+          const target = outgoing ? u.target : u.source;
+          const row = createChild(linked, "div", { cls: "rdws-link-row rdws-link-unresolved" });
+          row.setAttribute("data-relation", u.relation);
+          createChild(row, "span", {
+            cls: "rdws-link-type",
+            text: outgoing ? `${u.relation} \u2192` : `\u2190 ${u.relation}`
+          });
+          createChild(row, "span", { cls: "rdws-link-id", text: target });
+          createChild(row, "span", { cls: "rdws-link-state", text: "unresolved" });
+        }
+      }
+    }
     const review = createChild(plane, "section", { cls: "rdws-insp-group" });
     createChild(review, "div", { cls: "rdws-insp-label", text: "Human review" });
     const pending = model !== null ? model.proposals.filter((p) => p.status === "pending") : [];

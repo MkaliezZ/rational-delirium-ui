@@ -76,7 +76,8 @@ describe("phase1 typography contract (CSS)", () => {
   it("applies the archival scale: serif titles, mono metadata, 4px rhythm", () => {
     expect(css).toContain("--rd-font-serif:");
     expect(css).toMatch(/\.rdws-masthead-title[\s\S]*?font-size: 28px;\s*\n\s*line-height: 36px;/);
-    expect(css).toMatch(/\.rdws-ko-title[\s\S]*?font-size: 22px;\s*\n\s*line-height: 30px;/);
+    // Phase 2 raised the KO dossier title to the display scale
+    expect(css).toMatch(/\.rdws-ko-title[\s\S]*?font-size: 30px;\s*\n\s*line-height: 38px;/);
     expect(css).toMatch(/\.rdws-desk-lead[\s\S]*?font-size: 16px;\s*\n\s*line-height: 26px;/);
     expect(css).toMatch(/\.rdws-object-row-id[\s\S]*?font-size: 13px;/);
     // center plane dominates; sides are fixed

@@ -400,10 +400,24 @@ export function renderKnowledgePanel(
   if (model.provenance !== null) {
     const prov = section(root, "rdkp-provenance", "Provenance (declared, four layers)", true);
     createChild(prov, "div", { cls: "rdkp-source-label", text: model.provenance.sourceLabel });
+    // Layer order is semantic (Observation → Evidence → Inference →
+    // Conclusion) and is never reordered. Each layer keeps an
+    // explicit state; declared text renders as an archival excerpt —
+    // a declaration, never a verified finding.
+    let layerIndex = 0;
     for (const l of model.provenance.layers) {
+      layerIndex += 1;
       const line = createChild(prov, "div", { cls: "rdkp-layer" });
       line.setAttribute("data-state", l.state);
-      line.textContent = `${l.label}: ${l.state} — ${l.text}`;
+      line.setAttribute("data-layer", l.label.toLowerCase());
+      const head = createChild(line, "div", { cls: "rdkp-layer-head" });
+      createChild(head, "span", {
+        cls: "rdkp-layer-marker",
+        text: String(layerIndex).padStart(2, "0"),
+      });
+      createChild(head, "span", { cls: "rdkp-layer-label", text: l.label });
+      createChild(head, "span", { cls: "rdkp-layer-state", text: l.state });
+      createChild(line, "div", { cls: "rdkp-layer-text", text: l.text });
     }
     for (const c of model.provenance.consistency) {
       createChild(prov, "div", { cls: "rdkp-consistency", text: c });
@@ -466,14 +480,24 @@ export function renderKnowledgePanel(
         : createChild(rel, "button", { cls: "rdkp-relation-row rdkp-nav" });
       line.setAttribute("data-direction", row.direction);
       line.setAttribute("data-endpoint", row.endpointState);
+      line.setAttribute("data-relation", row.edge.relation);
       if (navigate !== undefined) {
         line.setAttribute("aria-label", `inspect ${row.otherId}`);
         line.addEventListener("click", () => navigate(row.otherId));
       }
-      line.textContent =
-        `${row.edge.relation} [${row.direction}] ` +
-        `source: ${row.edge.source} → target: ${row.edge.target}` +
-        ` [endpoint: ${row.endpointState}]`;
+      // Structure only — every element of the declaration stays
+      // visible: relation type, direction, source, target, endpoint
+      // availability. No weight, no confidence, no ranking.
+      createChild(line, "span", { cls: "rdkp-rel-type", text: row.edge.relation });
+      createChild(line, "span", { cls: "rdkp-rel-dir", text: `[${row.direction}]` });
+      createChild(line, "span", {
+        cls: "rdkp-rel-path",
+        text: `source: ${row.edge.source} → target: ${row.edge.target}`,
+      });
+      createChild(line, "span", {
+        cls: "rdkp-rel-endpoint",
+        text: `[endpoint: ${row.endpointState}]`,
+      });
     }
   }
   for (const u of model.unresolvedFrom) {
