@@ -10,19 +10,14 @@
  *
  * Pure presentation: no writes, no new state authority, no
  * persistence. All state comes from the shared session store; the
- * only read is one explicit snapshot load, and only when no other
- * view has published one yet.
+ * snapshot read itself is owned by the shared graph snapshot
+ * coordinator (V2-01) — this view only awaits it and renders.
  */
 
 import { ItemView, type WorkspaceLeaf } from "obsidian";
-import {
-  loadGraphFromSource,
-  type GraphSource,
-} from "../semantic-graph/graph-loader";
-import {
-  publishGraphLoad,
-  type RDWorkspaceStore,
-} from "../architecture/workspace-state";
+import type { GraphSource } from "../semantic-graph/graph-loader";
+import { GraphSnapshotCoordinator } from "../architecture/graph-snapshot-coordinator";
+import { type RDWorkspaceStore } from "../architecture/workspace-state";
 import { createChild, emptyEl } from "./dom-helpers";
 import { RD_KNOWLEDGE_PANEL_VIEW_TYPE } from "./knowledge-panel-view";
 import { RD_GRAPH_VIEW_TYPE } from "./graph-intelligence-view";
@@ -42,18 +37,31 @@ const SURFACES: readonly { key: string; viewType?: string; mode?: "collaboration
 
 export interface RDArchiveNavDeps {
   readonly store: RDWorkspaceStore;
-  /** Read port for the one-shot explicit snapshot read (only when
-   * the shared store has no published snapshot yet). */
+  /** Read port for the snapshot read. Used only to build a private
+   * fallback coordinator when no shared one is injected (direct
+   * construction in tests). */
   readonly source: GraphSource;
+  /** V2-01: the shared graph snapshot coordinator (created once in
+   * rd-view-setup). This view never reads or publishes on its own. */
+  readonly coordinator?: GraphSnapshotCoordinator;
   /** Explicit activation of another RD view (registry path). */
   readonly openView: (viewType: string) => Promise<void>;
 }
 
 export class RDArchiveNavView extends ItemView {
   private unsubscribe: (() => void) | null = null;
+  /** V2-01: the one snapshot authority (shared in production). */
+  private readonly coordinator: GraphSnapshotCoordinator;
+  /** V2-02: async lifecycle — the view is renderable only between
+   * onOpen and onClose, and each onOpen starts a new open
+   * generation so a stale awaited continuation can never render. */
+  private active = false;
+  private openGeneration = 0;
 
   constructor(leaf: WorkspaceLeaf, private readonly deps: RDArchiveNavDeps) {
     super(leaf);
+    this.coordinator = deps.coordinator
+      ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
 
   getViewType(): string { return RD_ARCHIVE_NAV_VIEW_TYPE; }
@@ -61,17 +69,23 @@ export class RDArchiveNavView extends ItemView {
   getIcon(): string { return "archive"; }
 
   async onOpen(): Promise<void> {
+    this.openGeneration += 1;
+    const generation = this.openGeneration;
+    this.active = true;
     emptyEl(this.contentEl);
     this.unsubscribe = this.deps.store.subscribe(() => this.render());
-    // One explicit read, only when no view has published a snapshot
-    // yet; afterwards this view renders purely from the store.
-    if (this.deps.store.getState().graphSnapshot === null) {
-      publishGraphLoad(this.deps.store, await loadGraphFromSource(this.deps.source));
-    }
+    // The coordinator owns the one published snapshot: a cold open
+    // joins the in-flight read instead of starting its own.
+    await this.coordinator.ensureLoaded();
+    // V2-02: a continuation that resolves after close — or after a
+    // close→reopen cycle — belongs to a dead generation: drop
+    // silently (closed DOM stays empty, no render, no publish).
+    if (!this.active || generation !== this.openGeneration) return;
     this.render();
   }
 
   async onClose(): Promise<void> {
+    this.active = false;
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
@@ -80,6 +94,7 @@ export class RDArchiveNavView extends ItemView {
   /** Navigation rail: archive identity head, current selection,
    * knowledge objects, surface destinations. */
   private render(): void {
+    if (!this.active) return;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;

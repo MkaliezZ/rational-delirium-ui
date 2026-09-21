@@ -13006,9 +13006,6 @@ function publishGraphLoad(store, load) {
   }
 }
 
-// src/views/rd-workspace-view.ts
-var import_obsidian2 = require("obsidian");
-
 // src/semantic-graph/graph-loader.ts
 var GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
 var DEFAULT_SEMANTIC_GRAPH_PATH = "semantic-graph/graph.json";
@@ -13102,6 +13099,57 @@ async function loadGraphFromSource(source) {
   if (read.state === "unavailable") return { state: "unavailable", reason: read.reason };
   return parseGraphSnapshot(read.text);
 }
+
+// src/architecture/graph-snapshot-coordinator.ts
+var GraphSnapshotCoordinator = class {
+  constructor(store, source) {
+    this.store = store;
+    this.source = source;
+    /** Monotonically increasing load generation; 0 = never loaded. */
+    this.generation = 0;
+    /** Generation of the snapshot currently published in the store. */
+    this.published = 0;
+    /** The single in-flight load that newer cold-open calls may join. */
+    this.inFlight = null;
+  }
+  /** Generation of the published snapshot (0 when nothing has been
+   * published yet). Surfaces render from the store itself; this
+   * accessor exists for diagnostics and tests. */
+  publishedGeneration() {
+    return this.published;
+  }
+  /** Cold-open path: reuse the published snapshot when one exists,
+   * join the in-flight load when one is running, otherwise start
+   * the next generation. Concurrent callers share ONE source read. */
+  ensureLoaded() {
+    const published = this.store.getState().graphSnapshot;
+    if (published !== null) return Promise.resolve(published);
+    if (this.inFlight !== null) return this.inFlight.promise;
+    return this.startLoad();
+  }
+  /** Explicit re-read: ALWAYS starts a fresh generation, so every
+   * surface switches to the new published snapshot together once
+   * the read completes. */
+  refresh() {
+    return this.startLoad();
+  }
+  startLoad() {
+    const generation = ++this.generation;
+    const promise = loadGraphFromSource(this.source).then((load) => {
+      if (this.inFlight?.generation === generation) this.inFlight = null;
+      if (generation > this.published) {
+        this.published = generation;
+        publishGraphLoad(this.store, load);
+      }
+      return load;
+    });
+    this.inFlight = { generation, promise };
+    return promise;
+  }
+};
+
+// src/views/rd-workspace-view.ts
+var import_obsidian2 = require("obsidian");
 
 // src/semantic-graph/object-resolver.ts
 function resolveObject(graph, _workspace, objectId) {
@@ -14272,7 +14320,6 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
   constructor(leaf, deps) {
     super(leaf);
     this.unsubscribe = null;
-    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
     /** Source-read ownership (review fix): a resolved detail belongs
      * to exactly one object id; reads carry a generation token so a
      * late completion from an older selection can never apply, and a
@@ -14297,6 +14344,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     this.deps = deps;
     this.browser = deps.browser ?? new CollaborationBrowser();
     this.ownsBrowser = deps.browser === void 0;
+    this.coordinator = deps.coordinator ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
   getViewType() {
     return RD_WORKSPACE_VIEW_TYPE;
@@ -14330,7 +14378,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
       shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
     });
     this.observer.observe(shell);
-    await this.refreshAvailability();
+    await this.coordinator.ensureLoaded();
     if (this.deps.collaborationSource !== void 0) {
       void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
     }
@@ -14408,12 +14456,12 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     );
     this.renderBody();
   }
-  /** Explicit re-read of derived-state availability and snapshot;
-   * publishes the frozen read model into the shared store so the
-   * dock leaves render the same data. */
+  /** Explicit re-read of derived-state availability and snapshot
+   * (V2-01): a FRESH generation through the shared coordinator, so
+   * every shell surface switches to the new published snapshot
+   * together. Stale older generations can never overwrite it. */
   async refreshAvailability() {
-    this.graphLoad = await loadGraphFromSource(this.deps.source);
-    publishGraphLoad(this.deps.store, this.graphLoad);
+    await this.coordinator.refresh();
   }
   /** Source detail usable ONLY for the object it was read for. A
    * detail that belongs to another object is never reused — B
@@ -14510,17 +14558,17 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
       });
       return;
     }
-    if (this.graphLoad.state === "available" && state.selectedObjectId !== null) {
-      this.renderReading(center, state.selectedObjectId);
+    const snapshot = state.graphSnapshot;
+    if (snapshot !== null && snapshot.state === "available" && state.selectedObjectId !== null) {
+      this.renderReading(center, state.selectedObjectId, snapshot);
       this.ensureSourceDetail(state.selectedObjectId);
     } else {
-      this.renderDeskHome(center);
+      this.renderDeskHome(center, snapshot);
     }
   }
   /** CENTER — dominant reading surface. */
-  renderReading(center, selected) {
-    if (this.graphLoad.state !== "available") return;
-    const graph = this.graphLoad.graph;
+  renderReading(center, selected, load) {
+    const graph = load.graph;
     const node2 = graph.nodes.find((n) => n.object_id === selected);
     const host = createChild(center, "div", { cls: "rdws-reading" });
     const dossier = createChild(host, "header", { cls: "rdws-dossier" });
@@ -14571,7 +14619,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     }
     const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
     const model = buildKnowledgePanelModel({
-      load: this.graphLoad,
+      load,
       workspace: this.deps.store.getState().workspaceLabel,
       objectId: selected,
       sourceDetail: this.sourceDetailFor(selected)
@@ -14591,7 +14639,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     createChild(note, "span", { cls: "rdws-reading-note-id", text: selected });
   }
   /** CENTER — the desk home when nothing is selected. */
-  renderDeskHome(center) {
+  renderDeskHome(center, snapshot) {
     const desk = createChild(center, "div", { cls: "rdws-desk" });
     createChild(desk, "h2", {
       cls: "rdws-desk-title",
@@ -14608,7 +14656,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
       createChild(row, "dt", { text: area.key });
       createChild(row, "dd", { text: area.question });
     }
-    if (this.graphLoad.state !== "available") {
+    if (snapshot === null || snapshot.state !== "available") {
       createChild(desk, "div", {
         cls: "rdws-desk-snapshot-note",
         text: this.deps.store.getState().snapshot.note + " Object inspection needs the derived snapshot; everything else in this workspace works without it."
@@ -15643,6 +15691,12 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
     super(leaf);
     this.deps = deps;
     this.unsubscribe = null;
+    /** V2-02: async lifecycle — the view is renderable only between
+     * onOpen and onClose, and each onOpen starts a new open
+     * generation so a stale awaited continuation can never render. */
+    this.active = false;
+    this.openGeneration = 0;
+    this.coordinator = deps.coordinator ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
   getViewType() {
     return RD_ARCHIVE_NAV_VIEW_TYPE;
@@ -15654,14 +15708,17 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
     return "archive";
   }
   async onOpen() {
+    this.openGeneration += 1;
+    const generation = this.openGeneration;
+    this.active = true;
     emptyEl(this.contentEl);
     this.unsubscribe = this.deps.store.subscribe(() => this.render());
-    if (this.deps.store.getState().graphSnapshot === null) {
-      publishGraphLoad(this.deps.store, await loadGraphFromSource(this.deps.source));
-    }
+    await this.coordinator.ensureLoaded();
+    if (!this.active || generation !== this.openGeneration) return;
     this.render();
   }
   async onClose() {
+    this.active = false;
     this.unsubscribe?.();
     this.unsubscribe = null;
     emptyEl(this.contentEl);
@@ -15669,6 +15726,7 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
   /** Navigation rail: archive identity head, current selection,
    * knowledge objects, surface destinations. */
   render() {
+    if (!this.active) return;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;
@@ -15782,6 +15840,12 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
     this.deps = deps;
     this.unsubscribeStore = null;
     this.unsubscribeBrowser = null;
+    /** V2-02: async lifecycle — the view is renderable only between
+     * onOpen and onClose, and each onOpen starts a new open
+     * generation so a stale awaited continuation can never render. */
+    this.active = false;
+    this.openGeneration = 0;
+    this.coordinator = deps.coordinator ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
   getViewType() {
     return RD_INSPECTOR_VIEW_TYPE;
@@ -15793,15 +15857,18 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
     return "panel-right";
   }
   async onOpen() {
+    this.openGeneration += 1;
+    const generation = this.openGeneration;
+    this.active = true;
     emptyEl(this.contentEl);
     this.unsubscribeStore = this.deps.store.subscribe(() => this.render());
     this.unsubscribeBrowser = this.deps.browser.subscribe(() => this.render());
-    if (this.deps.store.getState().graphSnapshot === null) {
-      publishGraphLoad(this.deps.store, await loadGraphFromSource(this.deps.source));
-    }
+    await this.coordinator.ensureLoaded();
+    if (!this.active || generation !== this.openGeneration) return;
     this.render();
   }
   async onClose() {
+    this.active = false;
     this.unsubscribeStore?.();
     this.unsubscribeStore = null;
     this.unsubscribeBrowser?.();
@@ -15813,6 +15880,7 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
    * the selection. Collaboration summaries live in the workspace
    * zone, visually separate from knowledge state. */
   render() {
+    if (!this.active) return;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;
@@ -16453,7 +16521,8 @@ function buildRDViewRegistry() {
       openView: services.openView,
       themeController: services.themeController,
       browser: services.collaborationBrowser,
-      shellController: services.shellController
+      shellController: services.shellController,
+      coordinator: services.graphCoordinator
     })
   });
   registry.add({
@@ -16466,6 +16535,7 @@ function buildRDViewRegistry() {
     createView: (leaf, services) => new RDArchiveNavView(leaf, {
       store: services.workspaceStore,
       source: services.graphSource,
+      coordinator: services.graphCoordinator,
       openView: services.openView
     })
   });
@@ -16479,6 +16549,7 @@ function buildRDViewRegistry() {
     createView: (leaf, services) => new RDInspectorView(leaf, {
       store: services.workspaceStore,
       source: services.graphSource,
+      coordinator: services.graphCoordinator,
       browser: services.collaborationBrowser,
       shellController: services.shellController
     })
@@ -16502,6 +16573,10 @@ function liveDeps(services) {
 function registerRDViews(plugin, services) {
   const registry = buildRDViewRegistry();
   const workspaceStore = new RDWorkspaceStore();
+  const graphCoordinator = new GraphSnapshotCoordinator(
+    workspaceStore,
+    services.graphSource
+  );
   const themeController = new RDThemeController(
     createDefaultThemeRegistry(),
     "rational-archive"
@@ -16523,7 +16598,8 @@ function registerRDViews(plugin, services) {
       openView,
       themeController,
       collaborationBrowser,
-      shellController
+      shellController,
+      graphCoordinator
     }
   });
   return registry;

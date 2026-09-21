@@ -12,6 +12,7 @@
 import type { ItemView, Plugin, WorkspaceLeaf } from "obsidian";
 import { RDViewRegistry, activateRDView } from "./view-registry";
 import { RDWorkspaceStore } from "./workspace-state";
+import { GraphSnapshotCoordinator } from "./graph-snapshot-coordinator";
 import { RDShellController } from "./rd-shell-controller";
 import { RDWorkspaceShellView, RD_WORKSPACE_VIEW_TYPE } from "../views/rd-workspace-view";
 import { RDContextView, RD_CONTEXT_VIEW_TYPE } from "../views/context-view";
@@ -135,6 +136,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
         themeController: services.themeController as RDThemeController,
         browser: services.collaborationBrowser as CollaborationBrowser,
         shellController: services.shellController as RDShellController,
+        coordinator: services.graphCoordinator as GraphSnapshotCoordinator,
       }),
   });
 
@@ -151,6 +153,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
       new RDArchiveNavView(leaf, {
         store: services.workspaceStore as RDWorkspaceStore,
         source: services.graphSource as GraphSource,
+        coordinator: services.graphCoordinator as GraphSnapshotCoordinator,
         openView: services.openView as (viewType: string) => Promise<void>,
       }),
   });
@@ -166,6 +169,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
       new RDInspectorView(leaf, {
         store: services.workspaceStore as RDWorkspaceStore,
         source: services.graphSource as GraphSource,
+        coordinator: services.graphCoordinator as GraphSnapshotCoordinator,
         browser: services.collaborationBrowser as CollaborationBrowser,
         shellController: services.shellController as RDShellController,
       }),
@@ -197,6 +201,11 @@ function liveDeps(services: S) {
 export function registerRDViews(plugin: Plugin, services: RDServices): RDViewRegistry {
   const registry = buildRDViewRegistry();
   const workspaceStore = new RDWorkspaceStore();
+  // V2-01: one graph snapshot coordinator per session — the single
+  // load/publish authority shared by the workspace and both docks
+  // (cold-open dedup, explicit generations, stale rejection).
+  const graphCoordinator = new GraphSnapshotCoordinator(
+    workspaceStore, services.graphSource);
   // v1.6.2: single shipped theme; explicit, session-only selection.
   const themeController = new RDThemeController(
     createDefaultThemeRegistry(), "rational-archive");
@@ -218,7 +227,7 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
     plugin,
     services: {
       ...services, workspaceStore, openView, themeController,
-      collaborationBrowser, shellController,
+      collaborationBrowser, shellController, graphCoordinator,
     },
   });
   return registry;

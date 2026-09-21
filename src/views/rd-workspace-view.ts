@@ -21,13 +21,14 @@
 
 import { ItemView, type WorkspaceLeaf } from "obsidian";
 import type { GraphSource } from "../semantic-graph/graph-loader";
-import { loadGraphFromSource, type GraphLoadResult } from "../semantic-graph/graph-loader";
+import type { GraphLoadResult } from "../semantic-graph/graph-loader";
 import type { KoDetailResult, KoSourceReader } from "../semantic-graph/ko-detail-reader";
 import {
   buildKnowledgePanelModel,
   renderKnowledgePanel,
 } from "../semantic-graph/knowledge-panel";
-import { publishGraphLoad, type RDWorkspaceStore } from "../architecture/workspace-state";
+import { type RDWorkspaceStore } from "../architecture/workspace-state";
+import { GraphSnapshotCoordinator } from "../architecture/graph-snapshot-coordinator";
 import type { RDShellController } from "../architecture/rd-shell-controller";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
 import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
@@ -66,6 +67,11 @@ export interface RDWorkspaceShellDeps {
   /** V2 Phase A: shell controller owning the body scope class and
    * the dock leaves while this view is open. */
   readonly shellController?: RDShellController;
+  /** V2-01: the shared graph snapshot coordinator (created once in
+   * rd-view-setup, shared with both dock leaves). When absent the
+   * view owns a private one over the same store+source (direct
+   * construction in tests). */
+  readonly coordinator?: GraphSnapshotCoordinator;
 }
 
 /** The six information-architecture areas (v1.6.0 §4) — rendered
@@ -90,7 +96,11 @@ const AREAS: readonly { key: string; question: string; state: string }[] = [
 export class RDWorkspaceShellView extends ItemView {
   private readonly deps: RDWorkspaceShellDeps;
   private unsubscribe: (() => void) | null = null;
-  private graphLoad: GraphLoadResult = { state: "unavailable", reason: "not loaded yet" };
+  /** V2-01: the one snapshot authority. The view renders from the
+   * PUBLISHED store snapshot; loads (cold-open dedup, explicit
+   * re-read generations, stale-completion rejection) are owned by
+   * the coordinator, never by this view. */
+  private readonly coordinator: GraphSnapshotCoordinator;
   /** Source-read ownership (review fix): a resolved detail belongs
    * to exactly one object id; reads carry a generation token so a
    * late completion from an older selection can never apply, and a
@@ -122,6 +132,8 @@ export class RDWorkspaceShellView extends ItemView {
     this.deps = deps;
     this.browser = deps.browser ?? new CollaborationBrowser();
     this.ownsBrowser = deps.browser === undefined;
+    this.coordinator = deps.coordinator
+      ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
 
   getViewType(): string { return RD_WORKSPACE_VIEW_TYPE; }
@@ -162,7 +174,7 @@ export class RDWorkspaceShellView extends ItemView {
       shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
     });
     this.observer.observe(shell);
-    await this.refreshAvailability();
+    await this.coordinator.ensureLoaded();
     // Read-only collaboration summaries for the inspector dock.
     if (this.deps.collaborationSource !== undefined) {
       void this.browser.refresh(this.deps.collaborationSource)
@@ -252,12 +264,12 @@ export class RDWorkspaceShellView extends ItemView {
     this.renderBody();
   }
 
-  /** Explicit re-read of derived-state availability and snapshot;
-   * publishes the frozen read model into the shared store so the
-   * dock leaves render the same data. */
-  private async refreshAvailability(): Promise<void> {
-    this.graphLoad = await loadGraphFromSource(this.deps.source);
-    publishGraphLoad(this.deps.store, this.graphLoad);
+  /** Explicit re-read of derived-state availability and snapshot
+   * (V2-01): a FRESH generation through the shared coordinator, so
+   * every shell surface switches to the new published snapshot
+   * together. Stale older generations can never overwrite it. */
+  async refreshAvailability(): Promise<void> {
+    await this.coordinator.refresh();
   }
 
   /** Source detail usable ONLY for the object it was read for. A
@@ -371,18 +383,25 @@ export class RDWorkspaceShellView extends ItemView {
       return;
     }
 
-    if (this.graphLoad.state === "available" && state.selectedObjectId !== null) {
-      this.renderReading(center, state.selectedObjectId);
+    // V2-01: the center renders from the SAME published store
+    // snapshot the dock leaves render from — no private copy.
+    const snapshot = state.graphSnapshot;
+    if (snapshot !== null && snapshot.state === "available"
+        && state.selectedObjectId !== null) {
+      this.renderReading(center, state.selectedObjectId, snapshot);
       this.ensureSourceDetail(state.selectedObjectId);
     } else {
-      this.renderDeskHome(center);
+      this.renderDeskHome(center, snapshot);
     }
   }
 
   /** CENTER — dominant reading surface. */
-  private renderReading(center: HTMLElement, selected: string): void {
-    if (this.graphLoad.state !== "available") return;
-    const graph = this.graphLoad.graph;
+  private renderReading(
+    center: HTMLElement,
+    selected: string,
+    load: Extract<GraphLoadResult, { readonly state: "available" }>,
+  ): void {
+    const graph = load.graph;
     const node = graph.nodes.find((n) => n.object_id === selected);
     const host = createChild(center, "div", { cls: "rdws-reading" });
 
@@ -452,7 +471,7 @@ export class RDWorkspaceShellView extends ItemView {
 
     const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
     const model = buildKnowledgePanelModel({
-      load: this.graphLoad,
+      load,
       workspace: this.deps.store.getState().workspaceLabel,
       objectId: selected,
       sourceDetail: this.sourceDetailFor(selected),
@@ -477,7 +496,7 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   /** CENTER — the desk home when nothing is selected. */
-  private renderDeskHome(center: HTMLElement): void {
+  private renderDeskHome(center: HTMLElement, snapshot: GraphLoadResult | null): void {
     const desk = createChild(center, "div", { cls: "rdws-desk" });
     createChild(desk, "h2", {
       cls: "rdws-desk-title",
@@ -498,7 +517,7 @@ export class RDWorkspaceShellView extends ItemView {
       createChild(row, "dt", { text: area.key });
       createChild(row, "dd", { text: area.question });
     }
-    if (this.graphLoad.state !== "available") {
+    if (snapshot === null || snapshot.state !== "available") {
       createChild(desk, "div", {
         cls: "rdws-desk-snapshot-note",
         text: this.deps.store.getState().snapshot.note +

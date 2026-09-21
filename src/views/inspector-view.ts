@@ -9,21 +9,16 @@
  *
  * Pure presentation: no writes, no new state authority, no
  * persistence. Knowledge-object data comes from the shared store's
- * published snapshot (one explicit read of its own only when
- * nothing is published yet); collaboration summaries come from the
- * shared CollaborationBrowser — this view subscribes, it never
+ * published snapshot (the read is owned by the shared graph
+ * snapshot coordinator, V2-01); collaboration summaries come from
+ * the shared CollaborationBrowser — this view subscribes, it never
  * drives a refresh.
  */
 
 import { ItemView, type WorkspaceLeaf } from "obsidian";
-import {
-  loadGraphFromSource,
-  type GraphSource,
-} from "../semantic-graph/graph-loader";
-import {
-  publishGraphLoad,
-  type RDWorkspaceStore,
-} from "../architecture/workspace-state";
+import type { GraphSource } from "../semantic-graph/graph-loader";
+import { GraphSnapshotCoordinator } from "../architecture/graph-snapshot-coordinator";
+import { type RDWorkspaceStore } from "../architecture/workspace-state";
 import type { CollaborationBrowser } from "../collaboration/collaboration-surface";
 import type { RDShellController } from "../architecture/rd-shell-controller";
 import { createChild, emptyEl } from "./dom-helpers";
@@ -35,9 +30,13 @@ const CONTRIBUTION_LIMIT = 3;
 
 export interface RDInspectorDeps {
   readonly store: RDWorkspaceStore;
-  /** Read port for the one-shot explicit snapshot read (only when
-   * the shared store has no published snapshot yet). */
+  /** Read port for the snapshot read. Used only to build a private
+   * fallback coordinator when no shared one is injected (direct
+   * construction in tests). */
   readonly source: GraphSource;
+  /** V2-01: the shared graph snapshot coordinator (created once in
+   * rd-view-setup). This view never reads or publishes on its own. */
+  readonly coordinator?: GraphSnapshotCoordinator;
   /** Shared collaboration browser (created once in rd-view-setup).
    * This view only subscribes to its presentation state. */
   readonly browser: CollaborationBrowser;
@@ -49,9 +48,18 @@ export interface RDInspectorDeps {
 export class RDInspectorView extends ItemView {
   private unsubscribeStore: (() => void) | null = null;
   private unsubscribeBrowser: (() => void) | null = null;
+  /** V2-01: the one snapshot authority (shared in production). */
+  private readonly coordinator: GraphSnapshotCoordinator;
+  /** V2-02: async lifecycle — the view is renderable only between
+   * onOpen and onClose, and each onOpen starts a new open
+   * generation so a stale awaited continuation can never render. */
+  private active = false;
+  private openGeneration = 0;
 
   constructor(leaf: WorkspaceLeaf, private readonly deps: RDInspectorDeps) {
     super(leaf);
+    this.coordinator = deps.coordinator
+      ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
 
   getViewType(): string { return RD_INSPECTOR_VIEW_TYPE; }
@@ -59,18 +67,24 @@ export class RDInspectorView extends ItemView {
   getIcon(): string { return "panel-right"; }
 
   async onOpen(): Promise<void> {
+    this.openGeneration += 1;
+    const generation = this.openGeneration;
+    this.active = true;
     emptyEl(this.contentEl);
     this.unsubscribeStore = this.deps.store.subscribe(() => this.render());
     this.unsubscribeBrowser = this.deps.browser.subscribe(() => this.render());
-    // One explicit read, only when no view has published a snapshot
-    // yet; afterwards this view renders purely from the store.
-    if (this.deps.store.getState().graphSnapshot === null) {
-      publishGraphLoad(this.deps.store, await loadGraphFromSource(this.deps.source));
-    }
+    // The coordinator owns the one published snapshot: a cold open
+    // joins the in-flight read instead of starting its own.
+    await this.coordinator.ensureLoaded();
+    // V2-02: a continuation that resolves after close — or after a
+    // close→reopen cycle — belongs to a dead generation: drop
+    // silently (closed DOM stays empty, no render, no publish).
+    if (!this.active || generation !== this.openGeneration) return;
     this.render();
   }
 
   async onClose(): Promise<void> {
+    this.active = false;
     this.unsubscribeStore?.();
     this.unsubscribeStore = null;
     this.unsubscribeBrowser?.();
@@ -83,6 +97,7 @@ export class RDInspectorView extends ItemView {
    * the selection. Collaboration summaries live in the workspace
    * zone, visually separate from knowledge state. */
   private render(): void {
+    if (!this.active) return;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;
