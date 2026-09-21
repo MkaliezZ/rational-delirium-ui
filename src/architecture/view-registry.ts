@@ -24,8 +24,8 @@ export interface RDViewRegistration {
   readonly viewType: string;
   readonly displayText: string;
   readonly icon: string;
-  /** "right" = sidebar leaf (Context), "main" = main-area tab. */
-  readonly placement: "right" | "main";
+  /** "left"/"right" = sidebar dock leaves, "main" = main-area tab. */
+  readonly placement: "left" | "right" | "main";
   readonly commandId: string;
   readonly commandName: string;
   /** Ribbon icon text; omit for no ribbon entry point. */
@@ -88,7 +88,9 @@ export async function activateRDView(
   const leaf = existing[0] ??
     (reg.placement === "right"
       ? plugin.app.workspace.getRightLeaf(false)
-      : plugin.app.workspace.getLeaf(true));
+      : reg.placement === "left"
+        ? plugin.app.workspace.getLeftLeaf(false)
+        : plugin.app.workspace.getLeaf(true));
   if (leaf === null) return;
   await leaf.setViewState({ type: reg.viewType, active: true });
   plugin.app.workspace.revealLeaf(leaf);

@@ -113,9 +113,13 @@ describe("v1.6.3 investigation flow (re-homed projection)", () => {
 });
 
 describe("v1.6.3 honesty and neutrality", () => {
-  it("workspace source: neutral object list, honest placeholders, no ranking language", () => {
+  it("workspace sources: neutral object list, honest placeholders, no ranking language", () => {
     const src = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
-    expect(src).toContain("neutral id order");
+    // V2: the archive index moved to the left dock leaf.
+    const navSrc = readFileSync(join(root, "src", "views", "archive-nav-view.ts"), "utf-8");
+    expect(navSrc).toContain("neutral id order");
+    expect(navSrc).toContain('{ key: "Collaboration", mode: "collaboration" }');
+    expect(navSrc).toContain("rdan-collab-toggle");
     // v1.7.4-A: collaboration and agent-contribution areas are live;
     // honesty now lives in the empty-state wording of the surface.
     expect(src).toContain("Collaboration");
@@ -125,10 +129,12 @@ describe("v1.6.3 honesty and neutrality", () => {
     // no fake AI surface
     for (const banned of ["chat", "assistant", "suggest", "recommend ", "auto-complete"]) {
       expect(src.toLowerCase()).not.toContain(banned);
+      expect(navSrc.toLowerCase()).not.toContain(banned);
     }
     // read-only: no vault write, no timers
     for (const banned of ["vault.modify", "vault.create", "vault.delete", "setInterval", "setTimeout"]) {
       expect(src).not.toContain(banned);
+      expect(navSrc).not.toContain(banned);
     }
   });
 
@@ -177,13 +183,14 @@ describe("v1.6.3 theme token usage", () => {
 });
 
 describe("v1.6.3 existing views preserved", () => {
-  it("registry still ships the same six views with unchanged commands", async () => {
+  it("registry ships the six original views plus the two V2 docks, commands unchanged", async () => {
     const mod = await import("../src/architecture/rd-view-setup");
     const registry = mod.buildRDViewRegistry();
     const cmds = registry.registrations_().map((r) => r.commandId);
     expect(cmds).toEqual([
       "open-rd-context", "open-rd-investigation", "open-rd-loop-workspace",
       "open-rd-graph-intelligence", "open-rd-knowledge-panel", "open-rd-workspace",
+      "open-rd-archive-nav", "open-rd-inspector",
     ]);
   });
 

@@ -349,12 +349,13 @@ describe("v1.7.4-A read-only boundary", () => {
     expect(model.proposals[0].status).toBe("pending");
   });
 
-  it("workspace preserved: registry six views, investigation path intact", async () => {
+  it("workspace preserved: registry keeps the six originals plus the V2 docks, investigation path intact", async () => {
     const mod = await import("../src/architecture/rd-view-setup");
     const registry = mod.buildRDViewRegistry();
     expect(registry.registrations_().map((r) => r.commandId)).toEqual([
       "open-rd-context", "open-rd-investigation", "open-rd-loop-workspace",
       "open-rd-graph-intelligence", "open-rd-knowledge-panel", "open-rd-workspace",
+      "open-rd-archive-nav", "open-rd-inspector",
     ]);
     const src = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
     for (const banned of ["vault.modify", "vault.create", "vault.delete", "setInterval", "setTimeout"]) {

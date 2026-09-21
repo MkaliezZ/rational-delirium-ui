@@ -1,11 +1,15 @@
 /** RD Workspace — the investigation surface.
  *
  * Lineage: v1.6.1 shell → v1.6.3 journey → v1.7.4 collaboration →
- * v1.8 decisions. This phase realizes the frozen visual system
- * (RD_VISUAL_DESIGN_SYSTEM_V1_0 §5, RD_V1_6_0 §5): a three-plane
- * investigation desk — navigation rail / dominant reading surface /
- * inspection plane — with the archival typography scale. Presentation
- * only: every data flow, boundary and workflow semantic is unchanged.
+ * v1.8 decisions → V2 Phase A real shell. The V1 three-plane
+ * internal layout is decomposed: the navigation rail and the
+ * inspection plane are now real Obsidian dock leaves
+ * (rd-archive-nav / rd-inspector, sharing the session store), and
+ * this view keeps the central reading surface only — a slim
+ * archival masthead (exact-id input, Inspect, theme select), the
+ * honest snapshot statusline, and the dossier / desk home /
+ * collaboration host. Presentation only: every data flow, boundary
+ * and workflow semantic is unchanged.
  *
  * Boundaries preserved: read-only except the one decision port;
  * explicit reads only; selection is a UI pointer, never lifecycle;
@@ -23,7 +27,8 @@ import {
   buildKnowledgePanelModel,
   renderKnowledgePanel,
 } from "../semantic-graph/knowledge-panel";
-import type { RDWorkspaceStore } from "../architecture/workspace-state";
+import { publishGraphLoad, type RDWorkspaceStore } from "../architecture/workspace-state";
+import type { RDShellController } from "../architecture/rd-shell-controller";
 import { RD_THEME_ATTR, RD_TOKEN_VERSION } from "../architecture/theme-tokens";
 import { applyRDTheme, type RDThemeController } from "../themes/theme-runtime";
 import type {
@@ -38,10 +43,6 @@ import {
   resolveDetail,
 } from "../collaboration/collaboration-surface";
 import { createChild, emptyEl } from "./dom-helpers";
-import { RD_KNOWLEDGE_PANEL_VIEW_TYPE } from "./knowledge-panel-view";
-import { RD_GRAPH_VIEW_TYPE } from "./graph-intelligence-view";
-import { RD_LOOP_VIEW_TYPE } from "./loop-view";
-import { RD_INVESTIGATION_VIEW_TYPE } from "./investigation-view";
 
 export const RD_WORKSPACE_VIEW_TYPE = "rd-workspace";
 
@@ -58,6 +59,13 @@ export interface RDWorkspaceShellDeps {
   readonly collaborationSource?: CollaborationArtifactSource;
   /** v1.8: the one controlled write path (proposal decisions). */
   readonly decisionPort?: ProposalDecisionPort;
+  /** V2: shared collaboration browser (created once in
+   * rd-view-setup, shared with the inspector dock). When absent the
+   * view owns a private one (direct construction in tests). */
+  readonly browser?: CollaborationBrowser;
+  /** V2 Phase A: shell controller owning the body scope class and
+   * the dock leaves while this view is open. */
+  readonly shellController?: RDShellController;
 }
 
 /** The six information-architecture areas (v1.6.0 §4) — rendered
@@ -79,18 +87,6 @@ const AREAS: readonly { key: string; question: string; state: string }[] = [
   },
 ];
 
-/** Left-rail destinations (v1.6.0 §5 navigation; explicit only). */
-const SURFACES: readonly { key: string; viewType?: string; mode?: "collaboration" }[] = [
-  { key: "Collaboration", mode: "collaboration" },
-  { key: "Knowledge Panel", viewType: RD_KNOWLEDGE_PANEL_VIEW_TYPE },
-  { key: "Graph Intelligence", viewType: RD_GRAPH_VIEW_TYPE },
-  { key: "Loop Workspace", viewType: RD_LOOP_VIEW_TYPE },
-  { key: "Investigation", viewType: RD_INVESTIGATION_VIEW_TYPE },
-];
-
-const REVIEW_LIMIT = 5;
-const CONTRIBUTION_LIMIT = 3;
-
 export class RDWorkspaceShellView extends ItemView {
   private readonly deps: RDWorkspaceShellDeps;
   private unsubscribe: (() => void) | null = null;
@@ -111,13 +107,21 @@ export class RDWorkspaceShellView extends ItemView {
    * only if it is still its object's latest read. */
   private readonly sourceReadTokenByObject = new Map<string, number>();
   private observer: ResizeObserver | null = null;
-  private mode: "investigation" | "collaboration" = "investigation";
-  private readonly browser = new CollaborationBrowser();
+  /** V2: the desk mode lives in the shared store; this local mirror
+   * exists only so the view can detect entering collaboration mode
+   * and drive the one explicit artifact re-read for that entry. */
+  private lastMode: "investigation" | "collaboration" = "investigation";
+  /** V2: the browser is a shared service; a directly constructed
+   * view (tests) owns its private one and disposes it itself. */
+  private readonly browser: CollaborationBrowser;
+  private readonly ownsBrowser: boolean;
   private collabDetail: ArtifactDetail | null = null;
 
   constructor(leaf: WorkspaceLeaf, deps: RDWorkspaceShellDeps) {
     super(leaf);
     this.deps = deps;
+    this.browser = deps.browser ?? new CollaborationBrowser();
+    this.ownsBrowser = deps.browser === undefined;
   }
 
   getViewType(): string { return RD_WORKSPACE_VIEW_TYPE; }
@@ -126,6 +130,9 @@ export class RDWorkspaceShellView extends ItemView {
 
   async onOpen(): Promise<void> {
     emptyEl(this.contentEl);
+    // V2: activating the workspace brings up the real shell scope
+    // (body class + dock leaves), without stealing focus.
+    this.deps.shellController?.attach(this);
     const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
     shell.setAttribute(RD_THEME_ATTR, "");
     shell.setAttribute("data-rd-tokens", RD_TOKEN_VERSION);
@@ -134,18 +141,29 @@ export class RDWorkspaceShellView extends ItemView {
     if (this.deps.themeController !== undefined) {
       applyRDTheme(shell, this.deps.themeController.getCurrent());
     }
-    this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
+    this.unsubscribe = this.deps.store.subscribe((state) => {
+      // Entering collaboration mode drives exactly one explicit
+      // artifact re-read for that entry (unchanged v1.7.4-A
+      // behavior); all other state changes simply re-render.
+      if (state.workspaceMode === "collaboration" && this.lastMode !== "collaboration"
+          && this.deps.collaborationSource !== undefined) {
+        void this.browser.refresh(this.deps.collaborationSource)
+          .then(() => this.renderBody());
+      }
+      this.lastMode = state.workspaceMode;
+      this.renderBody();
+    });
     // Pane-width layout state (v1.3.5 §5: breakpoints follow the
-    // allocated pane, not the window). Supporting planes collapse
-    // before the reading surface is ever squeezed.
+    // allocated pane, not the window). Narrow keeps the dossier
+    // typography compact; the docks are Obsidian sidebars now and
+    // no longer fold inside this view.
     this.observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0;
       shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
-      shell.classList.toggle("rdws-mid", width >= 700 && width < 1100);
     });
     this.observer.observe(shell);
     await this.refreshAvailability();
-    // Read-only collaboration summaries for the inspection plane.
+    // Read-only collaboration summaries for the inspector dock.
     if (this.deps.collaborationSource !== undefined) {
       void this.browser.refresh(this.deps.collaborationSource)
         .then(() => this.renderBody());
@@ -154,26 +172,20 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    // V2: closing the workspace releases the shell scope and the
+    // dock leaves with it.
+    this.deps.shellController?.release();
     this.observer?.disconnect();
     this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
-    this.browser.dispose();
+    if (this.ownsBrowser) this.browser.dispose();
     emptyEl(this.contentEl);
   }
 
-  /** Masthead: investigation title + workspace scope on the left;
-   * theme and exact-id query on the right. */
+  /** Slim archival masthead: theme selection and the exact-id
+   * query. The archive identity head now lives in the left dock. */
   private buildMasthead(head: HTMLElement, shell: HTMLElement): void {
-    const left = createChild(head, "div", { cls: "rdws-masthead-left" });
-    createChild(left, "h1", {
-      cls: "rdws-masthead-title",
-      text: "Rational Delirium",
-    });
-    createChild(left, "div", {
-      cls: "rdws-masthead-scope",
-      text: `investigation workspace · ${this.deps.store.getState().workspaceLabel}`,
-    });
     const right = createChild(head, "div", { cls: "rdws-masthead-right" });
     const controller = this.deps.themeController;
     if (controller !== undefined) {
@@ -202,7 +214,7 @@ export class RDWorkspaceShellView extends ItemView {
     const go = () => {
       const id = input.value.trim();
       if (id !== "") {
-        this.mode = "investigation";
+        this.deps.store.setWorkspaceMode("investigation");
         this.deps.store.setSelectedObject(id);
       }
     };
@@ -240,33 +252,12 @@ export class RDWorkspaceShellView extends ItemView {
     this.renderBody();
   }
 
-  /** Explicit re-read of derived-state availability and snapshot. */
+  /** Explicit re-read of derived-state availability and snapshot;
+   * publishes the frozen read model into the shared store so the
+   * dock leaves render the same data. */
   private async refreshAvailability(): Promise<void> {
     this.graphLoad = await loadGraphFromSource(this.deps.source);
-    const load = this.graphLoad;
-    if (load.state === "available") {
-      this.deps.store.setSnapshotAvailability({
-        state: "available",
-        note:
-          `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations ` +
-          "(freshness unverified)",
-      });
-    } else if (load.state === "missing") {
-      this.deps.store.setSnapshotAvailability({
-        state: "missing",
-        note: "Graph artifact missing — this does not mean no knowledge exists.",
-      });
-    } else if (load.state === "invalid") {
-      this.deps.store.setSnapshotAvailability({
-        state: "invalid",
-        note: `Graph artifact invalid (${load.reason}).`,
-      });
-    } else {
-      this.deps.store.setSnapshotAvailability({
-        state: "unavailable",
-        note: `Graph artifact unavailable (${load.reason}).`,
-      });
-    }
+    publishGraphLoad(this.deps.store, this.graphLoad);
   }
 
   /** Source detail usable ONLY for the object it was read for. A
@@ -309,14 +300,34 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   /** Enter collaboration mode focused on one proposal (from the
-   * review-attention list). Explicit navigation, read-only. */
-  private openProposalInCollaboration(path: string): void {
-    this.mode = "collaboration";
+   * inspector's review list). Explicit navigation, read-only.
+   * Public: the shell controller routes dock-row clicks here. */
+  openProposalInCollaboration(path: string): void {
+    // Mark the mode change locally first so the store subscription
+    // does not start a second artifact re-read for the same entry.
+    this.lastMode = "collaboration";
+    this.deps.store.setWorkspaceMode("collaboration");
     const source = this.deps.collaborationSource;
     if (source === undefined) return;
     void this.browser.refresh(source)
       .then(() => {
         this.browser.select("proposal", path);
+        return this.refreshCollabDetail();
+      })
+      .then(() => this.renderBody());
+  }
+
+  /** Enter collaboration mode focused on one contribution (from the
+   * inspector's recent-contributions list). Explicit, read-only.
+   * Public: the shell controller routes dock-row clicks here. */
+  openContributionInCollaboration(path: string): void {
+    this.lastMode = "collaboration";
+    this.deps.store.setWorkspaceMode("collaboration");
+    const source = this.deps.collaborationSource;
+    if (source === undefined) return;
+    void this.browser.refresh(source)
+      .then(() => {
+        this.browser.select("contribution", path);
         return this.refreshCollabDetail();
       })
       .then(() => this.renderBody());
@@ -339,11 +350,10 @@ export class RDWorkspaceShellView extends ItemView {
       });
     }
 
-    const layout = createChild(body, "div", { cls: "rdws-planes" });
-    this.renderNavRail(layout, state.selectedObjectId);
-    const center = createChild(layout, "div", { cls: "rdws-plane-center" });
+    // Center-only composition: the reading surface is the view.
+    const center = createChild(body, "div", { cls: "rdws-center" });
 
-    if (this.mode === "collaboration") {
+    if (state.workspaceMode === "collaboration") {
       const host = createChild(center, "div", { cls: "rdws-collaboration-host" });
       renderCollaboration(host, this.browser.getState(), this.collabDetail, {
         onSelect: (kind: ArtifactKind, path: string) => {
@@ -366,109 +376,6 @@ export class RDWorkspaceShellView extends ItemView {
       this.ensureSourceDetail(state.selectedObjectId);
     } else {
       this.renderDeskHome(center);
-    }
-    this.renderInspectionPlane(layout, state.selectedObjectId);
-  }
-
-  /** LEFT — navigation rail: current selection, knowledge objects,
-   * surface destinations. 200–240px; collapses under 700px. */
-  private renderNavRail(layout: HTMLElement, selected: string | null): void {
-    const rail = createChild(layout, "nav", { cls: "rdws-plane-left" });
-    rail.setAttribute("aria-label", "RD workspace navigation");
-
-    const current = createChild(rail, "div", { cls: "rdws-nav-group" });
-    createChild(current, "div", { cls: "rdws-nav-label", text: "Investigation" });
-    if (selected !== null) {
-      const sel = createChild(current, "div", { cls: "rdws-nav-selection" });
-      createChild(sel, "div", { cls: "rdws-nav-selection-id", text: selected });
-      const back = createChild(current, "button", {
-        cls: "rdws-button rdws-back", text: "◀ Back",
-      });
-      back.setAttribute("aria-label", "Back along investigation trail");
-      back.addEventListener("click", () => this.deps.store.back());
-    } else {
-      createChild(current, "div", {
-        cls: "rdws-nav-hint", text: "nothing selected — query an exact id or choose an object",
-      });
-    }
-
-    const objects = createChild(rail, "div", { cls: "rdws-nav-group rdws-nav-objects" });
-    createChild(objects, "div", { cls: "rdws-nav-label", text: "Knowledge Objects" });
-    if (this.graphLoad.state !== "available") {
-      createChild(objects, "div", {
-        cls: "rdws-nav-empty",
-        text:
-          "snapshot unavailable — the vault still contains its knowledge; " +
-          "regenerate the derived graph with the projector when needed",
-      });
-    } else {
-      const nodes = [...this.graphLoad.graph.nodes]
-        .sort((a, b) => a.object_id.localeCompare(b.object_id));
-      if (nodes.length === 0) {
-        createChild(objects, "div", { cls: "rdws-nav-empty", text: "no objects in this snapshot" });
-      }
-      // Archival index: group by DECLARED kind only — kinds that do
-      // not exist in this snapshot never appear. Groups stay in
-      // neutral alphabetical order; ids stay in neutral id order
-      // within each group. Counts are snapshot counts, not weight.
-      const byKind = new Map<string, typeof nodes>();
-      for (const node of nodes) {
-        const list = byKind.get(node.kind) ?? [];
-        list.push(node);
-        byKind.set(node.kind, list);
-      }
-      const kinds = [...byKind.keys()].sort((a, b) => a.localeCompare(b));
-      for (const kind of kinds) {
-        const group = byKind.get(kind) ?? [];
-        const heading = createChild(objects, "div", { cls: "rdws-nav-kind" });
-        createChild(heading, "span", { cls: "rdws-nav-kind-name", text: kind });
-        createChild(heading, "span", {
-          cls: "rdws-nav-kind-count",
-          text: `· ${group.length}`,
-        });
-        for (const node of group) {
-          const row = createChild(objects, "button", { cls: "rdws-object-row" });
-          row.setAttribute("aria-label", `inspect ${node.object_id}`);
-          if (node.object_id === selected) row.setAttribute("aria-pressed", "true");
-          createChild(row, "span", { cls: "rdws-object-row-id", text: node.object_id });
-          createChild(row, "span", {
-            cls: "rdws-object-row-meta",
-            // kind lives in the group heading above — the row states
-            // lifecycle only, no duplicated classification
-            text: node.status,
-          });
-          createChild(row, "span", {
-            cls: "rdws-object-row-title", text: node.title,
-          });
-          row.addEventListener("click", () => {
-            this.mode = "investigation";
-            this.deps.store.setSelectedObject(node.object_id);
-          });
-        }
-      }
-    }
-
-    const surfaces = createChild(rail, "div", { cls: "rdws-nav-group" });
-    createChild(surfaces, "div", { cls: "rdws-nav-label", text: "Surfaces" });
-    for (const surface of SURFACES) {
-      const row = createChild(surfaces, "button", { cls: "rdws-surface-row" });
-      row.textContent = surface.key;
-      if (surface.mode === "collaboration") {
-        // v1.7.4-A toggle, now a first-class destination.
-        row.classList.add("rdws-collab-toggle");
-        row.setAttribute("aria-pressed", String(this.mode === "collaboration"));
-        row.addEventListener("click", () => {
-          this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
-          if (this.mode === "collaboration" && this.deps.collaborationSource !== undefined) {
-            void this.browser.refresh(this.deps.collaborationSource)
-              .then(() => this.renderBody());
-          }
-          this.renderBody();
-        });
-      } else if (surface.viewType !== undefined) {
-        const viewType = surface.viewType;
-        row.addEventListener("click", () => { void this.deps.openView(viewType); });
-      }
     }
   }
 
@@ -598,205 +505,6 @@ export class RDWorkspaceShellView extends ItemView {
           " Object inspection needs the derived snapshot; everything else in this " +
           "workspace works without it.",
       });
-    }
-  }
-
-  /** RIGHT — inspection plane: selected object metadata, linked
-   * objects, Human review attention, recent contributions,
-   * diagnostics for the selection. 280–340px; collapses under
-   * 1100px. Collaboration summaries live here, visually separate
-   * from knowledge state. */
-  private renderInspectionPlane(layout: HTMLElement, selected: string | null): void {
-    const plane = createChild(layout, "aside", { cls: "rdws-plane-right" });
-    plane.setAttribute("aria-label", "RD inspection");
-
-    const model = this.browser.getState().model;
-
-    // Inspector hierarchy (review fix): the PRIMARY zone carries the
-    // selected Knowledge Object's own context; the workspace zone is
-    // visually subordinate so review/contribution records never read
-    // as peer knowledge properties.
-    let objectZone: HTMLElement | null = null;
-    if (this.graphLoad.state === "available" && selected !== null) {
-      objectZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
-      objectZone.setAttribute("data-zone", "object");
-      createChild(objectZone, "div", { cls: "rdws-insp-zone-label", text: "Selected object" });
-    }
-
-    // Object — declared identity of the current selection. Metadata
-    // only; nothing here validates the object.
-    if (this.graphLoad.state === "available" && selected !== null) {
-      const graph = this.graphLoad.graph;
-      const node = graph.nodes.find((n) => n.object_id === selected);
-      const obj = createChild(objectZone!, "section", { cls: "rdws-insp-group" });
-      createChild(obj, "div", { cls: "rdws-insp-label", text: "Object" });
-      if (node === undefined) {
-        createChild(obj, "div", {
-          cls: "rdws-nav-empty", text: `${selected} — not in snapshot`,
-        });
-      } else {
-        const meta = createChild(obj, "dl", { cls: "rdws-insp-meta" });
-        const metaRow = (k: string, v: string) => {
-          createChild(meta, "dt", { text: k });
-          createChild(meta, "dd", { text: v });
-        };
-        metaRow("id", node.object_id);
-        metaRow("kind", node.kind);
-        metaRow("lifecycle", node.status);
-        if (node.predecessor !== null) metaRow("predecessor", node.predecessor);
-        if (node.successor !== null) metaRow("successor", node.successor);
-      }
-    }
-
-    // Linked objects — declared relations touching the selection.
-    // Navigation only; the listing carries no evaluation.
-    if (this.graphLoad.state === "available" && selected !== null) {
-      const graph = this.graphLoad.graph;
-      const linked = createChild(objectZone!, "section", { cls: "rdws-insp-group" });
-      createChild(linked, "div", { cls: "rdws-insp-label", text: "Linked objects" });
-      const edges = graph.edges
-        .filter((e) => e.source === selected || e.target === selected);
-      const unresolved = graph.unresolved
-        .filter((e) => e.source === selected || e.target === selected);
-      if (edges.length === 0 && unresolved.length === 0) {
-        createChild(linked, "div", {
-          cls: "rdws-nav-empty", text: "no declared relations in this snapshot",
-        });
-      } else {
-        for (const edge of edges) {
-          const outgoing = edge.source === selected;
-          const otherId = outgoing ? edge.target : edge.source;
-          const row = createChild(linked, "button", { cls: "rdws-link-row" });
-          row.setAttribute("data-relation", edge.relation);
-          row.setAttribute("aria-label", `inspect ${otherId}`);
-          createChild(row, "span", {
-            cls: "rdws-link-type",
-            text: outgoing ? `${edge.relation} →` : `← ${edge.relation}`,
-          });
-          createChild(row, "span", { cls: "rdws-link-id", text: otherId });
-          row.addEventListener("click", () => {
-            this.mode = "investigation";
-            this.deps.store.setSelectedObject(otherId);
-          });
-        }
-        for (const u of unresolved) {
-          const outgoing = u.source === selected;
-          const target = outgoing ? u.target : u.source;
-          const row = createChild(linked, "div", { cls: "rdws-link-row rdws-link-unresolved" });
-          row.setAttribute("data-relation", u.relation);
-          createChild(row, "span", {
-            cls: "rdws-link-type",
-            text: outgoing ? `${u.relation} →` : `← ${u.relation}`,
-          });
-          createChild(row, "span", { cls: "rdws-link-id", text: target });
-          createChild(row, "span", { cls: "rdws-link-state", text: "unresolved" });
-        }
-      }
-    }
-
-    // Workspace zone — recorded Human actions and Agent work on the
-    // archive. Distinct from, and subordinate to, the selected
-    // object's declared context above.
-    const workspaceZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
-    workspaceZone.setAttribute("data-zone", "workspace");
-    createChild(workspaceZone, "div", { cls: "rdws-insp-zone-label", text: "Workspace" });
-
-    // Human review attention — pending proposals, existing data only.
-    const review = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
-    createChild(review, "div", { cls: "rdws-insp-label", text: "Workspace review" });
-    const pending = model !== null
-      ? model.proposals.filter((p) => p.status === "pending")
-      : [];
-    if (model === null) {
-      createChild(review, "div", {
-        cls: "rdws-nav-empty", text: "reading proposal records…",
-      });
-    } else if (pending.length === 0) {
-      createChild(review, "div", {
-        cls: "rdws-nav-empty",
-        text: model.proposals.length > 0
-          ? "No proposals awaiting decision — all recorded proposals are decided."
-          : "No proposal records found.",
-      });
-    } else {
-      createChild(review, "div", {
-        cls: "rdws-insp-count",
-        text: `${pending.length} awaiting your decision`,
-      });
-      for (const p of pending.slice(0, REVIEW_LIMIT)) {
-        const row = createChild(review, "button", { cls: "rdws-review-row" });
-        row.setAttribute("aria-label", `review ${p.id ?? p.path}`);
-        createChild(row, "span", {
-          cls: "rdws-review-id", text: p.id ?? "(no id declared)",
-        });
-        createChild(row, "span", {
-          cls: "rdws-review-meta",
-          text: p.target !== null ? `→ ${p.target}` : (p.authorAgent ?? "author not declared"),
-        });
-        row.addEventListener("click", () => this.openProposalInCollaboration(p.path));
-      }
-      if (pending.length > REVIEW_LIMIT) {
-        createChild(review, "div", {
-          cls: "rdws-insp-more", text: `+ ${pending.length - REVIEW_LIMIT} more in Collaboration`,
-        });
-      }
-    }
-
-    // Recent contributions — provenance of what agents did, not proof.
-    const contribs = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
-    createChild(contribs, "div", {
-      cls: "rdws-insp-label", text: "Recent workspace contributions",
-    });
-    const records = model !== null
-      ? [...model.contributions].sort((a, b) =>
-          (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, CONTRIBUTION_LIMIT)
-      : [];
-    if (records.length === 0) {
-      createChild(contribs, "div", {
-        cls: "rdws-nav-empty", text: "No contribution records found.",
-      });
-    } else {
-      for (const c of records) {
-        const row = createChild(contribs, "button", { cls: "rdws-contrib-row" });
-        row.setAttribute("aria-label", `inspect ${c.id ?? c.path}`);
-        createChild(row, "span", {
-          cls: "rdws-review-id", text: c.id ?? "(no id declared)",
-        });
-        createChild(row, "span", {
-          cls: "rdws-review-meta",
-          text: [
-            c.performedOperation,
-            c.createdAt,
-          ].filter((x): x is string => x !== null).join(" · "),
-        });
-        row.addEventListener("click", () => {
-          this.mode = "collaboration";
-          if (this.deps.collaborationSource === undefined) return;
-          void this.browser.refresh(this.deps.collaborationSource)
-            .then(() => {
-              this.browser.select("contribution", c.path);
-              return this.refreshCollabDetail();
-            })
-            .then(() => this.renderBody());
-        });
-      }
-    }
-
-    // Diagnostics for the current selection — declared data only.
-    if (this.graphLoad.state === "available" && selected !== null) {
-      const graph = this.graphLoad.graph;
-      const unresolvedCount = graph.unresolved
-        .filter((e) => e.source === selected || e.target === selected).length;
-      const relationCount = graph.edges
-        .filter((e) => e.source === selected || e.target === selected).length;
-      const diagCount = graph.diagnostics
-        .filter((d) => d.object_id === selected).length;
-      const diag = createChild(plane, "section", { cls: "rdws-insp-group" });
-      createChild(diag, "div", { cls: "rdws-insp-label", text: "Diagnostics" });
-      const line = createChild(diag, "div", { cls: "rdws-diag-line" });
-      line.textContent =
-        `${relationCount} declared relation(s) · ${unresolvedCount} unresolved · ` +
-        `${diagCount} diagnostic(s) — observations, not repair requests`;
     }
   }
 }

@@ -23,6 +23,7 @@ import type { WorkspaceLeaf } from "obsidian";
 import { GRAPH_SCHEMA_TAG } from "../src/semantic-graph/graph-loader";
 import type { KoDetailResult, KoSourceReader } from "../src/semantic-graph/ko-detail-reader";
 import { RDWorkspaceShellView } from "../src/views/rd-workspace-view";
+import { RDArchiveNavView } from "../src/views/archive-nav-view";
 import { RDWorkspaceStore } from "../src/architecture/workspace-state";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -78,7 +79,7 @@ const detailFor = (objectId: string, path: string, text: string): KoDetailResult
   },
 });
 
-const views: RDWorkspaceShellView[] = [];
+const views: Array<{ onClose(): Promise<void> }> = [];
 const readers: DeferredReader[] = [];
 afterEach(async () => {
   for (const view of views.splice(0)) await view.onClose();
@@ -88,6 +89,7 @@ afterEach(async () => {
 
 async function openWorkspace(selected: string): Promise<{
   view: RDWorkspaceShellView;
+  nav: RDArchiveNavView;
   reader: DeferredReader;
   store: RDWorkspaceStore;
   select: (id: string) => void;
@@ -96,21 +98,27 @@ async function openWorkspace(selected: string): Promise<{
   store.setSelectedObject(selected);
   const reader = new DeferredReader();
   readers.push(reader);
+  const source = { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) };
   const view = new RDWorkspaceShellView({} as WorkspaceLeaf, {
     store,
-    source: { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) },
+    source,
     sourceReader: reader,
     collaborationSource: { readDir: async () => ({ state: "missing" as const }) },
     openView: async () => {},
   });
-  views.push(view);
+  // V2: selection rows live in the left dock leaf sharing the store.
+  const nav = new RDArchiveNavView({} as WorkspaceLeaf, {
+    store, source, openView: async () => {},
+  });
+  views.push(view, nav);
   await view.onOpen();
+  await nav.onOpen();
   const select = (id: string) => {
-    view.contentEl
-      .querySelector<HTMLButtonElement>(`.rdws-object-row[aria-label="inspect ${id}"]`)!
+    nav.contentEl
+      .querySelector<HTMLButtonElement>(`.rdan-object-row[aria-label="inspect ${id}"]`)!
       .click();
   };
-  return { view, reader, store, select };
+  return { view, nav, reader, store, select };
 }
 
 const stripItem = (view: RDWorkspaceShellView, label: string) =>
@@ -170,16 +178,16 @@ describe("review fix — source-read lifecycle", () => {
   });
 
   it("D. stable selection reads exactly once; rerenders never reread", async () => {
-    const { view, reader } = await openWorkspace("ko-20260921-0001");
+    const { view, nav, reader } = await openWorkspace("ko-20260921-0001");
     reader.settle("ko-20260921-0001", detailFor("ko-20260921-0001", "NOTES/a.md", "PROVENANCE-A"));
     await vi.waitFor(() => expect(renderedText(view)).toContain("PROVENANCE-A"));
     // force several plain rerender cycles (re-select same object, toggle
-    // collaboration surface and back) — none may reread the source
-    view.contentEl
-      .querySelector<HTMLButtonElement>('.rdws-object-row[aria-label="inspect ko-20260921-0001"]')!
+    // collaboration surface and back via the nav dock) — none may reread
+    nav.contentEl
+      .querySelector<HTMLButtonElement>('.rdan-object-row[aria-label="inspect ko-20260921-0001"]')!
       .click();
-    view.contentEl.querySelector<HTMLButtonElement>(".rdws-collab-toggle")!.click();
-    view.contentEl.querySelector<HTMLButtonElement>(".rdws-collab-toggle")!.click();
+    nav.contentEl.querySelector<HTMLButtonElement>(".rdan-collab-toggle")!.click();
+    nav.contentEl.querySelector<HTMLButtonElement>(".rdan-collab-toggle")!.click();
     await new Promise((r) => setTimeout(r, 30));
     expect(reader.calls.filter((c) => c === "ko-20260921-0001")).toHaveLength(1);
     expect(renderedText(view)).toContain("PROVENANCE-A");

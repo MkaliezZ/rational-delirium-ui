@@ -38,10 +38,16 @@ describe("v1.6.4 motion implementation shape", () => {
     expect(keyframes).toEqual(["@keyframes rd-reveal", "@keyframes rd-enter"]);
     expect(css.toLowerCase()).not.toContain("infinite");
     expect(css).not.toContain("animation-iteration-count");
-    // no JS-side animation machinery was introduced
-    const viewSrc = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
-    const panelSrc = readFileSync(join(root, "src", "semantic-graph", "knowledge-panel.ts"), "utf-8");
-    for (const src of [viewSrc, panelSrc]) {
+    // no JS-side animation machinery was introduced — in any view
+    // file, including the V2 dock leaves.
+    const viewFiles = [
+      "src/views/rd-workspace-view.ts",
+      "src/views/archive-nav-view.ts",
+      "src/views/inspector-view.ts",
+      "src/semantic-graph/knowledge-panel.ts",
+      "src/architecture/rd-shell-controller.ts",
+    ].map((rel) => readFileSync(join(root, rel), "utf-8"));
+    for (const src of viewFiles) {
       for (const banned of [
         "requestAnimationFrame", "setInterval", "setTimeout",
         "Animation(", "animate(", "transition",
@@ -128,12 +134,13 @@ describe("v1.6.4 boundary: animation cannot mutate data", () => {
     expect(section).not.toMatch(/javascript:|expression\(/);
   });
 
-  it("existing views preserved: registry command surface unchanged", async () => {
+  it("existing views preserved: registry command surface unchanged, V2 docks appended", async () => {
     const mod = await import("../src/architecture/rd-view-setup");
     const registry = mod.buildRDViewRegistry();
     expect(registry.registrations_().map((r) => r.commandId)).toEqual([
       "open-rd-context", "open-rd-investigation", "open-rd-loop-workspace",
       "open-rd-graph-intelligence", "open-rd-knowledge-panel", "open-rd-workspace",
+      "open-rd-archive-nav", "open-rd-inspector",
     ]);
   });
 });

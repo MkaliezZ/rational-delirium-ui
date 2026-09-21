@@ -7,6 +7,7 @@ import { ObsidianCollaborationSourceImpl } from "../src/architecture/obsidian-gr
 import { RDWorkspaceStore } from "../src/architecture/workspace-state";
 import { buildCollaborationModel, parseArtifact } from "../src/collaboration/artifact-reader";
 import { RDWorkspaceShellView } from "../src/views/rd-workspace-view";
+import { RDArchiveNavView } from "../src/views/archive-nav-view";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const example = (name: string) => readFileSync(join(root, "examples", name), "utf8");
@@ -42,7 +43,7 @@ function host(waitForListing: () => Promise<void> = async () => {}) {
   return { source, files, read, write };
 }
 
-const views: RDWorkspaceShellView[] = [];
+const views: Array<{ onClose(): Promise<void> }> = [];
 afterEach(async () => {
   for (const view of views.splice(0)) await view.onClose();
   document.body.replaceChildren();
@@ -79,18 +80,28 @@ describe("Collaboration real-host regressions", () => {
   it("renders after async loading on first open and after closing/reopening the view", async () => {
     const store = new RDWorkspaceStore();
     for (const opening of ["cold", "warm"]) {
+      // V2: the desk mode is shared store state (it survives view
+      // reopening); each opening starts from the investigation mode.
+      store.setWorkspaceMode("investigation");
       let release!: () => void;
       const loading = new Promise<void>((resolve) => { release = resolve; });
       const h = host(() => loading);
+      const source = { read: async () => ({ state: "missing" as const }) };
       const view = new RDWorkspaceShellView({} as WorkspaceLeaf, {
         store,
-        source: { read: async () => ({ state: "missing" as const }) },
+        source,
         collaborationSource: h.source,
         openView: async () => {},
       });
-      views.push(view);
+      // V2: the collaboration toggle lives in the left dock leaf,
+      // sharing the same store as the workspace view.
+      const nav = new RDArchiveNavView({} as WorkspaceLeaf, {
+        store, source, openView: async () => {},
+      });
+      views.push(view, nav);
       await view.onOpen();
-      view.contentEl.querySelector<HTMLButtonElement>(".rdws-collab-toggle")!.click();
+      await nav.onOpen();
+      nav.contentEl.querySelector<HTMLButtonElement>(".rdan-collab-toggle")!.click();
       expect(view.contentEl.textContent, opening).toContain("loading artifact directories");
       release();
       await vi.waitFor(() => {
@@ -114,8 +125,11 @@ describe("Collaboration real-host regressions", () => {
         .toContain("workflow: proposal PROP-20260920-001 → decision approved"));
       expect(h.write).not.toHaveBeenCalled();
       await view.onClose();
+      await nav.onClose();
+      views.pop();
       views.pop();
       view.contentEl.remove();
+      nav.contentEl.remove();
     }
   });
 });

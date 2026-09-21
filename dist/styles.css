@@ -641,7 +641,8 @@
    fallback values here are the current baseline presentation only,
    not a theme variant. */
 .rd-workspace-shell {
-  padding: 10px 12px;
+  /* V2 Phase B: the shell owns the full leaf; bands pad themselves. */
+  padding: 0;
   background: var(--rd-surface-base, #11110F);
   color: var(--rd-identity-title-text, #D4D0C8);
 }
@@ -733,63 +734,8 @@
   border-color: var(--rd-surface-focus-rule, #D8C89D);
   color: var(--rd-surface-focus-rule, #D8C89D);
 }
-.rd-workspace-shell .rdws-layout {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-  margin-top: 8px;
-  padding-top: 8px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-layout { flex-direction: column; }
 .rd-workspace-shell .rdws-reading { flex: 1 1 auto; min-width: 0; }
-.rd-workspace-shell .rdws-reading-note {
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-top: 6px;
-}
-.rd-workspace-shell .rdws-rail {
-  flex: 0 0 260px;
-  max-height: 70vh;
-  overflow-y: auto;
-  border-left: 1px solid var(--rd-surface-rule, #292824);
-  padding-left: 8px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-rail {
-  border-left: none;
-  padding-left: 0;
-  max-height: none;
-}
-.rd-workspace-shell .rdws-rail-title {
-  font-family: var(--font-monospace);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-bottom: 4px;
-}
-.rd-workspace-shell .rdws-object-row {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  cursor: pointer;
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  padding: 3px 4px;
-}
-.rd-workspace-shell .rdws-object-row:hover { background: var(--rd-surface-raised, #1D1C19); }
-.rd-workspace-shell .rdws-object-row[aria-pressed="true"] {
-  outline: 1px solid var(--rd-identity-rule, #34322D);
-}
-.rd-workspace-shell .rdws-overview { flex: 1 1 auto; min-width: 0; }
-.rd-workspace-shell .rdws-unavailable { color: var(--rd-availability-unavailable-text, #8B3A3A); font-size: 12px; margin-bottom: 6px; }
-.rd-workspace-shell .rdws-empty { color: var(--rd-identity-meta-text, #A19C92); font-size: 12px; }
 .rd-workspace-shell .rdws-area[data-live="true"] { border-left-color: var(--rd-identity-rule, #34322D); }
-.rd-workspace-shell .rdws-area-hint { font-size: 11px; color: var(--rd-identity-meta-text, #A19C92); }
 /* navigation affordances inside the re-homed panel */
 .rd-knowledge-panel .rdkp-nav {
   background: none;
@@ -829,7 +775,7 @@
 .rd-workspace-shell .rdws-button,
 .rd-workspace-shell .rdws-theme-select,
 .rd-workspace-shell .rdws-object-input,
-.rd-workspace-shell .rdws-object-row {
+.rd-archive-nav .rdan-object-row {
   transition:
     color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
     background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
@@ -843,14 +789,14 @@
 .rd-workspace-shell .rdws-button:focus-visible,
 .rd-workspace-shell .rdws-theme-select:focus-visible,
 .rd-workspace-shell .rdws-object-input:focus-visible,
-.rd-workspace-shell .rdws-object-row:focus-visible {
+.rd-archive-nav .rdan-object-row:focus-visible {
   outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
   outline-offset: 1px;
 }
 
 /* Phase 1 — selection feedback: current object row eases in its
    neutral selection outline (position feedback, not importance). */
-.rd-workspace-shell .rdws-object-row[aria-pressed="true"] {
+.rd-archive-nav .rdan-object-row[aria-pressed="true"] {
   transition:
     outline-color var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out),
     background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out);
@@ -923,162 +869,47 @@
   }
 }
 
-/* v1.7.4-A Collaboration surface — read-only display of agent
-   contribution artifacts; all colors via semantic tokens. */
-.rd-workspace-shell .rdws-collaboration-host { flex: 1 1 auto; min-width: 0; }
-.rd-workspace-shell .rd-collaboration { font-size: 13px; }
-.rd-workspace-shell .rdcol-section { border-top: 1px solid var(--rd-surface-rule, #292824); margin-top: 10px; padding-top: 6px; }
-.rd-workspace-shell .rdcol-section-title { cursor: pointer; font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--rd-identity-meta-text, #A19C92); }
-.rd-workspace-shell .rdcol-empty { color: var(--rd-identity-meta-text, #A19C92); font-size: 12px; padding: 2px 0; }
-.rd-workspace-shell .rdcol-dir-state { font-family: var(--font-monospace); font-size: 11px; color: var(--rd-availability-missing-text, #D0B77C); }
-.rd-workspace-shell .rdcol-row {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  border-left: 2px solid var(--rd-identity-rule, #34322D);
-  border-radius: 4px;
-  cursor: pointer;
-  padding: 4px 8px;
-  margin: 6px 0;
-}
-.rd-workspace-shell .rdcol-row:hover { background: var(--rd-surface-raised, #1D1C19); }
-.rd-workspace-shell .rdcol-row:focus-visible { outline: 2px solid var(--rd-surface-focus-rule, #D8C89D); outline-offset: 1px; }
-.rd-workspace-shell .rdcol-row-head { font-family: var(--font-monospace); font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
-.rd-workspace-shell .rdcol-row-summary { font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
-.rd-workspace-shell .rdcol-row-tail { font-family: var(--font-monospace); font-size: 11px; color: var(--rd-identity-meta-text, #A19C92); }
-.rd-workspace-shell .rdcol-back {
-  background: var(--rd-surface-raised, #1D1C19);
-  border: 1px solid var(--rd-identity-rule, #34322D);
-  border-radius: 4px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 3px 10px;
-}
-.rd-workspace-shell .rdcol-detail-head { font-family: var(--font-monospace); font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); margin-bottom: 6px; }
-.rd-workspace-shell .rdcol-meta dt { font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rd-identity-meta-text, #A19C92); margin-top: 6px; }
-.rd-workspace-shell .rdcol-meta dd { margin: 1px 0 0; }
-.rd-workspace-shell .rdcol-meta dd[data-state="not-declared"] { color: var(--rd-identity-meta-text, #A19C92); }
-.rd-workspace-shell .rdcol-flag { color: var(--rd-conflict-marker-text, #C78683); font-size: 12px; padding: 2px 0; }
-.rd-workspace-shell .rdcol-detail-section { border-top: 1px solid var(--rd-surface-rule, #292824); margin-top: 8px; padding-top: 4px; }
-.rd-workspace-shell .rdcol-detail-section summary { cursor: pointer; }
-.rd-workspace-shell .rdcol-detail-body { font-size: 12px; white-space: pre-wrap; color: var(--rd-identity-title-text, #D4D0C8); }
-.rd-workspace-shell .rdcol-note { font-size: 11px; color: var(--rd-identity-meta-text, #A19C92); margin-top: 8px; }
-
-/* v1.7.4-B collaboration usability polish — intro and status
-   semantics; scoped, semantic tokens only. */
-.rd-workspace-shell .rdcol-intro {
-  border-left: 2px solid var(--rd-identity-rule, #34322D);
-  padding: 4px 10px;
-  margin: 6px 0 10px 0;
-}
-.rd-workspace-shell .rdcol-intro-line { font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
-.rd-workspace-shell .rdcol-intro-principles {
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-top: 4px;
-}
-.rd-workspace-shell .rdcol-intro-status {
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-top: 2px;
-}
-.rd-workspace-shell .rdcol-empty-explain {
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  padding: 0 0 2px 0;
-}
-
-/* v1.8 Human decision controls — scoped, semantic tokens; these
-   buttons RECORD a decision, they never execute anything. */
-.rd-workspace-shell .rdcol-decide {
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-  margin-top: 8px;
-  padding-top: 6px;
-}
-.rd-workspace-shell .rdcol-decide-note {
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-bottom: 4px;
-}
-.rd-workspace-shell .rdcol-decide-button {
-  background: var(--rd-surface-raised, #1D1C19);
-  border: 1px solid var(--rd-identity-rule, #34322D);
-  border-radius: 4px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  cursor: pointer;
-  font-size: 11px;
-  margin-right: 6px;
-  padding: 3px 10px;
-}
-.rd-workspace-shell .rdcol-decide-button:hover,
-.rd-workspace-shell .rdcol-decide-button:focus-visible {
-  border-color: var(--rd-surface-focus-rule, #D8C89D);
-  outline: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rd-knowledge-panel *, .rd-workspace-shell * {
-    transition: none !important;
-    animation: none !important;
-  }
-}
-
-/* v1.9 workflow linkage display — scoped, semantic tokens. */
-.rd-workspace-shell .rdcol-linkage {
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin: 2px 0 6px 0;
-}
-.rd-workspace-shell .rdcol-linkage-row {
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  padding: 1px 0;
-}
-
 /* ============================================================
    RD Product Surface Refactor Phase 1 — the investigation desk
    (RD_VISUAL_DESIGN_SYSTEM_V1_0 §2/§4/§5, RD_V1_6_0 §5).
    Typography scale: serif investigation title 28/36, KO title
    22/30, section heading 18/26 (realized 17 for in-panel fit),
    body 16/26, navigation 14/20, metadata mono 13/20. 4px spacing
-   unit; thin rules; 2–4px radii; opaque surfaces; supporting
-   planes collapse before the reading surface is squeezed.
+   unit; thin rules; 2–4px radii; opaque surfaces.
+
+   V2 Phase B consolidation — RD SHELL. This section now hosts
+   the whole shell surface coherently: the workspace frame
+   (masthead, statusline, center band), the desk home, the shared
+   controls, and the Obsidian host chrome that carries the
+   archival material while the shell body class is active.
    ============================================================ */
 
 .rd-workspace-shell {
   --rd-font-serif: Georgia, "Times New Roman", "Noto Serif SC",
     "Source Han Serif SC", var(--font-text, serif);
+  /* The shell's own controls read archival in every state: remap
+     the host form-field/text variables for this subtree only
+     (host chrome outside the shell keeps its own theme). */
+  --background-modifier-form-field: var(--rd-surface-raised, #1D1C19);
+  --background-modifier-form-field-hover: var(--rd-surface-raised, #1D1C19);
+  --background-modifier-border: var(--rd-identity-rule, #34322D);
+  --background-modifier-border-hover: var(--rd-surface-focus-rule, #D8C89D);
+  --background-modifier-border-focus: var(--rd-surface-focus-rule, #D8C89D);
+  --text-normal: var(--rd-identity-title-text, #D4D0C8);
+  --text-muted: var(--rd-identity-meta-text, #A19C92);
+  --text-faint: var(--rd-identity-meta-text, #77736B);
 }
 
-/* Masthead — the archive's letterhead. */
+/* Masthead — the slim archival bar: theme selection and the
+   exact-id query, right-aligned. (The archive identity head lives
+   in the left dock leaf.) */
 .rd-workspace-shell .rdws-masthead {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 16px;
-  padding: 16px 20px 12px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--rd-surface-rule, #34322D);
-}
-.rd-workspace-shell .rdws-masthead-title {
-  margin: 0;
-  font-family: var(--rd-font-serif);
-  font-size: 28px;
-  line-height: 36px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--rd-identity-title-text, #D4D0C8);
-}
-.rd-workspace-shell .rdws-masthead-scope {
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  margin-top: 4px;
 }
 .rd-workspace-shell .rdws-masthead-right {
   display: flex;
@@ -1087,14 +918,16 @@
   flex: 0 0 auto;
 }
 
-/* Status line — an honest data state, not an error. */
+/* Status line — an honest data state, not an error. With the
+   masthead rule it reads as an archival double band. */
 .rd-workspace-shell .rdws-statusline {
   font-family: var(--font-monospace);
   font-size: 13px;
   line-height: 20px;
   color: var(--rd-identity-meta-text, #A19C92);
-  padding: 8px 20px;
+  padding: 6px 20px;
   border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+  background: var(--rd-surface-raised, #1D1C19);
 }
 .rd-workspace-shell .rdws-statusline[data-state="missing"],
 .rd-workspace-shell .rdws-statusline[data-state="invalid"],
@@ -1102,138 +935,19 @@
   color: var(--rd-availability-missing-text, #D0B77C);
 }
 
-/* Three planes. Center dominates; sides are fixed and collapse. */
-.rd-workspace-shell .rdws-planes {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  min-height: 0;
-}
-.rd-workspace-shell .rdws-plane-left {
-  /* Phase 2.1: rail holds 240px (contract maximum) so the object id
-     and its lifecycle share one baseline line without truncation. */
-  flex: 0 0 240px;
+/* Center — the dossier desk is the view (the navigation rail and
+   the inspection plane are real dock leaves now). The archival
+   light material is token-derived and barely perceptible. */
+.rd-workspace-shell .rdws-center {
   min-width: 0;
-  border-right: 1px solid var(--rd-surface-rule, #34322D);
-  padding: 12px 10px 24px 10px;
+  padding: 28px 40px 40px 40px;
   overflow-y: auto;
-}
-.rd-workspace-shell .rdws-plane-center {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 16px 24px 32px 24px;
-  overflow-y: auto;
-}
-.rd-workspace-shell .rdws-plane-right {
-  flex: 0 0 312px;
-  min-width: 0;
-  border-left: 1px solid var(--rd-surface-rule, #34322D);
-  padding: 16px 16px 24px 16px;
-  overflow-y: auto;
-  background: var(--rd-surface-raised, #1D1C19);
+  background: radial-gradient(1000px 600px at 28% 0%, color-mix(in srgb, var(--rd-surface-focus-rule, #D8C89D) 3%, transparent), transparent 55%);
 }
 
-/* Navigation rail groups — labels, not boxes. */
-.rd-workspace-shell .rdws-nav-group { margin-bottom: 20px; }
-.rd-workspace-shell .rdws-nav-label {
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #A19C92);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
-  margin-bottom: 8px;
-}
-.rd-workspace-shell .rdws-nav-selection-id {
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  word-break: break-all;
-  margin-bottom: 8px;
-}
-.rd-workspace-shell .rdws-nav-hint,
-.rd-workspace-shell .rdws-nav-empty {
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-meta-text, #A19C92);
-}
-.rd-workspace-shell .rdws-nav-objects { flex: 1 1 auto; }
-
-/* Object rows: id+meta mono line, serif title line, no left bar. */
-.rd-workspace-shell .rdws-object-row {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: normal;
-  padding: 6px 8px;
-  margin: 0 0 2px 0;
-}
-.rd-workspace-shell .rdws-object-row:hover {
-  background: var(--rd-surface-raised, #1D1C19);
-}
-.rd-workspace-shell .rdws-object-row:focus-visible {
-  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  outline-offset: 1px;
-}
-.rd-workspace-shell .rdws-object-row[aria-pressed="true"] {
-  background: var(--rd-surface-raised, #1D1C19);
-  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  padding-left: 6px;
-}
-.rd-workspace-shell .rdws-object-row-id,
-.rd-workspace-shell .rdws-object-row-meta {
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-}
-.rd-workspace-shell .rdws-object-row-id { color: var(--rd-identity-title-text, #D4D0C8); }
-.rd-workspace-shell .rdws-object-row-meta { color: var(--rd-identity-meta-text, #A19C92); }
-.rd-workspace-shell .rdws-object-row-title {
-  display: block;
-  font-family: var(--rd-font-serif);
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Surface destinations. */
-.rd-workspace-shell .rdws-surface-row {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--rd-font-serif);
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  padding: 5px 8px;
-  margin: 0 0 2px 0;
-}
-.rd-workspace-shell .rdws-surface-row:hover { background: var(--rd-surface-raised, #1D1C19); }
-.rd-workspace-shell .rdws-surface-row:focus-visible {
-  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  outline-offset: 1px;
-}
-.rd-workspace-shell .rdws-surface-row[aria-pressed="true"] {
-  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  padding-left: 6px;
-}
-
-/* Knowledge Object head in the reading plane. Phase 2 raises the
-   dossier title to the display scale (large and dominant). */
-.rd-workspace-shell .rdws-dossier { margin-bottom: 20px; }
+/* Knowledge Object head in the reading plane. The dossier title
+   keeps the archival scale base; the dossier display scale lives
+   with the dossier composition below. */
 .rd-workspace-shell .rdws-ko-title {
   margin: 6px 0 4px 0;
   font-family: var(--rd-font-serif);
@@ -1305,64 +1019,32 @@
   max-width: 560px;
 }
 
-/* Inspection plane groups — labels + quiet content, no boxes. */
-.rd-workspace-shell .rdws-insp-group { margin-bottom: 24px; }
-
-.rd-workspace-shell .rdws-insp-count {
-  font-family: var(--rd-font-serif);
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  margin-bottom: 6px;
-}
-.rd-workspace-shell .rdws-review-row,
-.rd-workspace-shell .rdws-contrib-row {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
+/* Shared controls — the exact-id query and the Inspect button.
+   Behavior is pinned elsewhere; this is presentation only. */
+.rd-workspace-shell .rdws-object-input {
+  flex: 1;
+  min-width: 160px;
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
   border-radius: 4px;
-  cursor: pointer;
-  white-space: normal;
-  padding: 4px 6px;
-  margin: 0 0 2px 0;
-}
-.rd-workspace-shell .rdws-review-row:hover,
-.rd-workspace-shell .rdws-contrib-row:hover {
-  background: var(--rd-surface-base, #11110F);
-}
-.rd-workspace-shell .rdws-review-row:focus-visible,
-.rd-workspace-shell .rdws-contrib-row:focus-visible {
-  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  outline-offset: 1px;
-}
-.rd-workspace-shell .rdws-review-id {
-  display: block;
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
   color: var(--rd-identity-title-text, #D4D0C8);
-  word-break: break-all;
-}
-.rd-workspace-shell .rdws-review-meta {
-  display: block;
   font-family: var(--font-monospace);
   font-size: 12px;
-  line-height: 18px;
-  color: var(--rd-identity-meta-text, #A19C92);
-  word-break: break-all;
+  padding: 3px 6px;
 }
-.rd-workspace-shell .rdws-insp-more {
-  font-size: 13px;
+.rd-workspace-shell .rdws-button {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
   color: var(--rd-identity-meta-text, #A19C92);
-  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 10px;
 }
-.rd-workspace-shell .rdws-diag-line {
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  line-height: 19px;
-  color: var(--rd-identity-meta-text, #A19C92);
+.rd-workspace-shell .rdws-button:hover,
+.rd-workspace-shell .rdws-button:focus-visible {
+  border-color: var(--rd-surface-focus-rule, #D8C89D);
+  color: var(--rd-surface-focus-rule, #D8C89D);
 }
 
 /* In-workspace Knowledge Panel typography upgrade (reading plane
@@ -1376,56 +1058,282 @@
   font-size: 15px;
   line-height: 24px;
 }
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title {
-  font-family: var(--rd-font-serif);
-  font-size: 17px;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--rd-identity-title-text, #D4D0C8);
-}
 .rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer,
 .rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-relation-row,
 .rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-lineage-row {
   font-size: 14px;
   line-height: 22px;
 }
-.rd-workspace-shell .rdws-reading-note {
-  font-size: 13px;
+
+/* ——— Obsidian host chrome (Rational Archive shell active) ———
+   Presentation only, scoped to body.rd-rational-archive-shell:
+   while the shell is up, the app frame wears the archival
+   material — workspace ground, tab bars, leaf headers, the
+   ribbon, the two dock splits, split dividers, the status bar
+   and chrome scrollbars. Settings, modals, popovers, menus and
+   the editor content of non-RD leaves live outside these
+   selectors and keep their own theme. Every color derives from
+   an RD token (var() fallback or color-mix); nothing here
+   hard-codes a new structural color. */
+
+/* The native chrome paints itself almost entirely from custom
+   properties. Component-scoped variables (tab bars, leaf headers,
+   titlebar, ribbon, status bar, vault profile) are remapped to RD
+   tokens at the shell body scope — they style only that chrome, so
+   modals, popovers and settings never inherit the material. */
+body.rd-rational-archive-shell {
+  --file-header-background: var(--rd-surface-base, #11110F);
+  --file-header-background-focused: var(--rd-surface-base, #11110F);
+  --tab-container-background: var(--rd-surface-base, #11110F);
+  --tab-outline-color: var(--rd-surface-rule, #34322D);
+  --tab-background-active: var(--rd-surface-raised, #1D1C19);
+  --tab-divider-color: var(--rd-surface-rule, #34322D);
+  --tab-text-color: color-mix(in srgb, var(--rd-identity-meta-text, #A19C92) 62%, transparent);
+  --tab-text-color-focused: var(--rd-identity-meta-text, #A19C92);
+  --tab-text-color-active: var(--rd-identity-meta-text, #A19C92);
+  --tab-text-color-focused-active: var(--rd-identity-title-text, #D4D0C8);
+  --tab-text-color-focused-active-current: var(--rd-identity-title-text, #D4D0C8);
+  --tab-text-color-focused-highlighted: var(--rd-identity-title-text, #D4D0C8);
+  --titlebar-background: var(--rd-surface-base, #11110F);
+  --titlebar-background-focused: var(--rd-surface-base, #11110F);
+  --titlebar-text-color: var(--rd-identity-meta-text, #A19C92);
+  --titlebar-border-color: var(--rd-surface-rule, #34322D);
+  --ribbon-background: var(--rd-surface-base, #11110F);
+  --ribbon-background-collapsed: var(--rd-surface-base, #11110F);
+  --status-bar-background: var(--rd-surface-base, #11110F);
+  --status-bar-border-color: var(--rd-surface-rule, #34322D);
+  --status-bar-text-color: var(--rd-identity-meta-text, #A19C92);
+  --vault-profile-color: var(--rd-identity-meta-text, #A19C92);
+  --vault-profile-color-hover: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* Generic interaction ink remaps only inside the workspace frame —
+   settings, modals and popovers keep the host theme's values. */
+body.rd-rational-archive-shell .workspace {
+  background: var(--rd-surface-base, #11110F);
+  --icon-color: var(--rd-identity-meta-text, #A19C92);
+  --icon-color-hover: var(--rd-identity-title-text, #D4D0C8);
+  --icon-color-focused: var(--rd-identity-title-text, #D4D0C8);
+  --icon-color-active: var(--rd-surface-focus-rule, #D8C89D);
+  --background-modifier-hover: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 82%, transparent);
+  --background-modifier-active: var(--rd-surface-raised, #1D1C19);
+  --nav-item-background-hover: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 82%, transparent);
+  --nav-item-background-selected: var(--rd-surface-raised, #1D1C19);
+  --interactive-normal: var(--rd-surface-raised, #1D1C19);
+  --interactive-hover: var(--rd-surface-raised, #1D1C19);
+}
+body.rd-rational-archive-shell .workspace-split.mod-root,
+body.rd-rational-archive-shell .workspace-tabs {
+  background: var(--rd-surface-base, #11110F);
+}
+
+/* The vault profile block at the left dock's foot (native rule is
+   body-scoped and high-specificity — matched deliberately). */
+body.rd-rational-archive-shell .workspace .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
+  background-color: var(--rd-surface-base, #11110F);
+  border-top-color: var(--rd-surface-rule, #34322D);
   color: var(--rd-identity-meta-text, #A19C92);
-  margin-top: 16px;
 }
 
-/* Collaboration inside the desk keeps its compact list style. */
-.rd-workspace-shell .rdws-collaboration-host { max-width: 860px; }
-
-/* Responsive (pane-width basis, v1.3.5 §5): the right plane folds
-   first, then the left rail; the reading surface is never squeezed. */
-.rd-workspace-shell.rdws-mid .rdws-plane-right { display: none; }
-.rd-workspace-shell.rdws-mid .rdws-plane-left { flex-basis: 200px; }
-.rd-workspace-shell.rdws-narrow .rdws-planes { flex-direction: column; }
-.rd-workspace-shell.rdws-narrow .rdws-plane-left {
-  border-right: none;
+/* Titlebar (frameless window chrome; inert where OS-framed). */
+body.rd-rational-archive-shell .titlebar {
+  background: var(--rd-surface-base, #11110F);
+  color: var(--rd-identity-meta-text, #A19C92);
   border-bottom: 1px solid var(--rd-surface-rule, #34322D);
-  flex-basis: auto;
-  max-height: 40vh;
 }
-.rd-workspace-shell.rdws-narrow .rdws-plane-right { display: none; }
-.rd-workspace-shell.rdws-narrow .rdws-masthead { flex-direction: column; align-items: flex-start; }
-.rd-workspace-shell.rdws-narrow .rdws-desk-areas { grid-template-columns: 1fr; }
+body.rd-rational-archive-shell .titlebar-text {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .titlebar-button {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .titlebar-button:hover {
+  background: var(--rd-surface-raised, #1D1C19);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* Tab bars — quiet ground, the active tab carries the only
+   archival accent. The default theme's rounded corner masks are
+   suppressed: the archive keeps square edges. */
+body.rd-rational-archive-shell .workspace-tab-header-container,
+body.rd-rational-archive-shell .workspace-tab-header-container-inner {
+  background: var(--rd-surface-base, #11110F);
+  border-bottom-color: var(--rd-surface-rule, #34322D);
+}
+body.rd-rational-archive-shell .workspace-tab-header {
+  background: transparent;
+  border-top: 1px solid transparent;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .workspace-tab-header.is-active {
+  background: var(--rd-surface-raised, #1D1C19);
+  border-top-color: var(--rd-surface-focus-rule, #D8C89D);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+body.rd-rational-archive-shell .workspace-tab-header.is-active::before,
+body.rd-rational-archive-shell .workspace-tab-header.is-active::after {
+  display: none;
+}
+body.rd-rational-archive-shell .workspace-tab-header-inner {
+  color: inherit;
+}
+
+/* Leaf headers — the per-leaf title band joins the frame. The
+   focused-active-leaf title rule of the host is deliberately
+   matched in specificity so the quiet archival ink always wins. */
+body.rd-rational-archive-shell .view-header {
+  background: var(--rd-surface-base, #11110F);
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+}
+body.rd-rational-archive-shell .view-header-title,
+body.rd-rational-archive-shell.is-focused .workspace-leaf.mod-active .view-header-title,
+body.rd-rational-archive-shell .view-header-icon {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .view-header-title-parent {
+  color: color-mix(in srgb, var(--rd-identity-meta-text, #A19C92) 62%, transparent);
+}
+
+/* Icon buttons across the chrome (ribbon actions, view actions,
+   tab actions, sidebar toggles) — muted ink, quiet hover. */
+body.rd-rational-archive-shell .workspace .clickable-icon {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .workspace .clickable-icon:hover {
+  background: var(--rd-surface-raised, #1D1C19);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+body.rd-rational-archive-shell .workspace .clickable-icon.is-active {
+  color: var(--rd-surface-focus-rule, #D8C89D);
+}
+
+/* Ribbon — the far-left instrument rail on the same ground. */
+body.rd-rational-archive-shell .workspace-ribbon {
+  background: var(--rd-surface-base, #11110F);
+  border-right: 1px solid var(--rd-surface-rule, #34322D);
+}
+body.rd-rational-archive-shell .workspace-ribbon.mod-right {
+  border-right: none;
+  border-left: 1px solid var(--rd-surface-rule, #34322D);
+}
+
+/* Side docks — the archive nav and the inspector live here; the
+   split ground and its hairline dividers match the frame. */
+body.rd-rational-archive-shell .workspace-split.mod-left-split,
+body.rd-rational-archive-shell .workspace-split.mod-right-split {
+  background: var(--rd-surface-base, #11110F);
+}
+body.rd-rational-archive-shell .workspace-split.mod-left-split {
+  border-right: 1px solid var(--rd-surface-rule, #34322D);
+}
+body.rd-rational-archive-shell .workspace-split.mod-right-split {
+  border-left: 1px solid var(--rd-surface-rule, #34322D);
+}
+body.rd-rational-archive-shell .workspace-leaf-resize-handle {
+  background: var(--rd-surface-base, #11110F);
+}
+
+/* RD leaves paint their own ground to the leaf edge (the dossier
+   bands span full width); non-RD editor content is untouched. */
+body.rd-rational-archive-shell .workspace-leaf-content[data-type^="rd-"] .view-content {
+  background: var(--rd-surface-base, #11110F);
+}
+body.rd-rational-archive-shell .workspace-leaf-content[data-type="rd-workspace"] .view-content,
+body.rd-rational-archive-shell .workspace-leaf-content[data-type="rd-archive-nav"] .view-content,
+body.rd-rational-archive-shell .workspace-leaf-content[data-type="rd-inspector"] .view-content {
+  padding: 0;
+}
+
+/* Status bar — the archival frame's bottom edge. */
+body.rd-rational-archive-shell .status-bar {
+  background: var(--rd-surface-base, #11110F);
+  border-top: 1px solid var(--rd-surface-rule, #34322D);
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .status-bar-item {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+body.rd-rational-archive-shell .status-bar-item:hover {
+  background: var(--rd-surface-raised, #1D1C19);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* Chrome scrollbars — docks and RD leaves; the editor scrollbars
+   of non-RD leaves keep the host theme. */
+body.rd-rational-archive-shell .workspace-split.mod-left-split ::-webkit-scrollbar,
+body.rd-rational-archive-shell .workspace-split.mod-right-split ::-webkit-scrollbar,
+body.rd-rational-archive-shell .workspace-leaf-content[data-type^="rd-"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+body.rd-rational-archive-shell .workspace-split.mod-left-split ::-webkit-scrollbar-thumb,
+body.rd-rational-archive-shell .workspace-split.mod-right-split ::-webkit-scrollbar-thumb,
+body.rd-rational-archive-shell .workspace-leaf-content[data-type^="rd-"] ::-webkit-scrollbar-thumb {
+  background: var(--rd-surface-rule, #34322D);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 5px;
+}
+body.rd-rational-archive-shell .workspace-split.mod-left-split ::-webkit-scrollbar-thumb:hover,
+body.rd-rational-archive-shell .workspace-split.mod-right-split ::-webkit-scrollbar-thumb:hover,
+body.rd-rational-archive-shell .workspace-leaf-content[data-type^="rd-"] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--rd-surface-focus-rule, #D8C89D) 22%, var(--rd-surface-rule, #34322D));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
 
 /* ============================================================
    RD Product Surface Refactor Phase 2 — the archival reading
    surface (CASE / Knowledge Object dossier). The workspace reads
    as a case file: context eyebrow, dominant serif title, ruled
    identity strip, sections with distinct identities, provenance
-   excerpts, semantic relation markers, mature inspector.
-   Atmosphere stays archival and restrained — thin rules, negative
-   space, low-contrast surface variation. No texture assets, no
-   glow, no grain; every color rides a semantic token.
+   excerpts, semantic relation markers. Atmosphere stays archival
+   and restrained — thin rules, negative space, low-contrast
+   surface variation. No texture assets, no glow, no grain;
+   every color rides a semantic token.
+
+   V2 Phase B consolidation — RD DOSSIER. The dossier head, the
+   identity strip, the section line-markers and the per-layer
+   content composition live here in one place; the historical
+   hardening and fidelity layers are merged in or retired.
    ============================================================ */
 
-/* Reading measure — the dossier holds a readable line length. */
-.rd-workspace-shell .rdws-reading { max-width: 880px; }
+/* Reading measure — the dossier dominates the center. */
+.rd-workspace-shell .rdws-reading { max-width: 1040px; }
+
+/* Dossier head — editorial band: declared identity on the left,
+   a faint archive mark on the right (decorative only); the
+   identity strip keeps its full-width ruled band below. */
+.rd-workspace-shell .rdws-dossier {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  column-gap: 32px;
+  margin-bottom: 24px;
+}
+.rd-workspace-shell .rdws-dossier-head { flex: 1 1 auto; min-width: 0; }
+.rd-workspace-shell .rdws-dossier .rdws-identity-strip { flex: 1 1 100%; }
+.rd-workspace-shell .rdws-dossier-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  font-family: var(--rd-font-serif);
+  font-size: 120px;
+  line-height: 96px;
+  color: color-mix(in srgb, var(--rd-surface-focus-rule, #D8C89D) 9%, transparent);
+  pointer-events: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Display-scale dossier title (an additional, more specific rule;
+   the shell-scale 30/38 declaration above stays in place). */
+.rd-workspace-shell .rdws-reading .rdws-dossier .rdws-ko-title {
+  font-size: 40px;
+  line-height: 48px;
+  margin: 14px 0 8px 0;
+}
 
 /* Dossier eyebrow — context label with an archival rule running
    to the right edge (a label, not a banner). */
@@ -1447,26 +1355,22 @@
   background: var(--rd-identity-rule, #34322D);
 }
 
-/* Identity strip — hairline-ruled top and bottom, monospace,
-   descriptive. Fields are separated by thin vertical rules; it
-   describes declared data, it never scores anything. */
+/* Identity strip — the archival property band: one boxed, ruled
+   row of declared fields, cell-divided. It describes declared
+   data; it never scores anything. */
 .rd-workspace-shell .rdws-identity-strip {
   display: flex;
   flex-wrap: wrap;
-  margin: 14px 0 0 0;
-  padding: 8px 0;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+  margin: 18px 0 0 0;
+  border: 1px solid var(--rd-surface-rule, #292824);
+  background: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 50%, transparent);
 }
 .rd-workspace-shell .rdws-strip-item {
-  padding: 2px 20px 2px 0;
-  margin-right: 20px;
+  padding: 10px 20px;
   border-right: 1px solid var(--rd-surface-rule, #292824);
 }
 .rd-workspace-shell .rdws-strip-item:last-child {
-  margin-right: 0;
   border-right: none;
-  padding-right: 0;
 }
 .rd-workspace-shell .rdws-strip-item dt {
   font-family: var(--font-monospace);
@@ -1477,7 +1381,7 @@
   color: var(--rd-identity-meta-text, #A19C92);
 }
 .rd-workspace-shell .rdws-strip-item dd {
-  margin: 0;
+  margin: 2px 0 0 0;
   font-family: var(--font-monospace);
   font-size: 13px;
   line-height: 20px;
@@ -1490,132 +1394,88 @@
 .rd-workspace-shell .rdws-strip-item[data-state="not_loaded"] dd {
   color: var(--rd-identity-meta-text, #A19C92);
 }
-.rd-workspace-shell .rdws-reading-inner { margin-top: 24px; }
+.rd-workspace-shell .rdws-reading-inner { margin-top: 28px; }
 
-/* Left rail titles wrap to their full declared text — an archival
-   index hides nothing (the dossier shows the same title anyway). */
-.rd-workspace-shell .rdws-object-row-title {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-}
-
-/* Left rail — declared-kind index headings. Kind names come from
-   the snapshot only; the count is a count, never a weight. */
-.rd-workspace-shell .rdws-nav-kind {
-  font-family: var(--font-monospace);
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  margin: 14px 0 2px 0;
-}
-.rd-workspace-shell .rdws-nav-kind-name { color: var(--rd-identity-id-text, #A19C92); }
-.rd-workspace-shell .rdws-nav-kind-count { color: var(--rd-identity-meta-text, #77736B); }
-
-/* Inspector — archival properties panel. Serif section titles
-   over hairlines; metadata stays monospace. */
-.rd-workspace-shell .rdws-insp-label {
-  font-family: var(--rd-font-serif);
-  font-size: 15px;
-  line-height: 22px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
-  margin-bottom: 8px;
-}
-.rd-workspace-shell .rdws-insp-meta { margin: 0 0 6px 0; }
-.rd-workspace-shell .rdws-insp-meta dt {
-  font-family: var(--font-monospace);
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #77736B);
-  margin-top: 4px;
-}
-.rd-workspace-shell .rdws-insp-meta dd {
-  margin: 0;
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  word-break: break-all;
-}
-
-/* Linked-object rows — declaration type + exact id. contradicts
-   carries the restrained conflict accent; every other type shares
-   the archival relation ochre. No thickness, no rank, no score. */
-.rd-workspace-shell .rdws-link-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: normal;
-  padding: 3px 6px;
-  margin: 0 0 2px 0;
-}
-.rd-workspace-shell .rdws-link-row:hover { background: var(--rd-surface-base, #11110F); }
-.rd-workspace-shell .rdws-link-row:focus-visible {
-  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
-  outline-offset: 1px;
-}
-.rd-workspace-shell .rdws-link-type {
-  flex: 0 0 auto;
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  line-height: 19px;
-  color: var(--rd-relation-type-text, #D0B77C);
-}
-.rd-workspace-shell .rdws-link-row[data-relation="contradicts"] .rdws-link-type {
-  color: var(--rd-conflict-marker-text, #C78683);
-}
-.rd-workspace-shell .rdws-link-id {
-  font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  word-break: break-all;
-}
-.rd-workspace-shell .rdws-link-unresolved .rdws-link-id {
-  color: var(--rd-identity-meta-text, #A19C92);
-}
-.rd-workspace-shell .rdws-link-state {
-  flex: 0 0 auto;
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  line-height: 18px;
-  color: var(--rd-relation-unresolved-text, #D0B77C);
-}
-
-/* Reading-panel sections — each gains an identity: an archival
-   section marker and a hairline, serif heading. */
+/* Reading-panel sections — each gains an identity: a geometric
+   line-marker, mono small caps and a hairline running to the
+   right edge, like an archival index heading. */
 .rd-knowledge-panel .rdkp-section-title,
 .rd-knowledge-panel summary.rdkp-section-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title::before {
-  content: "§";
-  font-family: var(--rd-font-serif);
-  font-size: 14px;
-  color: var(--rd-surface-focus-rule, #D8C89D);
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel details {
+  border-top: none;
+  margin-top: 34px;
+  padding-top: 0;
 }
 .rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title {
-  font-size: 18px;
-  line-height: 26px;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--rd-identity-rule, #34322D);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel details:not([open]) > .rdkp-section-title {
+  color: var(--rd-identity-meta-text, #77736B);
 }
 
-/* Provenance layers — numbered layer markers carry the declared
-   layer color; declared text renders as an archival excerpt (a
-   declaration, never a verified finding). Missing layers stay
-   visible and quiet. */
+/* Section line-markers — restrained geometry, one per dossier
+   section. Pure CSS decoration (the mark is a pseudo-element, so
+   it is aria-hidden by construction); the pinned text label
+   always rides alongside. Consistent 1px stroke, quiet ink. */
+.rd-knowledge-panel .rdkp-section-title::before {
+  content: "";
+  flex: 0 0 auto;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--rd-identity-meta-text, #A19C92);
+}
+/* Provenance — the layered record: a square with an echo. */
+.rd-knowledge-panel .rdkp-provenance > .rdkp-section-title::before {
+  width: 7px;
+  height: 7px;
+  outline: 1px solid var(--rd-identity-rule, #34322D);
+  outline-offset: 1px;
+}
+/* Relations — two endpoints joined: a squared union mark. */
+.rd-knowledge-panel .rdkp-relations > .rdkp-section-title::before {
+  width: 10px;
+  height: 6px;
+  border-top: none;
+  border-color: var(--rd-relation-type-text, #D0B77C);
+}
+/* Lineage — descent: a corner mark. */
+.rd-knowledge-panel .rdkp-lineage > .rdkp-section-title::before {
+  width: 7px;
+  height: 9px;
+  border-top: none;
+  border-right: none;
+}
+/* Declared record — the archive card: a wide outline. */
+.rd-knowledge-panel .rdkp-record > .rdkp-section-title::before {
+  width: 10px;
+  height: 7px;
+}
+/* Diagnostics — the instrument ring: a circle outline. */
+.rd-knowledge-panel .rdkp-diagnostics > .rdkp-section-title::before {
+  border-radius: 50%;
+}
+
+/* Provenance layers — a geometric layer-mark precedes the pinned
+   layer number; the mark carries the declared layer's token color
+   (the existing per-layer semantics, unchanged). */
 .rd-knowledge-panel .rdkp-layer-head {
   display: flex;
   align-items: baseline;
@@ -1627,17 +1487,47 @@
   line-height: 18px;
   letter-spacing: 0.08em;
 }
+.rd-knowledge-panel .rdkp-layer-marker::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  vertical-align: middle;
+}
+/* Observation — the watched room: a square outline. */
 .rd-knowledge-panel .rdkp-layer[data-layer="observation"] .rdkp-layer-marker {
   color: var(--rd-provenance-observation-text, #A8B6AD);
 }
+.rd-knowledge-panel .rdkp-layer[data-layer="observation"] .rdkp-layer-marker::before {
+  border-color: var(--rd-provenance-observation-text, #A8B6AD);
+}
+/* Evidence — the ledger page: a square with a doubled foot. */
 .rd-knowledge-panel .rdkp-layer[data-layer="evidence"] .rdkp-layer-marker {
   color: var(--rd-provenance-evidence-text, #91B5B0);
 }
+.rd-knowledge-panel .rdkp-layer[data-layer="evidence"] .rdkp-layer-marker::before {
+  border-color: var(--rd-provenance-evidence-text, #91B5B0);
+  border-bottom-width: 2px;
+}
+/* Inference — a turn of mind: a diamond outline. */
 .rd-knowledge-panel .rdkp-layer[data-layer="inference"] .rdkp-layer-marker {
   color: var(--rd-provenance-inference-text, #C6B477);
 }
+.rd-knowledge-panel .rdkp-layer[data-layer="inference"] .rdkp-layer-marker::before {
+  border-color: var(--rd-provenance-inference-text, #C6B477);
+  transform: rotate(45deg);
+}
+/* Conclusion — the declared position: an upward chevron. */
 .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"] .rdkp-layer-marker {
   color: var(--rd-provenance-conclusion-text, #D4D0C8);
+}
+.rd-knowledge-panel .rdkp-layer[data-layer="conclusion"] .rdkp-layer-marker::before {
+  border-color: var(--rd-provenance-conclusion-text, #D4D0C8);
+  border-right: none;
+  border-bottom: none;
+  transform: rotate(45deg);
 }
 .rd-knowledge-panel .rdkp-layer-label {
   font-family: var(--font-monospace);
@@ -1670,11 +1560,160 @@
   padding-left: 12px;
 }
 
-/* Relation rows — type marker carries the semantic color; the
-   declaration (direction, source, target, endpoint state) stays
-   fully visible in monospace. contradicts gets the restrained
-   conflict accent only. Obsidian styles buttons nowrap; the
-   declaration wraps — nothing hides behind a scrollbar. */
+/* Reading-plane secondary text: one step brighter than stone —
+   availability states stay quieter than content, but nothing in
+   the dossier becomes hard to read. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-fields dt,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-source-label,
+.rd-knowledge-panel .rdkp-layer-state,
+.rd-knowledge-panel .rdkp-rel-dir,
+.rd-knowledge-panel .rdkp-rel-endpoint {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-knowledge-panel .rdkp-layer:not([data-state="available"]) .rdkp-layer-text {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* Provenance composition — the declared layers read as distinct
+   content types. Observation is the primary prose; evidence is a
+   denser documentary ledger block; inference stays quieter; the
+   conclusion spans the full width as an editorial band — a
+   declared position, never an authority mark. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-section-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 36px;
+  row-gap: 24px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-source-label,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-consistency {
+  grid-column: 1 / -1;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-layer {
+  margin: 0;
+}
+.rd-workspace-shell .rdws-reading .rdkp-provenance { margin-top: 4px; }
+.rd-workspace-shell .rdws-reading .rdkp-source-label { margin-bottom: 14px; }
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer-head { margin-bottom: 6px; }
+/* Observation — primary prose: the full excerpt scale. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="observation"][data-state="available"] .rdkp-layer-text {
+  font-size: 17px;
+  line-height: 28px;
+}
+/* Evidence — documentary: a denser mono ledger on a ruled block. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="evidence"] {
+  background: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 70%, transparent);
+  padding: 12px 16px 14px 16px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="evidence"][data-state="available"] .rdkp-layer-text {
+  font-family: var(--font-monospace);
+  font-style: normal;
+  font-size: 13px;
+  line-height: 21px;
+  border-left: none;
+  padding-left: 0;
+}
+/* Inference — quieter: one step down, dimmer ink, full span. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="inference"] {
+  grid-column: 1 / -1;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="inference"][data-state="available"] .rdkp-layer-text {
+  color: var(--rd-identity-meta-text, #A19C92);
+  font-size: 15px;
+  line-height: 24px;
+  max-width: 72ch;
+}
+/* Conclusion — the declared position band, ruled top and bottom. */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"] {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 16px 0 18px 0;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"][data-state="available"] .rdkp-layer-text {
+  font-size: 18px;
+  line-height: 30px;
+  max-width: 72ch;
+}
+
+/* Declared record — exact raw values, deliberately secondary:
+   compact monospace inside a folded block. Nothing is removed;
+   the record simply stops competing with the reading content. */
+.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dt {
+  font-size: 10px;
+  line-height: 16px;
+  margin-top: 8px;
+}
+.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dd {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel.rdkp-composed .rdkp-fields
+  dd[data-state="not_loaded"] {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* Colophon — the honesty note on the left, the exact object id on
+   the right; the dossier page ends like an archival record. */
+.rd-workspace-shell .rdws-reading-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 16px;
+  row-gap: 2px;
+  margin-top: 32px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  font-size: 13px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-workspace-shell .rdws-reading-note-id {
+  flex: 0 0 auto;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.1em;
+  color: var(--rd-identity-meta-text, #77736B);
+}
+
+/* ============================================================
+   RD RELATIONS — the cross-reference ledger. V2: the declared
+   group name is the scannable heading (a larger small-caps
+   scale); the exact technical declaration (direction, source →
+   target, endpoint state) stays fully visible beneath it,
+   secondary in scale. Every string is the declared text,
+   unchanged; contradicts keeps only the restrained conflict
+   accent. No weight, no score.
+   ============================================================ */
+
+.rd-knowledge-panel .rdkp-rel-group { margin: 0 0 18px 0; }
+.rd-knowledge-panel .rdkp-rel-type-label {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-knowledge-panel .rdkp-rel-group[data-relation="contradicts"] .rdkp-rel-type-label {
+  color: var(--rd-conflict-marker-text, #C78683);
+}
+.rd-knowledge-panel .rdkp-rel-unresolved .rdkp-rel-type-label {
+  color: var(--rd-relation-unresolved-text, #D0B77C);
+}
+
+/* Rows — type marker carries the semantic color; the declaration
+   (direction, source, target, endpoint state) stays fully visible
+   in monospace. Obsidian styles buttons nowrap; the declaration
+   wraps — nothing hides behind a scrollbar. */
 .rd-knowledge-panel .rdkp-relation-row,
 .rd-knowledge-panel .rdkp-lineage-row,
 .rd-knowledge-panel .rdkp-unresolved,
@@ -1699,416 +1738,33 @@
 }
 .rd-knowledge-panel .rdkp-rel-path {
   font-family: var(--font-monospace);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--rd-identity-title-text, #D4D0C8);
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--rd-identity-meta-text, #A19C92);
   word-break: break-all;
 }
 .rd-knowledge-panel .rdkp-relation-row[data-endpoint="missing"] .rdkp-rel-endpoint {
   color: var(--rd-relation-endpoint-text, #D0B77C);
 }
 
-/* Collaboration artifact detail — declared section text reads as
-   an archival excerpt of the record, attribution stays in the
-   artifact head. It is a record of work, never verified truth. */
-.rd-workspace-shell .rdcol-detail-body {
-  font-family: var(--rd-font-serif);
-  font-size: 15px;
-  line-height: 24px;
-  color: var(--rd-identity-title-text, #D4D0C8);
-  border-left: 2px solid var(--rd-identity-rule, #34322D);
-  padding-left: 12px;
-  white-space: pre-wrap;
+/* Navigation affordances inside the re-homed panel. */
+.rd-knowledge-panel .rdkp-nav {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 1px 4px;
+  text-align: left;
 }
-
-/* Atmosphere — layered letterhead: the masthead rule and the
-   statusline rule read as an archival double band. The inspection
-   plane sits on the raised surface with its own quiet top rule. */
-.rd-workspace-shell .rdws-statusline {
-  padding: 6px 20px;
+.rd-knowledge-panel .rdkp-nav:hover {
   background: var(--rd-surface-raised, #1D1C19);
-}
-.rd-workspace-shell .rdws-plane-right { padding-top: 20px; }
-.rd-workspace-shell .rdws-plane-center { padding-top: 24px; }
-
-/* Reading-plane secondary text: one step brighter than stone —
-   availability states stay quieter than content, but nothing in
-   the dossier becomes hard to read. */
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-fields dt,
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-source-label,
-.rd-knowledge-panel .rdkp-layer-state,
-.rd-knowledge-panel .rdkp-rel-dir,
-.rd-knowledge-panel .rdkp-rel-endpoint {
-  color: var(--rd-identity-meta-text, #A19C92);
-}
-.rd-knowledge-panel .rdkp-layer:not([data-state="available"]) .rdkp-layer-text {
-  color: var(--rd-identity-meta-text, #A19C92);
+  color: var(--rd-surface-focus-rule, #D8C89D);
 }
 
-/* Responsive — the dossier keeps its hierarchy at every width. */
-.rd-workspace-shell.rdws-narrow .rdws-ko-title {
-  font-size: 26px;
-  line-height: 34px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-strip-item {
-  margin-right: 16px;
-  padding-right: 16px;
-}
-
-/* ============================================================
-   RD Product Surface Refactor Phase 2.1 — visual hardening
-   (independent review of the real screenshots: left-index row
-   collisions, ultra-wide dead space, flat inspector, narrow
-   first-screen economy). Layout and hierarchy only — no new
-   capabilities, no semantic change. Every color rides a token.
-   ============================================================ */
-
-/* Left archival index — every object row is a deliberate two-line
-   structure: id and lifecycle share a baseline row (lifecycle
-   right-aligned, never concatenated), the declared title takes its
-   own wrapping line, and rows breathe before the next row or the
-   next kind divider. */
-.rd-workspace-shell .rdws-object-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 6px;
-  row-gap: 2px;
-  padding: 6px 6px;
-  margin: 0 0 6px 0;
-}
-.rd-workspace-shell .rdws-object-row-id {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.rd-workspace-shell .rdws-object-row-meta {
-  flex: 0 0 auto;
-}
-.rd-workspace-shell .rdws-object-row-title {
-  flex: 1 1 100%;
-  margin-top: 2px;
-}
-
-/* Kind group headings read as archival index dividers: a hairline
-   above each new kind, breathing room, quiet count. The first kind
-   after the section label needs no second rule. */
-.rd-workspace-shell .rdws-nav-kind {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 18px 0 6px 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-}
-.rd-workspace-shell .rdws-nav-label + .rdws-nav-kind,
-.rd-workspace-shell .rdws-nav-empty + .rdws-nav-kind {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 10px;
-}
-
-/* Ultra-wide composition — the letterhead bands and the three
-   planes form one bounded, centered composition. Prose measure
-   stays constrained inside the dossier; the inspector stays
-   spatially adjacent. No giant internal gulf at any width. */
-.rd-workspace-shell .rdws-masthead,
-.rd-workspace-shell .rdws-statusline,
-.rd-workspace-shell .rdws-planes {
-  max-width: 1720px;
-  margin: 0 auto;
-}
-
-/* Inspector hierarchy — the selected object's context is primary;
-   the workspace zone (recorded Human decisions and Agent work) is
-   subordinate and visually separated; diagnostics stay quietest. */
-.rd-workspace-shell .rdws-insp-zone-label {
-  font-family: var(--font-monospace);
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #77736B);
-  margin-bottom: 10px;
-}
-.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] {
-  margin-top: 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-}
-.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-insp-label,
-.rd-workspace-shell .rdws-plane-right > .rdws-insp-group > .rdws-insp-label {
-  font-family: var(--font-monospace);
-  font-size: 11px;
-  line-height: 18px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #A19C92);
-  padding-bottom: 4px;
-}
-.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-insp-count,
-.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-review-id {
-  font-size: 13px;
-}
-
-/* Narrow economy — reading-first without hiding state: compact
-   letterhead, wrapping controls, compact statusline, a bounded
-   navigation block, and the dossier arriving early in the first
-   viewport. */
-.rd-workspace-shell.rdws-narrow .rdws-masthead {
-  padding: 10px 14px 8px 14px;
-  gap: 8px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-masthead-title {
-  font-size: 22px;
-  line-height: 28px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-masthead-scope {
-  font-size: 11px;
-  line-height: 16px;
-  margin-top: 2px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-masthead-right {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-object-input {
-  min-width: 120px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-statusline {
-  font-size: 12px;
-  line-height: 17px;
-  padding: 4px 14px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-nav-group { margin-bottom: 12px; }
-.rd-workspace-shell.rdws-narrow .rdws-nav-label {
-  padding-bottom: 4px;
-  margin-bottom: 6px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-plane-left {
-  max-height: 26vh;
-  padding: 8px 12px 12px 12px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-object-row {
-  padding: 4px 8px;
-  margin-bottom: 4px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-nav-kind {
-  margin: 12px 0 4px 0;
-  padding-top: 8px;
-}
-/* Reading-first: in the stacked narrow layout the dossier leads
-   and the archival index follows below it (the masthead's exact-id
-   input still reaches any object directly). Presentation order
-   only — the navigation is fully present, never removed. */
-.rd-workspace-shell.rdws-narrow .rdws-plane-center { order: -1; }
-.rd-workspace-shell.rdws-narrow .rdws-plane-center {
-  padding: 14px 16px 24px 16px;
-}
-.rd-workspace-shell.rdws-narrow .rdws-dossier { margin-bottom: 12px; }
-.rd-workspace-shell.rdws-narrow .rdws-reading-inner { margin-top: 16px; }
-
-/* ============================================================
-   RD Product Surface Refactor Phase 2.2 — case dossier content
-   composition. Root-cause fix: Obsidian gives every <button> a
-   FIXED height (30px input height) with visible overflow, so RD
-   buttons whose text wraps painted past the button rectangle —
-   the wrapped left-nav title collided with the next kind heading
-   while row-rect checks still passed. Every RD row button now
-   owns its full content height. Then: the central dossier reads
-   as content — provenance prose rhythm, relation groups, the raw
-   declared record folded secondary.
-   ============================================================ */
-
-/* Left archive index — button height ownership (root cause).
-   Wrapped titles now contribute to the row's real height. */
-.rd-workspace-shell .rdws-object-row,
-.rd-workspace-shell .rdws-surface-row,
-.rd-workspace-shell .rdws-link-row,
-.rd-workspace-shell .rdws-review-row,
-.rd-workspace-shell .rdws-contrib-row,
-.rd-workspace-shell .rdws-button,
-.rd-knowledge-panel .rdkp-nav,
-.rd-knowledge-panel .rdkp-relation-row,
-.rd-knowledge-panel .rdkp-lineage-row,
-.rd-knowledge-panel .rdkp-unresolved {
-  height: auto;
-  min-height: 0;
-}
-
-/* Dossier provenance — the reading rhythm. The layer head (number,
-   label, state) is quiet and subordinate; the declared prose
-   breathes as the main reading content of the case file. */
-.rd-workspace-shell .rdws-reading .rdkp-provenance { margin-top: 4px; }
-.rd-workspace-shell .rdws-reading .rdkp-source-label { margin-bottom: 14px; }
-.rd-workspace-shell .rdws-reading .rdkp-layer { margin: 0 0 20px 0; }
-.rd-workspace-shell .rdws-reading .rdkp-layer-head { margin-bottom: 6px; }
-.rd-knowledge-panel .rdkp-layer[data-state="available"] .rdkp-layer-text {
-  font-size: 16px;
-  line-height: 26px;
-  padding-left: 14px;
-}
-
-/* Relation groups — a group is an archival index of declarations:
-   quiet mono type label, rows beneath. contradicts keeps only the
-   restrained conflict accent on its label. */
-.rd-knowledge-panel .rdkp-rel-group { margin: 0 0 14px 0; }
-.rd-knowledge-panel .rdkp-rel-type-label {
-  font-family: var(--font-monospace);
-  font-size: 10px;
-  line-height: 16px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--rd-relation-type-text, #D0B77C);
-  padding-bottom: 4px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
-}
-.rd-knowledge-panel .rdkp-rel-group[data-relation="contradicts"] .rdkp-rel-type-label {
-  color: var(--rd-conflict-marker-text, #C78683);
-}
-.rd-knowledge-panel .rdkp-rel-unresolved .rdkp-rel-type-label {
-  color: var(--rd-relation-unresolved-text, #D0B77C);
-}
-
-/* Declared record — exact raw values, deliberately secondary:
-   compact monospace inside a folded block. Nothing is removed;
-   the record simply stops competing with the reading content. */
-.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dt {
-  font-size: 10px;
-  line-height: 16px;
-  margin-top: 8px;
-}
-.rd-workspace-shell .rdws-reading .rdkp-record .rdkp-fields dd {
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  line-height: 18px;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel.rdkp-composed .rdkp-fields
-  dd[data-state="not_loaded"] {
-  color: var(--rd-identity-meta-text, #A19C92);
-}
-
-/* ============================================================
-   RD Case Dossier — visual fidelity pass (Kimi)
-   Presentation only — no DOM contract changes live here. The
-   dossier reads closer to the archival case-file art direction:
-   an editorial head with a decorative archive mark, mono
-   small-cap section labels with a long rule, provenance as a
-   two-column layer grid with a full-width conclusion band,
-   relations as a ruled cross-reference ledger, an index-marked
-   left rail, a label/value inspector, and a colophon footer.
-   Every color rides a semantic token (var fallback form); no new
-   palette, no loops, no new keyframes.
-   ============================================================ */
-
-/* Reading measure — the dossier dominates the center plane; a
-   barely-there archival light falls on the page (radial, token
-   hue at trace opacity). */
-.rd-workspace-shell .rdws-reading { max-width: 1040px; }
-.rd-workspace-shell .rdws-plane-center {
-  padding-left: 40px;
-  padding-right: 40px;
-  background: radial-gradient(1000px 600px at 28% 0%, rgba(216, 200, 157, 0.03), rgba(0, 0, 0, 0) 55%);
-}
-
-/* Dossier head — editorial band: declared identity on the left,
-   a faint archive mark on the right (decorative only); the
-   identity strip keeps its full-width ruled row below. */
-.rd-workspace-shell .rdws-dossier {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  column-gap: 32px;
-}
-.rd-workspace-shell .rdws-dossier-head { flex: 1 1 auto; min-width: 0; }
-.rd-workspace-shell .rdws-dossier .rdws-identity-strip { flex: 1 1 100%; }
-.rd-workspace-shell .rdws-dossier-mark {
-  flex: 0 0 auto;
-  align-self: center;
-  font-family: var(--rd-font-serif);
-  font-size: 120px;
-  line-height: 96px;
-  color: rgba(216, 200, 157, 0.08);
-  pointer-events: none;
-  user-select: none;
-  overflow: hidden;
-}
-/* Display-scale dossier title (an additional, more specific rule;
-   the Phase 1 30/38 declaration above stays in place). */
-.rd-workspace-shell .rdws-reading .rdws-dossier .rdws-ko-title {
-  font-size: 40px;
-  line-height: 48px;
-  margin: 10px 0 6px 0;
-}
-
-/* Section labels — mono small caps with the § marker (the pinned
-   content rule above is unchanged) and a long hairline running to
-   the right edge, like an archival index heading. */
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel details {
-  border-top: none;
-  margin-top: 26px;
-  padding-top: 0;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title {
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  line-height: 18px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--rd-identity-meta-text, #A19C92);
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title::after {
-  content: "";
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--rd-identity-rule, #34322D);
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel details:not([open]) > .rdkp-section-title {
-  color: var(--rd-identity-meta-text, #77736B);
-}
-
-/* Provenance — two-column layer grid; the conclusion spans both
-   columns as an editorial band ruled top and bottom. The evidence
-   layer sits on a faint raised block, denser than the prose
-   layers. Declared text keeps its pinned italic excerpt style. */
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-section-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 36px;
-  row-gap: 20px;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-source-label,
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-consistency {
-  grid-column: 1 / -1;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-layer {
-  margin: 0;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="evidence"] {
-  background: var(--rd-surface-raised, #1D1C19);
-  padding: 10px 14px 12px 14px;
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"] {
-  grid-column: 1 / -1;
-  margin-top: 6px;
-  padding: 14px 0;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
-}
-.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer[data-layer="conclusion"][data-state="available"] .rdkp-layer-text {
-  font-size: 17px;
-  line-height: 28px;
-}
-
-/* Relations — an archival cross-reference ledger: ruled rows on a
-   shared baseline; the relation type is a small mono label, the
-   direction stays quiet, the declaration keeps the measure, and
-   the endpoint state sits at the right edge. Every string is the
-   declared text, unchanged. */
+/* Ledger rows in the dossier — ruled rows on a shared baseline;
+   the relation type is a small mono cell, the direction stays
+   quiet, the declaration keeps the measure, and the endpoint
+   state sits at the right edge. */
 .rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-relation-row {
   display: flex;
   flex-wrap: wrap;
@@ -2150,17 +1806,204 @@
   color: var(--rd-identity-meta-text, #A19C92);
 }
 
-/* Left archive index — kind headings carry the name left and the
-   count right; a tiny outline-square index mark precedes each id
-   (filled for the current selection). Pure decoration; the row
-   anatomy and its pinned rhythm are unchanged. */
-.rd-workspace-shell .rdws-nav-kind { justify-content: space-between; }
-.rd-workspace-shell .rdws-object-row {
-  padding-left: 4px;
-  padding-right: 4px;
+/* ============================================================
+   RD Product Surface Refactor Phase 2.1 — visual hardening
+   (independent review of the real screenshots: left-index row
+   collisions, ultra-wide dead space, flat inspector, narrow
+   first-screen economy). Layout and hierarchy only — no new
+   capabilities, no semantic change. Every color rides a token.
+
+   V2 Phase B consolidation — RD ARCHIVE NAVIGATION. The left
+   dock leaf (.rd-archive-nav) surface lives here in one place,
+   including the archival brand block (the archive identity
+   moment) and the bounded ultra-wide composition band.
+   ============================================================ */
+
+/* Ultra-wide composition — the letterhead bands and the central
+   desk form one bounded, centered composition. Prose measure
+   stays constrained inside the dossier. No giant internal gulf
+   at any width. */
+.rd-workspace-shell .rdws-masthead,
+.rd-workspace-shell .rdws-statusline,
+.rd-workspace-shell .rdws-center {
+  max-width: 1720px;
+  margin: 0 auto;
 }
-.rd-workspace-shell .rdws-object-row-meta { font-size: 11px; }
-.rd-workspace-shell .rdws-object-row-id::before {
+
+.rd-archive-nav {
+  height: 100%;
+  padding: 20px 14px 24px 14px;
+  overflow-y: auto;
+  background: var(--rd-surface-base, #11110F);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* Brand — the archival identity moment: the serif wordmark with
+   a quiet index mark, the scope line beneath in small caps, a
+   hairline closing the letterhead. */
+.rd-archive-nav .rdan-brand {
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+}
+.rd-archive-nav .rdan-brand-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--rd-font-serif, Georgia, serif);
+  font-size: 21px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-archive-nav .rdan-brand-title::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--rd-surface-focus-rule, #D8C89D);
+}
+.rd-archive-nav .rdan-brand-scope {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-top: 5px;
+}
+
+/* Navigation groups — labels, not boxes. */
+.rd-archive-nav .rdan-group { margin-bottom: 20px; }
+.rd-archive-nav .rdan-label {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+  margin-bottom: 8px;
+}
+.rd-archive-nav .rdan-selection-id {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+.rd-archive-nav .rdan-hint,
+.rd-archive-nav .rdan-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-archive-nav .rdan-button {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 10px;
+}
+.rd-archive-nav .rdan-button:hover,
+.rd-archive-nav .rdan-button:focus-visible {
+  border-color: var(--rd-surface-focus-rule, #D8C89D);
+  color: var(--rd-surface-focus-rule, #D8C89D);
+}
+
+/* Declared-kind index headings — a hairline above each new kind,
+   breathing room, quiet count; name left, count right. The first
+   kind after the section label needs no second rule. */
+.rd-archive-nav .rdan-kind {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 18px 0 6px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-archive-nav .rdan-label + .rdan-kind,
+.rd-archive-nav .rdan-empty + .rdan-kind {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 10px;
+}
+.rd-archive-nav .rdan-kind-name { color: var(--rd-identity-id-text, #A19C92); }
+.rd-archive-nav .rdan-kind-count { color: var(--rd-identity-meta-text, #77736B); }
+
+/* Object rows — a deliberate two-line structure: id and lifecycle
+   share a baseline row (lifecycle right-aligned, never
+   concatenated), the declared title takes its own wrapping line.
+   A tiny outline-square index mark precedes each id (filled for
+   the current selection) — pure decoration. */
+.rd-archive-nav .rdan-object-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  padding: 6px 4px;
+  margin: 0 0 6px 0;
+}
+.rd-archive-nav .rdan-object-row:hover {
+  background: var(--rd-surface-raised, #1D1C19);
+}
+.rd-archive-nav .rdan-object-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-archive-nav .rdan-object-row[aria-pressed="true"] {
+  background: var(--rd-surface-raised, #1D1C19);
+  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  padding-left: 6px;
+}
+.rd-archive-nav .rdan-object-row-id,
+.rd-archive-nav .rdan-object-row-meta {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+}
+.rd-archive-nav .rdan-object-row-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-archive-nav .rdan-object-row-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-archive-nav .rdan-object-row-title {
+  flex: 1 1 100%;
+  margin-top: 2px;
+  display: block;
+  font-family: var(--rd-font-serif, Georgia, serif);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  /* archival index titles wrap to their full declared text */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.rd-archive-nav .rdan-object-row-id::before {
   content: "";
   display: inline-block;
   width: 5px;
@@ -2169,75 +2012,450 @@
   border: 1px solid var(--rd-identity-rule, #34322D);
   vertical-align: baseline;
 }
-.rd-workspace-shell .rdws-object-row[aria-pressed="true"] .rdws-object-row-id::before {
+.rd-archive-nav .rdan-object-row[aria-pressed="true"] .rdan-object-row-id::before {
   background: var(--rd-surface-focus-rule, #D8C89D);
   border-color: var(--rd-surface-focus-rule, #D8C89D);
 }
 
-/* Inspector — archival properties: label left, value right, ruled
-   rows; linked objects stack type over id like ledger entries. */
-.rd-workspace-shell .rdws-insp-meta {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 16px;
-  align-items: baseline;
-}
-.rd-workspace-shell .rdws-insp-meta dt {
-  margin-top: 0;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
-}
-.rd-workspace-shell .rdws-insp-meta dd {
-  padding: 5px 0;
-  border-bottom: 1px solid var(--rd-surface-rule, #292824);
-  text-align: right;
-}
-.rd-workspace-shell .rdws-link-row {
+/* Surface destinations. */
+.rd-archive-nav .rdan-surface-row {
   display: block;
-  padding: 7px 6px;
-  border-top: 1px solid var(--rd-surface-rule, #292824);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--rd-font-serif, Georgia, serif);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding: 5px 8px;
+  margin: 0 0 2px 0;
 }
-.rd-workspace-shell .rdws-insp-group .rdws-insp-label + .rdws-link-row {
-  border-top: none;
+.rd-archive-nav .rdan-surface-row:hover { background: var(--rd-surface-raised, #1D1C19); }
+.rd-archive-nav .rdan-surface-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
 }
-.rd-workspace-shell .rdws-link-type {
-  display: block;
+.rd-archive-nav .rdan-surface-row[aria-pressed="true"] {
+  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  padding-left: 6px;
+}
+
+/* ============================================================
+   RD INSPECTOR — the right dock leaf (.rd-inspector) of the
+   Rational Archive shell. The selected object's context is
+   primary; the workspace zone (recorded Human decisions and
+   Agent work) is subordinate and visually separated; diagnostics
+   stay quietest. Labels and quiet content, no boxes; metadata
+   stays monospace.
+   ============================================================ */
+
+.rd-inspector {
+  height: 100%;
+  padding: 20px 16px 24px 16px;
+  overflow-y: auto;
+  background: var(--rd-surface-raised, #1D1C19);
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+
+/* Inspector hierarchy — zones carry the reading order. */
+.rd-inspector .rdin-zone-label {
+  font-family: var(--font-monospace);
   font-size: 10px;
   line-height: 16px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #77736B);
+  margin-bottom: 10px;
 }
-.rd-workspace-shell .rdws-link-id { display: block; }
-.rd-workspace-shell .rdws-link-state { display: block; }
-
-/* Colophon — the honesty note on the left, the exact object id on
-   the right; the dossier page ends like an archival record. */
-.rd-workspace-shell .rdws-reading-note {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  column-gap: 16px;
-  row-gap: 2px;
-  margin-top: 28px;
-  padding-top: 12px;
+.rd-inspector .rdin-zone[data-zone="workspace"] {
+  margin-top: 8px;
+  padding-top: 16px;
   border-top: 1px solid var(--rd-surface-rule, #292824);
 }
-.rd-workspace-shell .rdws-reading-note-id {
-  flex: 0 0 auto;
+.rd-inspector .rdin-zone[data-zone="workspace"] .rdin-label,
+.rd-inspector > .rdin-group > .rdin-label {
   font-family: var(--font-monospace);
   font-size: 11px;
   line-height: 18px;
   letter-spacing: 0.1em;
-  color: var(--rd-identity-meta-text, #77736B);
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding-bottom: 4px;
+}
+.rd-inspector .rdin-zone[data-zone="workspace"] .rdin-count,
+.rd-inspector .rdin-zone[data-zone="workspace"] .rdin-review-id {
+  font-size: 13px;
 }
 
-/* Narrow — one column, compact title (matching the pinned narrow
-   scale), the archive mark steps aside. */
+/* Groups — serif section titles over hairlines. */
+.rd-inspector .rdin-group { margin-bottom: 24px; }
+.rd-inspector .rdin-label {
+  font-family: var(--rd-font-serif, Georgia, serif);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+  margin-bottom: 8px;
+}
+.rd-inspector .rdin-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* Archival properties: label left, value right, ruled rows. */
+.rd-inspector .rdin-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 16px;
+  align-items: baseline;
+  margin: 0 0 6px 0;
+}
+.rd-inspector .rdin-meta dt {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #77736B);
+  margin-top: 0;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-inspector .rdin-meta dd {
+  margin: 0;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rd-surface-rule, #292824);
+  text-align: right;
+}
+
+/* Linked-object rows — ledger entries stacking type over id.
+   contradicts carries the restrained conflict accent; every other
+   type shares the archival relation ochre. No thickness, no rank,
+   no score. */
+.rd-inspector .rdin-link-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  padding: 7px 6px;
+  margin: 0 0 2px 0;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-inspector .rdin-group .rdin-label + .rdin-link-row {
+  border-top: none;
+}
+.rd-inspector .rdin-link-row:hover { background: var(--rd-surface-base, #11110F); }
+.rd-inspector .rdin-link-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-inspector .rdin-link-type {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rd-relation-type-text, #D0B77C);
+}
+.rd-inspector .rdin-link-row[data-relation="contradicts"] .rdin-link-type {
+  color: var(--rd-conflict-marker-text, #C78683);
+}
+.rd-inspector .rdin-link-id {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+}
+.rd-inspector .rdin-link-unresolved .rdin-link-id {
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-inspector .rdin-link-state {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--rd-relation-unresolved-text, #D0B77C);
+}
+
+/* Review and contribution rows. */
+.rd-inspector .rdin-count {
+  font-family: var(--rd-font-serif, Georgia, serif);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  margin-bottom: 6px;
+}
+.rd-inspector .rdin-review-row,
+.rd-inspector .rdin-contrib-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  padding: 4px 6px;
+  margin: 0 0 2px 0;
+}
+.rd-inspector .rdin-review-row:hover,
+.rd-inspector .rdin-contrib-row:hover {
+  background: var(--rd-surface-base, #11110F);
+}
+.rd-inspector .rdin-review-row:focus-visible,
+.rd-inspector .rdin-contrib-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-inspector .rdin-review-id {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+}
+.rd-inspector .rdin-review-meta {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  word-break: break-all;
+}
+.rd-inspector .rdin-more {
+  font-size: 13px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding: 4px 6px;
+}
+.rd-inspector .rdin-diag-line {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* ============================================================
+   RD Product Surface Refactor Phase 2.2 — case dossier content
+   composition. Root-cause fix: Obsidian gives every <button> a
+   FIXED height (30px input height) with visible overflow, so RD
+   buttons whose text wraps painted past the button rectangle —
+   the wrapped left-nav title collided with the next kind heading
+   while row-rect checks still passed. Every RD row button now
+   owns its full content height.
+
+   V2 Phase B consolidation — RD COLLABORATION. The row-height
+   ownership contract stays pinned here; the collaboration
+   surface styles (the read-only artifact browser and the
+   recorded human decisions) sit beside it now.
+   ============================================================ */
+
+/* Row buttons — button height ownership (the dock-leaf row
+   classes carry the same contract). Wrapped titles contribute to
+   the row's real height. */
+.rd-archive-nav .rdan-object-row,
+.rd-archive-nav .rdan-surface-row,
+.rd-archive-nav .rdan-button,
+.rd-inspector .rdin-link-row,
+.rd-inspector .rdin-review-row,
+.rd-inspector .rdin-contrib-row,
+.rd-workspace-shell .rdws-button,
+.rd-knowledge-panel .rdkp-nav,
+.rd-knowledge-panel .rdkp-relation-row,
+.rd-knowledge-panel .rdkp-lineage-row,
+.rd-knowledge-panel .rdkp-unresolved {
+  height: auto;
+  min-height: 0;
+}
+
+/* Collaboration surface — read-only display of agent contribution
+   artifacts; all colors via semantic tokens. */
+.rd-workspace-shell .rdws-collaboration-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 860px;
+}
+.rd-workspace-shell .rd-collaboration { font-size: 13px; }
+.rd-workspace-shell .rdcol-section { border-top: 1px solid var(--rd-surface-rule, #292824); margin-top: 10px; padding-top: 6px; }
+.rd-workspace-shell .rdcol-section-title { cursor: pointer; font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--rd-identity-meta-text, #A19C92); }
+.rd-workspace-shell .rdcol-empty { color: var(--rd-identity-meta-text, #A19C92); font-size: 12px; padding: 2px 0; }
+.rd-workspace-shell .rdcol-dir-state { font-family: var(--font-monospace); font-size: 11px; color: var(--rd-availability-missing-text, #D0B77C); }
+.rd-workspace-shell .rdcol-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 2px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: 6px 0;
+}
+.rd-workspace-shell .rdcol-row:hover { background: var(--rd-surface-raised, #1D1C19); }
+.rd-workspace-shell .rdcol-row:focus-visible { outline: 2px solid var(--rd-surface-focus-rule, #D8C89D); outline-offset: 1px; }
+.rd-workspace-shell .rdcol-row-head { font-family: var(--font-monospace); font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
+.rd-workspace-shell .rdcol-row-summary { font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
+.rd-workspace-shell .rdcol-row-tail { font-family: var(--font-monospace); font-size: 11px; color: var(--rd-identity-meta-text, #A19C92); }
+.rd-workspace-shell .rdcol-back {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 10px;
+}
+.rd-workspace-shell .rdcol-detail-head { font-family: var(--font-monospace); font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); margin-bottom: 6px; }
+.rd-workspace-shell .rdcol-meta dt { font-family: var(--font-monospace); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rd-identity-meta-text, #A19C92); margin-top: 6px; }
+.rd-workspace-shell .rdcol-meta dd { margin: 1px 0 0; }
+.rd-workspace-shell .rdcol-meta dd[data-state="not-declared"] { color: var(--rd-identity-meta-text, #A19C92); }
+.rd-workspace-shell .rdcol-flag { color: var(--rd-conflict-marker-text, #C78683); font-size: 12px; padding: 2px 0; }
+.rd-workspace-shell .rdcol-detail-section { border-top: 1px solid var(--rd-surface-rule, #292824); margin-top: 8px; padding-top: 4px; }
+.rd-workspace-shell .rdcol-detail-section summary { cursor: pointer; }
+
+/* Artifact detail — declared section text reads as an archival
+   excerpt of the record; attribution stays in the artifact head.
+   It is a record of work, never verified truth. */
+.rd-workspace-shell .rdcol-detail-body {
+  font-family: var(--rd-font-serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  border-left: 2px solid var(--rd-identity-rule, #34322D);
+  padding-left: 12px;
+  white-space: pre-wrap;
+}
+
+/* Collaboration intro — read-only status semantics, quiet. */
+.rd-workspace-shell .rdcol-intro {
+  border-left: 2px solid var(--rd-identity-rule, #34322D);
+  padding: 4px 10px;
+  margin: 6px 0 10px 0;
+}
+.rd-workspace-shell .rdcol-intro-line { font-size: 12px; color: var(--rd-identity-title-text, #D4D0C8); }
+.rd-workspace-shell .rdcol-intro-principles {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-top: 4px;
+}
+.rd-workspace-shell .rdcol-intro-status {
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-top: 2px;
+}
+.rd-workspace-shell .rdcol-empty-explain {
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding: 0 0 2px 0;
+}
+
+/* Human decision controls — scoped, semantic tokens; these
+   buttons RECORD a decision, they never execute anything. */
+.rd-workspace-shell .rdcol-decide {
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+.rd-workspace-shell .rdcol-decide-note {
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-bottom: 4px;
+}
+.rd-workspace-shell .rdcol-decide-button {
+  background: var(--rd-surface-raised, #1D1C19);
+  border: 1px solid var(--rd-identity-rule, #34322D);
+  border-radius: 4px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  cursor: pointer;
+  font-size: 11px;
+  margin-right: 6px;
+  padding: 3px 10px;
+}
+.rd-workspace-shell .rdcol-decide-button:hover,
+.rd-workspace-shell .rdcol-decide-button:focus-visible {
+  border-color: var(--rd-surface-focus-rule, #D8C89D);
+  outline: none;
+}
+
+/* Workflow linkage display — scoped, semantic tokens. */
+.rd-workspace-shell .rdcol-linkage {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin: 2px 0 6px 0;
+}
+.rd-workspace-shell .rdcol-linkage-row {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding: 1px 0;
+}
+
+/* ============================================================
+   RESPONSIVE — pane-width contracts (v1.3.5 §5: breakpoints
+   follow the allocated pane, not the window). Narrow keeps the
+   dossier readable first: compact bar and statusline, one-column
+   desk map, compact display title, single-column provenance; the
+   archive mark steps aside. The docks are Obsidian sidebars —
+   they fold through Obsidian's own chrome, not through these
+   rules.
+   ============================================================ */
+
+.rd-workspace-shell.rdws-narrow .rdws-masthead {
+  padding: 8px 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rd-workspace-shell.rdws-narrow .rdws-masthead-right {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-object-input {
+  min-width: 120px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-statusline {
+  font-size: 12px;
+  line-height: 17px;
+  padding: 4px 14px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-center {
+  padding: 14px 16px 24px 16px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-dossier { margin-bottom: 12px; }
+.rd-workspace-shell.rdws-narrow .rdws-reading-inner { margin-top: 16px; }
+/* The pinned narrow title scale; the longer selector below keeps
+   it effective against the dossier display-scale rule. */
+.rd-workspace-shell.rdws-narrow .rdws-ko-title {
+  font-size: 26px;
+  line-height: 34px;
+}
 .rd-workspace-shell.rdws-narrow .rdws-reading .rdws-dossier .rdws-ko-title {
   font-size: 26px;
   line-height: 34px;
 }
+.rd-workspace-shell.rdws-narrow .rdws-strip-item {
+  padding: 8px 14px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-desk-areas { grid-template-columns: 1fr; }
 .rd-workspace-shell.rdws-narrow .rdws-dossier-mark { display: none; }
 .rd-workspace-shell.rdws-narrow .rdws-reading .rd-knowledge-panel .rdkp-provenance .rdkp-section-body {
   grid-template-columns: 1fr;
