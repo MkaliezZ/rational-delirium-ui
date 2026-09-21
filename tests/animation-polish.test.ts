@@ -17,7 +17,10 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
 const start = css.indexOf("v1.6.4 — Animation & interaction polish");
-const section = start >= 0 ? css.slice(start) : "";
+// Scope to the v1.6.4 section ONLY: later visual-system sections
+// (e.g. the desk typography) are not motion rules.
+const nextSection = start >= 0 ? css.indexOf("/* ====", start + 10) : -1;
+const section = start >= 0 ? css.slice(start, nextSection >= 0 ? nextSection : undefined) : "";
 
 describe("v1.6.4 motion implementation shape", () => {
   it("is present and defines motion tokens as overridable custom properties", () => {

@@ -1039,3 +1039,372 @@
   color: var(--rd-identity-title-text, #D4D0C8);
   padding: 1px 0;
 }
+
+/* ============================================================
+   RD Product Surface Refactor Phase 1 — the investigation desk
+   (RD_VISUAL_DESIGN_SYSTEM_V1_0 §2/§4/§5, RD_V1_6_0 §5).
+   Typography scale: serif investigation title 28/36, KO title
+   22/30, section heading 18/26 (realized 17 for in-panel fit),
+   body 16/26, navigation 14/20, metadata mono 13/20. 4px spacing
+   unit; thin rules; 2–4px radii; opaque surfaces; supporting
+   planes collapse before the reading surface is squeezed.
+   ============================================================ */
+
+.rd-workspace-shell {
+  --rd-font-serif: Georgia, "Times New Roman", "Noto Serif SC",
+    "Source Han Serif SC", var(--font-text, serif);
+}
+
+/* Masthead — the archive's letterhead. */
+.rd-workspace-shell .rdws-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px 12px 20px;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+}
+.rd-workspace-shell .rdws-masthead-title {
+  margin: 0;
+  font-family: var(--rd-font-serif);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-masthead-scope {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-top: 4px;
+}
+.rd-workspace-shell .rdws-masthead-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* Status line — an honest data state, not an error. */
+.rd-workspace-shell .rdws-statusline {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+}
+.rd-workspace-shell .rdws-statusline[data-state="missing"] .rdws-statusline,
+.rd-workspace-shell .rdws-statusline[data-state="invalid"],
+.rd-workspace-shell .rdws-statusline[data-state="unavailable"] {
+  color: var(--rd-availability-missing-text, #D0B77C);
+}
+
+/* Three planes. Center dominates; sides are fixed and collapse. */
+.rd-workspace-shell .rdws-planes {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+}
+.rd-workspace-shell .rdws-plane-left {
+  flex: 0 0 224px;
+  min-width: 0;
+  border-right: 1px solid var(--rd-surface-rule, #34322D);
+  padding: 12px 12px 24px 12px;
+  overflow-y: auto;
+}
+.rd-workspace-shell .rdws-plane-center {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 16px 24px 32px 24px;
+  overflow-y: auto;
+}
+.rd-workspace-shell .rdws-plane-right {
+  flex: 0 0 312px;
+  min-width: 0;
+  border-left: 1px solid var(--rd-surface-rule, #34322D);
+  padding: 16px 16px 24px 16px;
+  overflow-y: auto;
+  background: var(--rd-surface-raised, #1D1C19);
+}
+
+/* Navigation rail groups — labels, not boxes. */
+.rd-workspace-shell .rdws-nav-group { margin-bottom: 20px; }
+.rd-workspace-shell .rdws-nav-label {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+  margin-bottom: 8px;
+}
+.rd-workspace-shell .rdws-nav-selection-id {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+.rd-workspace-shell .rdws-nav-hint,
+.rd-workspace-shell .rdws-nav-empty {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-workspace-shell .rdws-nav-objects { flex: 1 1 auto; }
+
+/* Object rows: id+meta mono line, serif title line, no left bar. */
+.rd-workspace-shell .rdws-object-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  padding: 6px 8px;
+  margin: 0 0 2px 0;
+}
+.rd-workspace-shell .rdws-object-row:hover {
+  background: var(--rd-surface-raised, #1D1C19);
+}
+.rd-workspace-shell .rdws-object-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-workspace-shell .rdws-object-row[aria-pressed="true"] {
+  background: var(--rd-surface-raised, #1D1C19);
+  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  padding-left: 6px;
+}
+.rd-workspace-shell .rdws-object-row-id,
+.rd-workspace-shell .rdws-object-row-meta {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+}
+.rd-workspace-shell .rdws-object-row-id { color: var(--rd-identity-title-text, #D4D0C8); }
+.rd-workspace-shell .rdws-object-row-meta { color: var(--rd-identity-meta-text, #A19C92); }
+.rd-workspace-shell .rdws-object-row-title {
+  display: block;
+  font-family: var(--rd-font-serif);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Surface destinations. */
+.rd-workspace-shell .rdws-surface-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--rd-font-serif);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  padding: 5px 8px;
+  margin: 0 0 2px 0;
+}
+.rd-workspace-shell .rdws-surface-row:hover { background: var(--rd-surface-raised, #1D1C19); }
+.rd-workspace-shell .rdws-surface-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-workspace-shell .rdws-surface-row[aria-pressed="true"] {
+  border-left: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  padding-left: 6px;
+}
+
+/* Knowledge Object head in the reading plane. */
+.rd-workspace-shell .rdws-ko-head { margin-bottom: 12px; }
+.rd-workspace-shell .rdws-ko-title {
+  margin: 0 0 4px 0;
+  font-family: var(--rd-font-serif);
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 600;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-ko-identity {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  word-break: break-all;
+}
+
+/* Desk home — composed, breathing, not a list of boxes. */
+.rd-workspace-shell .rdws-desk { max-width: 720px; }
+.rd-workspace-shell .rdws-desk-title {
+  margin: 12px 0 12px 0;
+  font-family: var(--rd-font-serif);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-desk-lead {
+  margin: 0 0 28px 0;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-desk-map-title {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-bottom: 8px;
+}
+.rd-workspace-shell .rdws-desk-areas {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 32px;
+}
+.rd-workspace-shell .rdws-area {
+  padding: 8px 0;
+  border-top: 1px solid var(--rd-surface-rule, #34322D);
+}
+.rd-workspace-shell .rdws-area dt {
+  font-family: var(--rd-font-serif);
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-area dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+.rd-workspace-shell .rdws-desk-snapshot-note {
+  margin-top: 28px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--rd-availability-missing-text, #D0B77C);
+  max-width: 560px;
+}
+
+/* Inspection plane groups — labels + quiet content, no boxes. */
+.rd-workspace-shell .rdws-insp-group { margin-bottom: 24px; }
+
+.rd-workspace-shell .rdws-insp-count {
+  font-family: var(--rd-font-serif);
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  margin-bottom: 6px;
+}
+.rd-workspace-shell .rdws-review-row,
+.rd-workspace-shell .rdws-contrib-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  padding: 4px 6px;
+  margin: 0 0 2px 0;
+}
+.rd-workspace-shell .rdws-review-row:hover,
+.rd-workspace-shell .rdws-contrib-row:hover {
+  background: var(--rd-surface-base, #11110F);
+}
+.rd-workspace-shell .rdws-review-row:focus-visible,
+.rd-workspace-shell .rdws-contrib-row:focus-visible {
+  outline: 2px solid var(--rd-surface-focus-rule, #D8C89D);
+  outline-offset: 1px;
+}
+.rd-workspace-shell .rdws-review-id {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  word-break: break-all;
+}
+.rd-workspace-shell .rdws-review-meta {
+  display: block;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  word-break: break-all;
+}
+.rd-workspace-shell .rdws-insp-more {
+  font-size: 13px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding: 4px 6px;
+}
+.rd-workspace-shell .rdws-diag-line {
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--rd-identity-meta-text, #A19C92);
+}
+
+/* In-workspace Knowledge Panel typography upgrade (reading plane
+   context only; the standalone panel keeps its compact style). */
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel { font-size: 16px; }
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-fields dt {
+  font-size: 11px;
+  margin-top: 12px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-fields dd {
+  font-size: 15px;
+  line-height: 24px;
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-section-title {
+  font-family: var(--rd-font-serif);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--rd-identity-title-text, #D4D0C8);
+}
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-layer,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-relation-row,
+.rd-workspace-shell .rdws-reading .rd-knowledge-panel .rdkp-lineage-row {
+  font-size: 14px;
+  line-height: 22px;
+}
+.rd-workspace-shell .rdws-reading-note {
+  font-size: 13px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  margin-top: 16px;
+}
+
+/* Collaboration inside the desk keeps its compact list style. */
+.rd-workspace-shell .rdws-collaboration-host { max-width: 860px; }
+
+/* Responsive (pane-width basis, v1.3.5 §5): the right plane folds
+   first, then the left rail; the reading surface is never squeezed. */
+.rd-workspace-shell.rdws-mid .rdws-plane-right { display: none; }
+.rd-workspace-shell.rdws-mid .rdws-plane-left { flex-basis: 200px; }
+.rd-workspace-shell.rdws-narrow .rdws-planes { flex-direction: column; }
+.rd-workspace-shell.rdws-narrow .rdws-plane-left {
+  border-right: none;
+  border-bottom: 1px solid var(--rd-surface-rule, #34322D);
+  flex-basis: auto;
+  max-height: 40vh;
+}
+.rd-workspace-shell.rdws-narrow .rdws-plane-right { display: none; }
+.rd-workspace-shell.rdws-narrow .rdws-masthead { flex-direction: column; align-items: flex-start; }
+.rd-workspace-shell.rdws-narrow .rdws-desk-areas { grid-template-columns: 1fr; }

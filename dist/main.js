@@ -12970,7 +12970,7 @@ var RDWorkspaceStore = class {
 };
 
 // src/views/rd-workspace-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/semantic-graph/graph-loader.ts
 var GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
@@ -14253,1127 +14253,8 @@ var RDKnowledgePanelView = class extends import_obsidian2.ItemView {
   }
 };
 
-// src/views/rd-workspace-view.ts
-var RD_WORKSPACE_VIEW_TYPE = "rd-workspace";
-var AREAS = [
-  { key: "Knowledge Panel", question: "What is this object?", state: "live in workspace" },
-  { key: "Provenance Explorer", question: "Why do we believe this?", state: "live in workspace" },
-  { key: "Lineage Explorer", question: "How did this change?", state: "live in workspace" },
-  { key: "Relation Explorer", question: "What is it connected to?", state: "live in workspace" },
-  {
-    key: "Collaboration View",
-    question: "Who worked on this and what happened?",
-    state: "live in workspace"
-  },
-  {
-    key: "Agent Contribution View",
-    question: "What did Agents do here?",
-    state: "live in workspace"
-  }
-];
-var RDWorkspaceShellView = class extends import_obsidian3.ItemView {
-  constructor(leaf, deps) {
-    super(leaf);
-    this.unsubscribe = null;
-    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
-    this.sourceDetail = void 0;
-    this.observer = null;
-    this.mode = "investigation";
-    this.browser = new CollaborationBrowser();
-    this.collabDetail = null;
-    this.deps = deps;
-  }
-  getViewType() {
-    return RD_WORKSPACE_VIEW_TYPE;
-  }
-  getDisplayText() {
-    return "RD Workspace";
-  }
-  getIcon() {
-    return "library";
-  }
-  async onOpen() {
-    emptyEl(this.contentEl);
-    const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
-    shell.setAttribute(RD_THEME_ATTR, "");
-    shell.setAttribute("data-rd-tokens", RD_TOKEN_VERSION);
-    this.buildToolbar(createChild(shell, "div", { cls: "rdws-toolbar" }), shell);
-    createChild(shell, "div", { cls: "rdws-body" });
-    if (this.deps.themeController !== void 0) {
-      applyRDTheme(shell, this.deps.themeController.getCurrent());
-    }
-    this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
-    this.observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
-    });
-    this.observer.observe(shell);
-    await this.refreshAvailability();
-    this.renderBody();
-  }
-  async onClose() {
-    this.observer?.disconnect();
-    this.observer = null;
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    this.browser.dispose();
-    emptyEl(this.contentEl);
-  }
-  /** v1.6.2 §5: explicit, session-only theme selection. */
-  buildToolbar(bar, shell) {
-    const controller = this.deps.themeController;
-    if (controller !== void 0) {
-      createChild(bar, "span", { cls: "rdws-theme-label", text: "Theme:" });
-      const select = createChild(bar, "select", { cls: "rdws-theme-select" });
-      select.setAttribute("aria-label", "RD theme (presentation only)");
-      for (const theme of controller.list()) {
-        const option = createChild(select, "option", { text: theme.label });
-        option.value = theme.id;
-        if (theme.id === controller.getCurrent().id) {
-          option.selected = true;
-        }
-      }
-      select.addEventListener("change", () => {
-        try {
-          const theme = controller.setTheme(select.value);
-          applyRDTheme(shell, theme);
-        } catch {
-        }
-      });
-    }
-    const input = createChild(bar, "input", { cls: "rdws-object-input" });
-    input.type = "text";
-    input.placeholder = "inspect exact object_id (e.g. ko-20260921-0001)";
-    input.setAttribute("aria-label", "Knowledge object id (exact match)");
-    const go = () => {
-      const id = input.value.trim();
-      if (id !== "") this.deps.store.setSelectedObject(id);
-    };
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") go();
-    });
-    createChild(bar, "button", { cls: "rdws-button", text: "Inspect" }).addEventListener("click", go);
-    const back = createChild(bar, "button", { cls: "rdws-button", text: "\u25C0 Back" });
-    back.setAttribute("aria-label", "Back along investigation trail");
-    back.addEventListener("click", () => this.deps.store.back());
-    if (this.deps.collaborationSource !== void 0) {
-      const collab = createChild(bar, "button", {
-        cls: "rdws-button rdws-collab-toggle",
-        text: "Collaboration"
-      });
-      collab.setAttribute("aria-pressed", "false");
-      collab.addEventListener("click", () => {
-        this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
-        collab.setAttribute("aria-pressed", String(this.mode === "collaboration"));
-        if (this.mode === "collaboration") {
-          void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
-        }
-        this.renderBody();
-      });
-    }
-  }
-  /** v1.8: explicit Human decision recording — the only write.
-   * Records the decision, then re-reads artifacts and re-opens the
-   * same proposal so the Human sees the recorded state. */
-  async recordProposalDecision(decision, path) {
-    const port = this.deps.decisionPort;
-    const source = this.deps.collaborationSource;
-    if (port === void 0 || source === void 0) return;
-    const result = await port.recordDecision(path, decision);
-    if (result.state === "written") {
-      await this.browser.refresh(source);
-      this.browser.select("proposal", path);
-      await this.refreshCollabDetail();
-    }
-  }
-  /** v1.7.4-A: load the detail for the current collaboration
-   * selection (exact path), then re-render. Read-only. */
-  async refreshCollabDetail() {
-    if (this.deps.collaborationSource === void 0) return;
-    this.collabDetail = await resolveDetail(
-      this.deps.collaborationSource,
-      this.browser.getState()
-    );
-    this.renderBody();
-  }
-  /** Explicit re-read of derived-state availability and snapshot.
-   * No rebuild, no sync, no spawn — reads available data only. */
-  async refreshAvailability() {
-    this.graphLoad = await loadGraphFromSource(this.deps.source);
-    const load = this.graphLoad;
-    if (load.state === "available") {
-      this.deps.store.setSnapshotAvailability({
-        state: "available",
-        note: `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations (freshness unverified)`
-      });
-    } else if (load.state === "missing") {
-      this.deps.store.setSnapshotAvailability({
-        state: "missing",
-        note: "Graph artifact missing \u2014 this does not mean no knowledge exists."
-      });
-    } else if (load.state === "invalid") {
-      this.deps.store.setSnapshotAvailability({
-        state: "invalid",
-        note: `Graph artifact invalid (${load.reason}).`
-      });
-    } else {
-      this.deps.store.setSnapshotAvailability({
-        state: "unavailable",
-        note: `Graph artifact unavailable (${load.reason}).`
-      });
-    }
-  }
-  async resolveSourceAndRender(objectId) {
-    if (this.deps.sourceReader === void 0) return;
-    const detail = await this.deps.sourceReader.resolve(objectId);
-    this.sourceDetail = detail;
-    this.renderBody();
-  }
-  renderBody() {
-    const body = this.contentEl.querySelector(".rdws-body");
-    if (!(body instanceof HTMLElement)) return;
-    emptyEl(body);
-    const state = this.deps.store.getState();
-    const head = createChild(body, "div", { cls: "rdws-head" });
-    createChild(head, "div", {
-      cls: "rdws-title",
-      text: `Rational Delirium Workspace \u2014 ${state.workspaceLabel}`
-    });
-    const snap = createChild(head, "div", { cls: "rdws-snapshot" });
-    snap.setAttribute("data-state", state.snapshot.state);
-    snap.textContent = `snapshot: ${state.snapshot.state} \u2014 ${state.snapshot.note}`;
-    const selected = state.selectedObjectId;
-    if (selected !== null) {
-      createChild(head, "div", {
-        cls: "rdws-selected",
-        text: `inspecting: ${selected} (UI pointer; not a lifecycle state) \xB7 trail ${state.navigation.length}`
-      });
-    }
-    const layout = createChild(body, "div", { cls: "rdws-layout" });
-    if (this.mode === "collaboration") {
-      const host = createChild(layout, "div", { cls: "rdws-collaboration-host" });
-      renderCollaboration(host, this.browser.getState(), this.collabDetail, {
-        onSelect: (kind, path) => {
-          this.browser.select(kind, path);
-          void this.refreshCollabDetail();
-        },
-        onBack: () => {
-          this.browser.back();
-          void this.refreshCollabDetail();
-        },
-        onDecide: (decision, path) => {
-          void this.recordProposalDecision(decision, path);
-        }
-      });
-      return;
-    }
-    if (this.graphLoad.state === "available" && selected !== null) {
-      this.renderInspection(layout, selected);
-      this.renderObjectRail(layout, selected);
-      void this.resolveSourceAndRender(selected);
-      return;
-    }
-    this.renderOverview(layout, selected);
-    if (this.graphLoad.state === "available") {
-      this.renderObjectRail(layout, selected);
-    }
-  }
-  /** Primary reading panel: the re-homed v1.3.1 Knowledge Panel
-   * projection with object navigation enabled. */
-  renderInspection(layout, selected) {
-    if (this.graphLoad.state !== "available") return;
-    const model = buildKnowledgePanelModel({
-      load: this.graphLoad,
-      workspace: this.deps.store.getState().workspaceLabel,
-      objectId: selected,
-      sourceDetail: this.sourceDetail
-    });
-    const host = createChild(layout, "div", { cls: "rdws-reading" });
-    const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
-    renderKnowledgePanel(reading, model, {
-      onSelectObject: (objectId) => {
-        this.deps.store.setSelectedObject(objectId);
-      }
-    });
-    createChild(host, "div", {
-      cls: "rdws-reading-note",
-      text: "declared data only \u2014 projection eligibility is not Knowledge Object validity; no ranking, no recommendation"
-    });
-  }
-  /** Neutral navigation rail: what exists in this snapshot, stable
-   * object-id order, no importance ordering. Click selects. */
-  renderObjectRail(layout, selected) {
-    if (this.graphLoad.state !== "available") return;
-    const rail = createChild(layout, "div", { cls: "rdws-rail" });
-    createChild(rail, "div", {
-      cls: "rdws-rail-title",
-      text: `Objects in snapshot (neutral id order \u2014 ${this.graphLoad.graph.nodes.length})`
-    });
-    const nodes = [...this.graphLoad.graph.nodes].sort((a, b) => a.object_id.localeCompare(b.object_id));
-    if (nodes.length === 0) {
-      createChild(rail, "div", { cls: "rdws-empty", text: "no objects in this snapshot" });
-      return;
-    }
-    for (const node2 of nodes) {
-      const row = createChild(rail, "button", { cls: "rdws-object-row" });
-      row.setAttribute("aria-label", `inspect ${node2.object_id}`);
-      if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
-      row.textContent = `${node2.object_id} \xB7 ${node2.kind} \xB7 ${node2.status} \u2014 ${node2.title}`;
-      row.addEventListener("click", () => {
-        this.deps.store.setSelectedObject(node2.object_id);
-      });
-    }
-  }
-  /** Overview: area map with honest live/placeholder states; shown
-   * when nothing is selected. */
-  renderOverview(layout, _selected) {
-    const overview = createChild(layout, "div", { cls: "rdws-overview" });
-    if (this.graphLoad.state !== "available") {
-      createChild(overview, "div", {
-        cls: "rdws-unavailable",
-        text: this.deps.store.getState().snapshot.note
-      });
-    }
-    const list2 = createChild(overview, "div", { cls: "rdws-areas" });
-    createChild(list2, "div", { cls: "rdws-areas-title", text: "Inspection areas (v1.6.0 \xA74)" });
-    for (const area of AREAS) {
-      const row = createChild(list2, "div", { cls: "rdws-area" });
-      row.setAttribute("data-live", String(area.state === "live in workspace"));
-      createChild(row, "div", { cls: "rdws-area-name", text: area.key });
-      createChild(row, "div", { cls: "rdws-area-question", text: area.question });
-      if (area.state === "live in workspace") {
-        createChild(row, "div", {
-          cls: "rdws-area-hint",
-          text: "select an object above to inspect"
-        });
-      } else {
-        createChild(row, "div", { cls: "rdws-area-pending", text: area.state });
-      }
-    }
-    const openPanel = createChild(overview, "button", {
-      cls: "rdws-button",
-      text: "Open standalone Knowledge Panel"
-    });
-    openPanel.addEventListener("click", () => {
-      void this.deps.openView(RD_KNOWLEDGE_PANEL_VIEW_TYPE);
-    });
-  }
-};
-
-// src/views/context-view.ts
-var import_obsidian4 = require("obsidian");
-
-// src/views/object-summary.ts
-function renderObjectSummary(container, data, pinned, callbacks) {
-  const hadFocus = container.contains(document.activeElement);
-  const focusedCls = document.activeElement instanceof HTMLElement ? document.activeElement.className : null;
-  emptyEl(container);
-  const head = createChild(container, "div", { cls: "rdc-head" });
-  if (data.object) {
-    createChild(head, "span", { cls: "rdc-id", text: data.object.id });
-  }
-  const pin = createChild(head, "button", {
-    cls: "rdc-pin",
-    text: pinned ? "Unpin" : "Pin"
-  });
-  pin.setAttribute("aria-pressed", pinned ? "true" : "false");
-  pin.setAttribute(
-    "aria-label",
-    pinned ? "Unpin context target" : "Pin context target"
-  );
-  pin.addEventListener("click", callbacks.onPinToggle);
-  if (data.phase === "ERROR") {
-    createChild(container, "div", {
-      cls: "rdc-state rdc-error",
-      text: data.pinnedDeleted ? "Pinned target deleted" : "Context error"
-    });
-    return;
-  }
-  if (data.phase === "NO_ACTIVE_OBJECT" || !data.object) {
-    createChild(container, "div", {
-      cls: "rdc-state",
-      text: data.indexState === "INDEXING" ? "INDEXING" : "No active RD object"
-    });
-    return;
-  }
-  createChild(container, "div", { cls: "rdc-title", text: data.object.title });
-  const badges = createChild(container, "div");
-  const statusBadge = createChild(badges, "span", {
-    cls: "rdc-badge",
-    text: data.object.status || "(no status)"
-  });
-  statusBadge.setAttribute("data-kind", "status");
-  if (data.object.proof) {
-    const b = createChild(badges, "span", { cls: "rdc-badge", text: "proof" });
-    b.setAttribute("data-kind", "proof");
-  }
-  if (data.object.demo) {
-    const b = createChild(badges, "span", { cls: "rdc-badge", text: "demo" });
-    b.setAttribute("data-kind", "demo");
-  }
-  const verify = createChild(badges, "span", {
-    cls: "rdc-badge",
-    text: data.object.lastVerified ? `verified ${data.object.lastVerified}` : "never verified"
-  });
-  verify.setAttribute("data-kind", "verification");
-  if (hadFocus && focusedCls !== null) {
-    const again = container.querySelector("." + focusedCls.trim().replace(/\s+/g, "."));
-    again?.focus();
-  }
-}
-
-// src/views/relation-list.ts
-function renderRelationList(container, data, expanded, callbacks) {
-  emptyEl(container);
-  if (data.indexState === "INDEXING" && data.sections.length === 0) {
-    createChild(container, "div", { cls: "rdc-state", text: "INDEXING" });
-    container.setAttribute("aria-busy", "true");
-    return;
-  }
-  container.removeAttribute("aria-busy");
-  for (const section3 of data.sections) {
-    const sectionEl = createChild(container, "div", { cls: "rdc-section" });
-    const title = createChild(sectionEl, "button", {
-      cls: "rdc-section-title",
-      text: section3.title
-    });
-    const isOpen = expanded.has(section3.key);
-    title.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    const body = createChild(sectionEl, "div", { cls: "rdc-section-body" });
-    body.style.display = isOpen ? "" : "none";
-    title.addEventListener("click", () => {
-      const nowOpen = body.style.display === "none";
-      body.style.display = nowOpen ? "" : "none";
-      title.setAttribute("aria-expanded", nowOpen ? "true" : "false");
-      callbacks.onToggleSection(section3.key, nowOpen);
-    });
-    for (const row of section3.rows) {
-      const btn = createChild(body, "button", { cls: "rdc-rel" });
-      const label = createChild(btn, "span", { cls: "rdc-pred" });
-      label.textContent = (row.direction === "incoming" ? "\u2190 " : "\u2192 ") + row.predicate + (row.ordinary ? " (" + (row.direction === "incoming" ? "backlink" : "linked") + ")" : "");
-      createChild(btn, "span", { text: " " + row.targetTitle });
-      const state = createChild(btn, "span", {
-        cls: "rdc-badge",
-        text: row.resolution
-      });
-      state.setAttribute("data-state", row.resolution);
-      const actions = createChild(btn, "span", { cls: "rdc-actions" });
-      const tabBtn = createChild(actions, "button", {
-        cls: "rdc-act rdc-act-tab",
-        text: "\u21D7"
-      });
-      tabBtn.setAttribute("aria-label", "Open in new tab");
-      tabBtn.title = "Open in new tab";
-      tabBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        callbacks.onSelectRelationTab(row);
-      });
-      const splitBtn = createChild(actions, "button", {
-        cls: "rdc-act rdc-act-split",
-        text: "\u25A4"
-      });
-      splitBtn.setAttribute("aria-label", "Open in split");
-      splitBtn.title = "Open in split";
-      splitBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        callbacks.onSelectRelationSplit(row);
-      });
-      if (row.sourcePath !== null) {
-        const src = createChild(actions, "button", {
-          cls: "rdc-act rdc-src",
-          text: row.sourceLine !== null ? "@" + row.sourceLine : "@"
-        });
-        src.setAttribute(
-          "aria-label",
-          row.sourceLine !== null ? "Jump to source line " + row.sourceLine : "Open source file"
-        );
-        src.title = "Open source";
-        src.addEventListener("click", (e) => {
-          e.stopPropagation();
-          callbacks.onSelectRelation({ ...row, _sourceAction: true });
-        });
-      }
-      btn.addEventListener("click", () => callbacks.onSelectRelation(row));
-    }
-  }
-}
-
-// src/views/context-view.ts
-var RD_CONTEXT_VIEW_TYPE = "rd-context";
-var RDContextView = class extends import_obsidian4.ItemView {
-  constructor(leaf, controller, navigation) {
-    super(leaf);
-    this.unsubscribe = null;
-    this.container = null;
-    this.controller = controller;
-    this.nav = navigation;
-  }
-  getViewType() {
-    return RD_CONTEXT_VIEW_TYPE;
-  }
-  getDisplayText() {
-    return "RD Context";
-  }
-  getIcon() {
-    return "file-search";
-  }
-  async onOpen() {
-    emptyEl(this.contentEl);
-    this.container = createChild(this.contentEl, "div", { cls: "rd-context" });
-    this.unsubscribe = this.controller.subscribe(() => this.render());
-    await this.controller.reattach();
-    this.render();
-  }
-  async onClose() {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    emptyEl(this.contentEl);
-  }
-  render() {
-    const shell = this.container;
-    if (shell === null) return;
-    const controller = this.controller;
-    const projection = controller.projection;
-    const session = controller.session;
-    const focusKey = this.captureFocusKey(shell);
-    emptyEl(shell);
-    if (projection === null) {
-      createChild(shell, "div", {
-        cls: "rdc-state",
-        text: controller.phase === "LOADING" ? "Loading\u2026" : "No context"
-      });
-      return;
-    }
-    const summary = createChild(shell, "div", { cls: "rdc-summary" });
-    const relations = createChild(shell, "div", { cls: "rdc-relations" });
-    renderObjectSummary(summary, projection, session.mode === "PINNED", {
-      onPinToggle: () => void this.togglePin()
-    });
-    renderRelationList(relations, projection, session.expandedSections, {
-      onSelectRelation: (row) => this.navigateRelation(row, "normal"),
-      onSelectRelationTab: (row) => this.navigateRelation(row, "tab"),
-      onSelectRelationSplit: (row) => this.navigateRelation(row, "split"),
-      onToggleSection: (key, expanded) => {
-        controller.setSectionExpanded(key, expanded);
-      }
-    });
-    this.restoreFocus(shell, focusKey);
-  }
-  async togglePin() {
-    if (this.controller.session.mode === "PINNED") await this.controller.unpin();
-    else await this.controller.pin();
-  }
-  /** RR-03 §29: primary action opens TARGET; source action opens the
-   * declaration source. RD-10 §26: tab/split mode also supported. */
-  navigateRelation(row, mode = "normal") {
-    if (row._sourceAction === true) {
-      if (row.sourcePath === null) return;
-      const target2 = { path: row.sourcePath };
-      if (row.sourceLine !== null && row.sourceLine !== void 0) {
-        target2.line = row.sourceLine;
-        if (row.sourceRevision !== null) target2.sourceRevision = row.sourceRevision;
-        target2.sourceLocator = row.sourceLocator;
-      }
-      this.nav.open(target2, target2.line !== void 0 ? "source" : "normal");
-      return;
-    }
-    if (row.resolution !== "RESOLVED") return;
-    const targetPath = row.targetPath ?? null;
-    if (targetPath === null || targetPath.length === 0) return;
-    const target = { path: targetPath };
-    if (row.subpath !== null) target.subpath = row.subpath;
-    this.nav.open(target, mode);
-  }
-  captureFocusKey(shell) {
-    const active = document.activeElement;
-    if (active === null || !(active instanceof HTMLElement)) return null;
-    if (!shell.contains(active)) return null;
-    if (active.classList.contains("rdc-pin")) return "pin";
-    for (const toggle of shell.querySelectorAll(".rdc-section-title")) {
-      if (toggle === active) return "section:" + (toggle.textContent ?? "");
-    }
-    for (const rel of shell.querySelectorAll(".rdc-rel")) {
-      if (rel === active) return "rel:" + (rel.textContent ?? "").slice(0, 40);
-    }
-    return null;
-  }
-  restoreFocus(shell, key) {
-    if (key === null) return;
-    if (key === "pin") {
-      shell.querySelector(".rdc-pin")?.focus();
-      return;
-    }
-    if (key.startsWith("section:")) {
-      const title = key.slice("section:".length);
-      for (const toggle of shell.querySelectorAll(".rdc-section-title")) {
-        if (toggle.textContent === title) {
-          toggle.focus();
-          return;
-        }
-      }
-      shell.querySelector(".rdc-summary")?.setAttribute("tabindex", "-1");
-      shell.querySelector(".rdc-summary")?.focus();
-      return;
-    }
-    if (key.startsWith("rel:")) {
-      const prefix = key.slice("rel:".length);
-      for (const rel of shell.querySelectorAll(".rdc-rel")) {
-        if ((rel.textContent ?? "").slice(0, 40) === prefix) {
-          rel.focus();
-          return;
-        }
-      }
-      shell.setAttribute("tabindex", "-1");
-      shell.focus();
-      return;
-    }
-    shell.setAttribute("tabindex", "-1");
-    shell.focus();
-  }
-};
-
-// src/views/investigation-view.ts
-var import_obsidian5 = require("obsidian");
-
-// src/investigation/investigation-projection.ts
-var RECENT_LIMIT = 12;
-function endpointNeedsAttention(resolution) {
-  return resolution === "BROKEN" || resolution === "AMBIGUOUS";
-}
-function relationResolution(relation) {
-  const states = [relation.source.resolution, relation.target.resolution];
-  if (states.includes("AMBIGUOUS")) return "AMBIGUOUS";
-  if (states.includes("BROKEN")) return "BROKEN";
-  return "RESOLVED";
-}
-function needsAttention(relation) {
-  return relation.predicate === "contradicts" || endpointNeedsAttention(relationResolution(relation));
-}
-function endpointLabel(objectId, raw) {
-  return objectId !== null && objectId.length > 0 ? objectId : raw;
-}
-function compareByMtimeDescPathAsc(a, b) {
-  if (b.mtime !== a.mtime) return b.mtime - a.mtime;
-  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
-}
-function buildInvestigationProjection(index2) {
-  const { objects } = index2.snapshot();
-  const relations = index2.relations;
-  const counts = {
-    case: 0,
-    evidence: 0,
-    hypothesis: 0,
-    loop: 0,
-    broken: 0,
-    ambiguous: 0,
-    contradiction: 0
-  };
-  for (const object of objects) {
-    counts[object.type] += 1;
-  }
-  for (const relation of relations) {
-    if (relation.predicate === "contradicts") counts.contradiction += 1;
-    const states = [relation.source.resolution, relation.target.resolution];
-    if (states.includes("BROKEN")) counts.broken += 1;
-    if (states.includes("AMBIGUOUS")) counts.ambiguous += 1;
-  }
-  const relationSummary2 = /* @__PURE__ */ new Map();
-  const summaryOf2 = (path) => {
-    let entry2 = relationSummary2.get(path);
-    if (entry2 === void 0) {
-      entry2 = { resolved: 0, unresolved: 0, contradiction: 0 };
-      relationSummary2.set(path, entry2);
-    }
-    return entry2;
-  };
-  for (const relation of relations) {
-    const isContradiction = relation.predicate === "contradicts";
-    const unresolved = endpointNeedsAttention(relationResolution(relation));
-    for (const endpoint of [relation.source, relation.target]) {
-      if (endpoint.path === null) continue;
-      if (isContradiction) summaryOf2(endpoint.path).contradiction += 1;
-      if (unresolved) summaryOf2(endpoint.path).unresolved += 1;
-      if (!isContradiction && !unresolved) summaryOf2(endpoint.path).resolved += 1;
-    }
-  }
-  const cases = objects.filter((object) => object.type === "case").sort(compareByMtimeDescPathAsc).map((object) => ({
-    path: object.path,
-    id: object.id,
-    title: object.title,
-    status: object.status,
-    mtime: object.mtime,
-    relations: relationSummary2.get(object.path) ?? { resolved: 0, unresolved: 0, contradiction: 0 }
-  }));
-  const attention2 = relations.filter((relation) => needsAttention(relation)).map((relation) => ({
-    key: relation.key,
-    isContradiction: relation.predicate === "contradicts",
-    resolution: relationResolution(relation),
-    sourceLabel: endpointLabel(relation.source.objectId, relation.source.raw),
-    sourcePath: relation.source.path,
-    predicate: relation.predicate,
-    targetLabel: endpointLabel(relation.target.objectId, relation.target.raw),
-    targetPath: relation.target.path,
-    targetResolution: relation.targetResolution
-  })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-  const recent = objects.sort(compareByMtimeDescPathAsc).slice(0, RECENT_LIMIT).map((object) => ({
-    path: object.path,
-    type: object.type,
-    id: object.id,
-    title: object.title,
-    mtime: object.mtime
-  }));
-  return {
-    indexState: index2.state,
-    counts,
-    cases,
-    attention: attention2,
-    recent
-  };
-}
-
-// src/views/investigation-view.ts
-var RD_INVESTIGATION_VIEW_TYPE = "rd-investigation-dashboard";
-var FILTERS = [
-  { key: "all", label: "All" },
-  { key: "cases", label: "Cases" },
-  { key: "unresolved", label: "Unresolved" },
-  { key: "contradictions", label: "Contradictions" }
-];
-function formatDate(mtime) {
-  if (mtime <= 0) return "\u2014";
-  return new Date(mtime).toISOString().slice(0, 10);
-}
-var RDInvestigationView = class extends import_obsidian5.ItemView {
-  constructor(leaf, deps) {
-    super(leaf);
-    this.unsubscribe = null;
-    this.container = null;
-    this.filter = "all";
-    this.deps = deps;
-  }
-  getViewType() {
-    return RD_INVESTIGATION_VIEW_TYPE;
-  }
-  getDisplayText() {
-    return "RD Investigation";
-  }
-  getIcon() {
-    return "layout-list";
-  }
-  async onOpen() {
-    emptyEl(this.contentEl);
-    this.container = createChild(this.contentEl, "div", { cls: "rd-investigation" });
-    this.unsubscribe = this.deps.onIndexCommit(() => this.render());
-    this.render();
-  }
-  async onClose() {
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    emptyEl(this.contentEl);
-  }
-  /** §13: session-only; exists purely in this view instance. */
-  setFilter(filter) {
-    this.filter = filter;
-    this.render();
-  }
-  get currentFilter() {
-    return this.filter;
-  }
-  render() {
-    const shell = this.container;
-    if (shell === null) return;
-    emptyEl(shell);
-    const data = buildInvestigationProjection(this.deps.index);
-    const head = createChild(shell, "div", { cls: "rdi-head" });
-    createChild(head, "div", { cls: "rdi-title", text: "Investigation" });
-    const bar = createChild(head, "div", { cls: "rdi-filters" });
-    bar.setAttribute("role", "group");
-    bar.setAttribute("aria-label", "Investigation focus");
-    for (const f of FILTERS) {
-      const btn = createChild(bar, "button", { cls: "rdi-filter", text: f.label });
-      btn.setAttribute("aria-pressed", this.filter === f.key ? "true" : "false");
-      btn.setAttribute("aria-label", "Filter: " + f.label);
-      btn.addEventListener("click", () => this.setFilter(f.key));
-    }
-    if (data.indexState === "INDEXING") {
-      createChild(shell, "div", { cls: "rdi-state", text: "Indexing archive\u2026" });
-      return;
-    }
-    if (data.indexState === "ERROR") {
-      createChild(shell, "div", { cls: "rdi-state rdi-error", text: "Index unavailable." });
-      return;
-    }
-    if (data.cases.length === 0 && data.recent.length === 0 && data.attention.length === 0) {
-      createChild(shell, "div", { cls: "rdi-state", text: "No RD objects in the current index." });
-      return;
-    }
-    this.renderKnowledgeState(shell, data);
-    if (this.filter === "all" || this.filter === "cases") {
-      this.renderCases(shell, data);
-    }
-    if (this.filter !== "cases") {
-      this.renderAttention(shell, data);
-    }
-    if (this.filter === "all") {
-      this.renderRecent(shell, data);
-    }
-  }
-  /** §7: canonical object type counts + logical relation state counts. */
-  renderKnowledgeState(shell, data) {
-    const section3 = this.section(shell, "Knowledge State");
-    const grid = createChild(section3, "div", { cls: "rdi-counts" });
-    const entries = [
-      ["CASE", data.counts.case],
-      ["EVIDENCE", data.counts.evidence],
-      ["HYPOTHESIS", data.counts.hypothesis],
-      ["LOOP", data.counts.loop],
-      ["BROKEN", data.counts.broken],
-      ["AMBIGUOUS", data.counts.ambiguous],
-      ["CONTRADICTION", data.counts.contradiction]
-    ];
-    for (const [label, value] of entries) {
-      const cell = createChild(grid, "div", { cls: "rdi-count" });
-      createChild(cell, "span", { cls: "rdi-count-value", text: String(value) });
-      createChild(cell, "span", { cls: "rdi-count-label", text: label });
-    }
-  }
-  /** §8: CASE rows, most recently modified first, existing model
-   * fields only. Click opens the EXISTING file via the established
-   * navigation path; never creates a file. */
-  renderCases(shell, data) {
-    const section3 = this.section(shell, "Cases");
-    if (data.cases.length === 0) {
-      createChild(section3, "div", { cls: "rdi-state", text: "No cases in the current index." });
-      return;
-    }
-    for (const row of data.cases) {
-      const btn = createChild(section3, "button", { cls: "rdi-case" });
-      btn.setAttribute(
-        "aria-label",
-        `Open case ${row.title}${row.id !== null ? " (" + row.id + ")" : ""}`
-      );
-      createChild(btn, "span", { cls: "rdi-case-title", text: row.title });
-      const meta = createChild(btn, "span", { cls: "rdi-meta" });
-      meta.textContent = `${row.id ?? "(no id)"} \xB7 ${formatDate(row.mtime)} \xB7 rel ${row.relations.resolved}/${row.relations.unresolved}` + (row.relations.contradiction > 0 ? ` \xB7 contra ${row.relations.contradiction}` : "");
-      btn.addEventListener("click", () => {
-        void this.deps.navigation.open({ path: row.path }, "normal");
-      });
-    }
-  }
-  /** §9/INV-01: logical relations needing attention on EITHER
-   * dimension — contradiction classification or unresolved endpoint.
-   * §22 invariants: E != F, raw labels visible, logical dedup already
-   * done by the index. */
-  renderAttention(shell, data) {
-    const section3 = this.section(shell, "Attention");
-    const items = data.attention.filter((item) => {
-      const unresolved = item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS";
-      if (this.filter === "unresolved") return unresolved;
-      if (this.filter === "contradictions") return item.isContradiction;
-      return true;
-    });
-    if (items.length === 0) {
-      createChild(section3, "div", { cls: "rdi-state", text: "Nothing requires attention." });
-      return;
-    }
-    for (const item of items) {
-      this.renderAttentionRow(section3, item);
-    }
-  }
-  renderAttentionRow(section3, item) {
-    const navigable = item.targetPath !== null && item.targetResolution === "RESOLVED";
-    const row = createChild(section3, navigable ? "button" : "div", { cls: "rdi-att" });
-    if (!navigable) row.setAttribute("aria-disabled", "true");
-    const line = createChild(row, "span", { cls: "rdi-att-line" });
-    line.textContent = `${item.sourceLabel} ${item.predicate} ${item.targetLabel}`;
-    if (item.isContradiction) {
-      const badge = createChild(row, "span", { cls: "rdi-badge" });
-      badge.textContent = "CONTRADICTION";
-      badge.setAttribute("data-kind", "CONTRADICTION");
-    }
-    if (item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS") {
-      const badge = createChild(row, "span", { cls: "rdi-badge" });
-      badge.textContent = item.resolution;
-      badge.setAttribute("data-kind", item.resolution);
-    }
-    if (navigable && item.targetPath !== null) {
-      const path = item.targetPath;
-      row.setAttribute("aria-label", `Open ${item.targetLabel}`);
-      row.addEventListener("click", () => {
-        void this.deps.navigation.open({ path }, "normal");
-      });
-    }
-  }
-  /** §12: current filesystem metadata only; no history, no log. */
-  renderRecent(shell, data) {
-    const section3 = this.section(shell, "Recent");
-    if (data.recent.length === 0) {
-      createChild(section3, "div", { cls: "rdi-state", text: "No recent objects." });
-      return;
-    }
-    for (const object of data.recent) {
-      const btn = createChild(section3, "button", { cls: "rdi-recent" });
-      btn.setAttribute("aria-label", `Open ${object.title}`);
-      const line = createChild(btn, "span", { cls: "rdi-recent-line" });
-      line.textContent = `${object.type} \xB7 ${object.title}`;
-      const meta = createChild(btn, "span", { cls: "rdi-meta" });
-      meta.textContent = formatDate(object.mtime);
-      btn.addEventListener("click", () => {
-        void this.deps.navigation.open({ path: object.path }, "normal");
-      });
-    }
-  }
-  section(shell, title) {
-    const section3 = createChild(shell, "section", { cls: "rdi-section" });
-    createChild(section3, "h3", { cls: "rdi-section-title", text: title });
-    return section3;
-  }
-};
-
-// src/views/loop-view.ts
-var import_obsidian6 = require("obsidian");
-
-// src/loop/loop-projection.ts
-var RECURRENCE_PREDICATES = /* @__PURE__ */ new Set([
-  "repeats_in",
-  "observed_in"
-]);
-function ownerSection(row) {
-  if (RECURRENCE_PREDICATES.has(row.predicate)) return "recurrences";
-  if (row.otherType === "evidence") return "evidence";
-  if (row.otherType === "hypothesis") return "hypotheses";
-  if (row.otherType === "case") return "cases";
-  return "recurrences";
-}
-function endpointLabel2(objectId, raw) {
-  return objectId !== null && objectId.length > 0 ? objectId : raw;
-}
-function otherSide(relation, loopPath) {
-  const loopIsSource = relation.source.path === loopPath;
-  const loopIsTarget = relation.target.path === loopPath;
-  if (!loopIsSource && !loopIsTarget) return null;
-  if (loopIsSource && relation.target.path === loopPath && relation.source.path === loopPath) {
-    return { other: relation.target, direction: "outgoing" };
-  }
-  return loopIsSource ? { other: relation.target, direction: "outgoing" } : { other: relation.source, direction: "incoming" };
-}
-function buildLoopProjection(index2, selectedLoopPath) {
-  const { objects } = index2.snapshot();
-  const loops = objects.filter((o) => o.type === "loop").sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, title: o.title }));
-  const data = {
-    indexState: index2.state,
-    phase: "NO_LOOP_SELECTED",
-    selectedLoop: null,
-    loops,
-    recurrences: [],
-    evidence: [],
-    hypotheses: [],
-    cases: []
-  };
-  if (selectedLoopPath === null) return data;
-  const selected = objects.find((o) => o.path === selectedLoopPath) ?? null;
-  if (selected === null || selected.type !== "loop") {
-    data.phase = "NO_SUCH_LOOP";
-    return data;
-  }
-  data.phase = "READY";
-  data.selectedLoop = {
-    path: selected.path,
-    id: selected.id,
-    title: selected.title,
-    status: selected.status,
-    lastVerified: selected.lastVerified
-  };
-  const typeByPath = /* @__PURE__ */ new Map();
-  for (const o of objects) typeByPath.set(o.path, o);
-  const rows = [];
-  for (const relation of index2.relations) {
-    const side = otherSide(relation, selected.path);
-    if (side === null) continue;
-    const otherPath = side.other.path;
-    const partial = {
-      key: relation.key,
-      predicate: relation.predicate,
-      direction: side.direction,
-      otherLabel: endpointLabel2(side.other.objectId, side.other.raw),
-      otherPath,
-      otherType: otherPath !== null ? typeByPath.get(otherPath)?.type ?? null : null,
-      resolution: side.other.resolution
-    };
-    rows.push({ ...partial, section: ownerSection(partial) });
-  }
-  rows.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
-  data.recurrences = rows.filter((r) => r.section === "recurrences");
-  data.evidence = rows.filter((r) => r.section === "evidence");
-  data.hypotheses = rows.filter((r) => r.section === "hypotheses");
-  data.cases = rows.filter((r) => r.section === "cases");
-  return data;
-}
-
-// src/views/loop-view.ts
-var RD_LOOP_VIEW_TYPE = "rd-loop-workspace";
-var RDLoopView = class extends import_obsidian6.ItemView {
-  constructor(leaf, deps) {
-    super(leaf);
-    this.unsubscribeIndex = null;
-    this.unsubscribeActive = null;
-    this.container = null;
-    /** §4/§17: memory-only selected LOOP path. */
-    this.selectedLoopPath = null;
-    this.deps = deps;
-  }
-  getViewType() {
-    return RD_LOOP_VIEW_TYPE;
-  }
-  getDisplayText() {
-    return "RD Loop Workspace";
-  }
-  getIcon() {
-    return "iteration-ccw";
-  }
-  async onOpen() {
-    emptyEl(this.contentEl);
-    this.container = createChild(this.contentEl, "div", { cls: "rd-loop" });
-    this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
-    this.unsubscribeActive = this.deps.onActiveFile((path) => this.onActiveFileChanged(path));
-    this.syncFromActiveFile(this.currentActivePath());
-    this.render();
-  }
-  async onClose() {
-    this.unsubscribeIndex?.();
-    this.unsubscribeActive?.();
-    this.unsubscribeIndex = null;
-    this.unsubscribeActive = null;
-    emptyEl(this.contentEl);
-  }
-  /** Test/programmatic selection; memory-only. */
-  selectLoop(path) {
-    this.selectedLoopPath = path;
-    this.render();
-  }
-  get selectedLoop() {
-    return this.selectedLoopPath;
-  }
-  currentActivePath() {
-    return this.deps.activeFileProvider !== void 0 ? this.deps.activeFileProvider() : null;
-  }
-  onActiveFileChanged(path) {
-    if (this.syncFromActiveFile(path)) this.render();
-  }
-  /** §17: follow the active LOOP; retain the current selection when
-   * the active file is not a LOOP. Returns whether state changed. */
-  syncFromActiveFile(path) {
-    if (path === null) return false;
-    const object = this.deps.index.objectAt(path);
-    if (object !== null && object.type === "loop") {
-      if (this.selectedLoopPath === path) return false;
-      this.selectedLoopPath = path;
-      return true;
-    }
-    return false;
-  }
-  onIndexChanged() {
-    if (this.selectedLoopPath !== null) {
-      const object = this.deps.index.objectAt(this.selectedLoopPath);
-      if (object === null || object.type !== "loop") {
-        this.selectedLoopPath = null;
-      }
-    }
-    this.render();
-  }
-  render() {
-    const shell = this.container;
-    if (shell === null) return;
-    emptyEl(shell);
-    const data = buildLoopProjection(this.deps.index, this.selectedLoopPath);
-    const head = createChild(shell, "div", { cls: "rdl-head" });
-    createChild(head, "div", { cls: "rdl-title", text: "Loop" });
-    if (data.indexState === "INDEXING") {
-      createChild(shell, "div", { cls: "rdl-state", text: "Indexing archive\u2026" });
-      return;
-    }
-    if (data.indexState === "ERROR") {
-      createChild(shell, "div", { cls: "rdl-state rdl-error", text: "Index unavailable." });
-      return;
-    }
-    if (data.phase === "NO_LOOP_SELECTED" || data.phase === "NO_SUCH_LOOP") {
-      const section3 = this.section(shell, "Loops");
-      if (data.loops.length === 0) {
-        createChild(shell, "div", { cls: "rdl-state", text: "No LOOP selected." });
-        return;
-      }
-      for (const entry2 of data.loops) {
-        const btn = createChild(section3, "button", { cls: "rdl-loop-pick" });
-        btn.setAttribute("aria-label", `Select loop ${entry2.title}`);
-        createChild(btn, "span", { cls: "rdl-loop-pick-title", text: entry2.title });
-        const meta = createChild(btn, "span", { cls: "rdl-meta" });
-        meta.textContent = entry2.id ?? "(no id)";
-        btn.addEventListener("click", () => {
-          this.selectedLoopPath = entry2.path;
-          this.render();
-        });
-      }
-      return;
-    }
-    this.renderIdentity(shell, data);
-    this.renderRows(shell, "Recurrences", data.recurrences, "No recurrences recorded.");
-    this.renderRows(shell, "Evidence", data.evidence, "No connected evidence.");
-    this.renderRows(shell, "Hypotheses", data.hypotheses, "No connected hypotheses.");
-    this.renderRows(shell, "Related Cases", data.cases, "No related cases.");
-  }
-  /** §6 + LOOP-02: canonical LOOP fields only — title, id, status,
-   * path, lastVerified — as read-only safe text. */
-  renderIdentity(shell, data) {
-    const identity = data.selectedLoop;
-    if (identity === null) return;
-    const section3 = this.section(shell, "Identity");
-    const idEl = createChild(section3, "div", { cls: "rdl-identity" });
-    createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
-    const meta = createChild(idEl, "span", { cls: "rdl-meta" });
-    const bits = [
-      identity.id ?? "(no id)",
-      identity.status || "(no status)",
-      identity.path
-    ];
-    if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
-    meta.textContent = bits.join(" \xB7 ");
-  }
-  renderRows(shell, title, rows, emptyText) {
-    const section3 = this.section(shell, title);
-    if (rows.length === 0) {
-      createChild(section3, "div", { cls: "rdl-state", text: emptyText });
-      return;
-    }
-    for (const row of rows) {
-      this.renderRow(section3, row);
-    }
-  }
-  renderRow(section3, row) {
-    const navigable = row.otherPath !== null && row.resolution === "RESOLVED";
-    const el = createChild(section3, navigable ? "button" : "div", { cls: "rdl-rel" });
-    if (!navigable) el.setAttribute("aria-disabled", "true");
-    const line = createChild(el, "span", { cls: "rdl-rel-line" });
-    line.textContent = `${row.direction === "outgoing" ? "\u2192" : "\u2190"} ${row.predicate} ${row.otherLabel}`;
-    const badge = createChild(el, "span", { cls: "rdl-badge" });
-    badge.textContent = row.resolution;
-    badge.setAttribute("data-state", row.resolution);
-    if (navigable && row.otherPath !== null) {
-      const path = row.otherPath;
-      el.setAttribute("aria-label", `Open ${row.otherLabel}`);
-      el.addEventListener("click", () => {
-        void this.deps.navigation.open({ path }, "normal");
-      });
-    }
-  }
-  section(shell, title) {
-    const section3 = createChild(shell, "section", { cls: "rdl-section" });
-    createChild(section3, "h3", { cls: "rdl-section-title", text: title });
-    return section3;
-  }
-};
-
 // src/views/graph-intelligence-view.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/graph/graph-projection.ts
 function edgesFor(index2, subjectPath, typeByPath, excludeKeys, rootPath) {
@@ -15469,7 +14350,7 @@ function buildSecondHop(index2, neighborPath, rootPath) {
 
 // src/views/graph-intelligence-view.ts
 var RD_GRAPH_VIEW_TYPE = "rd-graph-intelligence";
-var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
+var RDGraphIntelligenceView = class extends import_obsidian3.ItemView {
   constructor(leaf, deps) {
     super(leaf);
     this.unsubscribeIndex = null;
@@ -15754,6 +14635,1279 @@ var RDGraphIntelligenceView = class extends import_obsidian7.ItemView {
     const section3 = createChild(shell, "section", { cls: "rdg-section" });
     createChild(section3, "h3", { cls: "rdg-section-title", text: title });
     return section3;
+  }
+};
+
+// src/views/loop-view.ts
+var import_obsidian4 = require("obsidian");
+
+// src/loop/loop-projection.ts
+var RECURRENCE_PREDICATES = /* @__PURE__ */ new Set([
+  "repeats_in",
+  "observed_in"
+]);
+function ownerSection(row) {
+  if (RECURRENCE_PREDICATES.has(row.predicate)) return "recurrences";
+  if (row.otherType === "evidence") return "evidence";
+  if (row.otherType === "hypothesis") return "hypotheses";
+  if (row.otherType === "case") return "cases";
+  return "recurrences";
+}
+function endpointLabel(objectId, raw) {
+  return objectId !== null && objectId.length > 0 ? objectId : raw;
+}
+function otherSide(relation, loopPath) {
+  const loopIsSource = relation.source.path === loopPath;
+  const loopIsTarget = relation.target.path === loopPath;
+  if (!loopIsSource && !loopIsTarget) return null;
+  if (loopIsSource && relation.target.path === loopPath && relation.source.path === loopPath) {
+    return { other: relation.target, direction: "outgoing" };
+  }
+  return loopIsSource ? { other: relation.target, direction: "outgoing" } : { other: relation.source, direction: "incoming" };
+}
+function buildLoopProjection(index2, selectedLoopPath) {
+  const { objects } = index2.snapshot();
+  const loops = objects.filter((o) => o.type === "loop").sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, title: o.title }));
+  const data = {
+    indexState: index2.state,
+    phase: "NO_LOOP_SELECTED",
+    selectedLoop: null,
+    loops,
+    recurrences: [],
+    evidence: [],
+    hypotheses: [],
+    cases: []
+  };
+  if (selectedLoopPath === null) return data;
+  const selected = objects.find((o) => o.path === selectedLoopPath) ?? null;
+  if (selected === null || selected.type !== "loop") {
+    data.phase = "NO_SUCH_LOOP";
+    return data;
+  }
+  data.phase = "READY";
+  data.selectedLoop = {
+    path: selected.path,
+    id: selected.id,
+    title: selected.title,
+    status: selected.status,
+    lastVerified: selected.lastVerified
+  };
+  const typeByPath = /* @__PURE__ */ new Map();
+  for (const o of objects) typeByPath.set(o.path, o);
+  const rows = [];
+  for (const relation of index2.relations) {
+    const side = otherSide(relation, selected.path);
+    if (side === null) continue;
+    const otherPath = side.other.path;
+    const partial = {
+      key: relation.key,
+      predicate: relation.predicate,
+      direction: side.direction,
+      otherLabel: endpointLabel(side.other.objectId, side.other.raw),
+      otherPath,
+      otherType: otherPath !== null ? typeByPath.get(otherPath)?.type ?? null : null,
+      resolution: side.other.resolution
+    };
+    rows.push({ ...partial, section: ownerSection(partial) });
+  }
+  rows.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  data.recurrences = rows.filter((r) => r.section === "recurrences");
+  data.evidence = rows.filter((r) => r.section === "evidence");
+  data.hypotheses = rows.filter((r) => r.section === "hypotheses");
+  data.cases = rows.filter((r) => r.section === "cases");
+  return data;
+}
+
+// src/views/loop-view.ts
+var RD_LOOP_VIEW_TYPE = "rd-loop-workspace";
+var RDLoopView = class extends import_obsidian4.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    this.container = null;
+    /** §4/§17: memory-only selected LOOP path. */
+    this.selectedLoopPath = null;
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_LOOP_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Loop Workspace";
+  }
+  getIcon() {
+    return "iteration-ccw";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    this.container = createChild(this.contentEl, "div", { cls: "rd-loop" });
+    this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
+    this.unsubscribeActive = this.deps.onActiveFile((path) => this.onActiveFileChanged(path));
+    this.syncFromActiveFile(this.currentActivePath());
+    this.render();
+  }
+  async onClose() {
+    this.unsubscribeIndex?.();
+    this.unsubscribeActive?.();
+    this.unsubscribeIndex = null;
+    this.unsubscribeActive = null;
+    emptyEl(this.contentEl);
+  }
+  /** Test/programmatic selection; memory-only. */
+  selectLoop(path) {
+    this.selectedLoopPath = path;
+    this.render();
+  }
+  get selectedLoop() {
+    return this.selectedLoopPath;
+  }
+  currentActivePath() {
+    return this.deps.activeFileProvider !== void 0 ? this.deps.activeFileProvider() : null;
+  }
+  onActiveFileChanged(path) {
+    if (this.syncFromActiveFile(path)) this.render();
+  }
+  /** §17: follow the active LOOP; retain the current selection when
+   * the active file is not a LOOP. Returns whether state changed. */
+  syncFromActiveFile(path) {
+    if (path === null) return false;
+    const object = this.deps.index.objectAt(path);
+    if (object !== null && object.type === "loop") {
+      if (this.selectedLoopPath === path) return false;
+      this.selectedLoopPath = path;
+      return true;
+    }
+    return false;
+  }
+  onIndexChanged() {
+    if (this.selectedLoopPath !== null) {
+      const object = this.deps.index.objectAt(this.selectedLoopPath);
+      if (object === null || object.type !== "loop") {
+        this.selectedLoopPath = null;
+      }
+    }
+    this.render();
+  }
+  render() {
+    const shell = this.container;
+    if (shell === null) return;
+    emptyEl(shell);
+    const data = buildLoopProjection(this.deps.index, this.selectedLoopPath);
+    const head = createChild(shell, "div", { cls: "rdl-head" });
+    createChild(head, "div", { cls: "rdl-title", text: "Loop" });
+    if (data.indexState === "INDEXING") {
+      createChild(shell, "div", { cls: "rdl-state", text: "Indexing archive\u2026" });
+      return;
+    }
+    if (data.indexState === "ERROR") {
+      createChild(shell, "div", { cls: "rdl-state rdl-error", text: "Index unavailable." });
+      return;
+    }
+    if (data.phase === "NO_LOOP_SELECTED" || data.phase === "NO_SUCH_LOOP") {
+      const section3 = this.section(shell, "Loops");
+      if (data.loops.length === 0) {
+        createChild(shell, "div", { cls: "rdl-state", text: "No LOOP selected." });
+        return;
+      }
+      for (const entry2 of data.loops) {
+        const btn = createChild(section3, "button", { cls: "rdl-loop-pick" });
+        btn.setAttribute("aria-label", `Select loop ${entry2.title}`);
+        createChild(btn, "span", { cls: "rdl-loop-pick-title", text: entry2.title });
+        const meta = createChild(btn, "span", { cls: "rdl-meta" });
+        meta.textContent = entry2.id ?? "(no id)";
+        btn.addEventListener("click", () => {
+          this.selectedLoopPath = entry2.path;
+          this.render();
+        });
+      }
+      return;
+    }
+    this.renderIdentity(shell, data);
+    this.renderRows(shell, "Recurrences", data.recurrences, "No recurrences recorded.");
+    this.renderRows(shell, "Evidence", data.evidence, "No connected evidence.");
+    this.renderRows(shell, "Hypotheses", data.hypotheses, "No connected hypotheses.");
+    this.renderRows(shell, "Related Cases", data.cases, "No related cases.");
+  }
+  /** §6 + LOOP-02: canonical LOOP fields only — title, id, status,
+   * path, lastVerified — as read-only safe text. */
+  renderIdentity(shell, data) {
+    const identity = data.selectedLoop;
+    if (identity === null) return;
+    const section3 = this.section(shell, "Identity");
+    const idEl = createChild(section3, "div", { cls: "rdl-identity" });
+    createChild(idEl, "span", { cls: "rdl-identity-title", text: identity.title });
+    const meta = createChild(idEl, "span", { cls: "rdl-meta" });
+    const bits = [
+      identity.id ?? "(no id)",
+      identity.status || "(no status)",
+      identity.path
+    ];
+    if (identity.lastVerified !== null) bits.push("verified " + identity.lastVerified);
+    meta.textContent = bits.join(" \xB7 ");
+  }
+  renderRows(shell, title, rows, emptyText) {
+    const section3 = this.section(shell, title);
+    if (rows.length === 0) {
+      createChild(section3, "div", { cls: "rdl-state", text: emptyText });
+      return;
+    }
+    for (const row of rows) {
+      this.renderRow(section3, row);
+    }
+  }
+  renderRow(section3, row) {
+    const navigable = row.otherPath !== null && row.resolution === "RESOLVED";
+    const el = createChild(section3, navigable ? "button" : "div", { cls: "rdl-rel" });
+    if (!navigable) el.setAttribute("aria-disabled", "true");
+    const line = createChild(el, "span", { cls: "rdl-rel-line" });
+    line.textContent = `${row.direction === "outgoing" ? "\u2192" : "\u2190"} ${row.predicate} ${row.otherLabel}`;
+    const badge = createChild(el, "span", { cls: "rdl-badge" });
+    badge.textContent = row.resolution;
+    badge.setAttribute("data-state", row.resolution);
+    if (navigable && row.otherPath !== null) {
+      const path = row.otherPath;
+      el.setAttribute("aria-label", `Open ${row.otherLabel}`);
+      el.addEventListener("click", () => {
+        void this.deps.navigation.open({ path }, "normal");
+      });
+    }
+  }
+  section(shell, title) {
+    const section3 = createChild(shell, "section", { cls: "rdl-section" });
+    createChild(section3, "h3", { cls: "rdl-section-title", text: title });
+    return section3;
+  }
+};
+
+// src/views/investigation-view.ts
+var import_obsidian5 = require("obsidian");
+
+// src/investigation/investigation-projection.ts
+var RECENT_LIMIT = 12;
+function endpointNeedsAttention(resolution) {
+  return resolution === "BROKEN" || resolution === "AMBIGUOUS";
+}
+function relationResolution(relation) {
+  const states = [relation.source.resolution, relation.target.resolution];
+  if (states.includes("AMBIGUOUS")) return "AMBIGUOUS";
+  if (states.includes("BROKEN")) return "BROKEN";
+  return "RESOLVED";
+}
+function needsAttention(relation) {
+  return relation.predicate === "contradicts" || endpointNeedsAttention(relationResolution(relation));
+}
+function endpointLabel2(objectId, raw) {
+  return objectId !== null && objectId.length > 0 ? objectId : raw;
+}
+function compareByMtimeDescPathAsc(a, b) {
+  if (b.mtime !== a.mtime) return b.mtime - a.mtime;
+  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+}
+function buildInvestigationProjection(index2) {
+  const { objects } = index2.snapshot();
+  const relations = index2.relations;
+  const counts = {
+    case: 0,
+    evidence: 0,
+    hypothesis: 0,
+    loop: 0,
+    broken: 0,
+    ambiguous: 0,
+    contradiction: 0
+  };
+  for (const object of objects) {
+    counts[object.type] += 1;
+  }
+  for (const relation of relations) {
+    if (relation.predicate === "contradicts") counts.contradiction += 1;
+    const states = [relation.source.resolution, relation.target.resolution];
+    if (states.includes("BROKEN")) counts.broken += 1;
+    if (states.includes("AMBIGUOUS")) counts.ambiguous += 1;
+  }
+  const relationSummary2 = /* @__PURE__ */ new Map();
+  const summaryOf2 = (path) => {
+    let entry2 = relationSummary2.get(path);
+    if (entry2 === void 0) {
+      entry2 = { resolved: 0, unresolved: 0, contradiction: 0 };
+      relationSummary2.set(path, entry2);
+    }
+    return entry2;
+  };
+  for (const relation of relations) {
+    const isContradiction = relation.predicate === "contradicts";
+    const unresolved = endpointNeedsAttention(relationResolution(relation));
+    for (const endpoint of [relation.source, relation.target]) {
+      if (endpoint.path === null) continue;
+      if (isContradiction) summaryOf2(endpoint.path).contradiction += 1;
+      if (unresolved) summaryOf2(endpoint.path).unresolved += 1;
+      if (!isContradiction && !unresolved) summaryOf2(endpoint.path).resolved += 1;
+    }
+  }
+  const cases = objects.filter((object) => object.type === "case").sort(compareByMtimeDescPathAsc).map((object) => ({
+    path: object.path,
+    id: object.id,
+    title: object.title,
+    status: object.status,
+    mtime: object.mtime,
+    relations: relationSummary2.get(object.path) ?? { resolved: 0, unresolved: 0, contradiction: 0 }
+  }));
+  const attention2 = relations.filter((relation) => needsAttention(relation)).map((relation) => ({
+    key: relation.key,
+    isContradiction: relation.predicate === "contradicts",
+    resolution: relationResolution(relation),
+    sourceLabel: endpointLabel2(relation.source.objectId, relation.source.raw),
+    sourcePath: relation.source.path,
+    predicate: relation.predicate,
+    targetLabel: endpointLabel2(relation.target.objectId, relation.target.raw),
+    targetPath: relation.target.path,
+    targetResolution: relation.targetResolution
+  })).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const recent = objects.sort(compareByMtimeDescPathAsc).slice(0, RECENT_LIMIT).map((object) => ({
+    path: object.path,
+    type: object.type,
+    id: object.id,
+    title: object.title,
+    mtime: object.mtime
+  }));
+  return {
+    indexState: index2.state,
+    counts,
+    cases,
+    attention: attention2,
+    recent
+  };
+}
+
+// src/views/investigation-view.ts
+var RD_INVESTIGATION_VIEW_TYPE = "rd-investigation-dashboard";
+var FILTERS = [
+  { key: "all", label: "All" },
+  { key: "cases", label: "Cases" },
+  { key: "unresolved", label: "Unresolved" },
+  { key: "contradictions", label: "Contradictions" }
+];
+function formatDate(mtime) {
+  if (mtime <= 0) return "\u2014";
+  return new Date(mtime).toISOString().slice(0, 10);
+}
+var RDInvestigationView = class extends import_obsidian5.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    this.unsubscribe = null;
+    this.container = null;
+    this.filter = "all";
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_INVESTIGATION_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Investigation";
+  }
+  getIcon() {
+    return "layout-list";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    this.container = createChild(this.contentEl, "div", { cls: "rd-investigation" });
+    this.unsubscribe = this.deps.onIndexCommit(() => this.render());
+    this.render();
+  }
+  async onClose() {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    emptyEl(this.contentEl);
+  }
+  /** §13: session-only; exists purely in this view instance. */
+  setFilter(filter) {
+    this.filter = filter;
+    this.render();
+  }
+  get currentFilter() {
+    return this.filter;
+  }
+  render() {
+    const shell = this.container;
+    if (shell === null) return;
+    emptyEl(shell);
+    const data = buildInvestigationProjection(this.deps.index);
+    const head = createChild(shell, "div", { cls: "rdi-head" });
+    createChild(head, "div", { cls: "rdi-title", text: "Investigation" });
+    const bar = createChild(head, "div", { cls: "rdi-filters" });
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", "Investigation focus");
+    for (const f of FILTERS) {
+      const btn = createChild(bar, "button", { cls: "rdi-filter", text: f.label });
+      btn.setAttribute("aria-pressed", this.filter === f.key ? "true" : "false");
+      btn.setAttribute("aria-label", "Filter: " + f.label);
+      btn.addEventListener("click", () => this.setFilter(f.key));
+    }
+    if (data.indexState === "INDEXING") {
+      createChild(shell, "div", { cls: "rdi-state", text: "Indexing archive\u2026" });
+      return;
+    }
+    if (data.indexState === "ERROR") {
+      createChild(shell, "div", { cls: "rdi-state rdi-error", text: "Index unavailable." });
+      return;
+    }
+    if (data.cases.length === 0 && data.recent.length === 0 && data.attention.length === 0) {
+      createChild(shell, "div", { cls: "rdi-state", text: "No RD objects in the current index." });
+      return;
+    }
+    this.renderKnowledgeState(shell, data);
+    if (this.filter === "all" || this.filter === "cases") {
+      this.renderCases(shell, data);
+    }
+    if (this.filter !== "cases") {
+      this.renderAttention(shell, data);
+    }
+    if (this.filter === "all") {
+      this.renderRecent(shell, data);
+    }
+  }
+  /** §7: canonical object type counts + logical relation state counts. */
+  renderKnowledgeState(shell, data) {
+    const section3 = this.section(shell, "Knowledge State");
+    const grid = createChild(section3, "div", { cls: "rdi-counts" });
+    const entries = [
+      ["CASE", data.counts.case],
+      ["EVIDENCE", data.counts.evidence],
+      ["HYPOTHESIS", data.counts.hypothesis],
+      ["LOOP", data.counts.loop],
+      ["BROKEN", data.counts.broken],
+      ["AMBIGUOUS", data.counts.ambiguous],
+      ["CONTRADICTION", data.counts.contradiction]
+    ];
+    for (const [label, value] of entries) {
+      const cell = createChild(grid, "div", { cls: "rdi-count" });
+      createChild(cell, "span", { cls: "rdi-count-value", text: String(value) });
+      createChild(cell, "span", { cls: "rdi-count-label", text: label });
+    }
+  }
+  /** §8: CASE rows, most recently modified first, existing model
+   * fields only. Click opens the EXISTING file via the established
+   * navigation path; never creates a file. */
+  renderCases(shell, data) {
+    const section3 = this.section(shell, "Cases");
+    if (data.cases.length === 0) {
+      createChild(section3, "div", { cls: "rdi-state", text: "No cases in the current index." });
+      return;
+    }
+    for (const row of data.cases) {
+      const btn = createChild(section3, "button", { cls: "rdi-case" });
+      btn.setAttribute(
+        "aria-label",
+        `Open case ${row.title}${row.id !== null ? " (" + row.id + ")" : ""}`
+      );
+      createChild(btn, "span", { cls: "rdi-case-title", text: row.title });
+      const meta = createChild(btn, "span", { cls: "rdi-meta" });
+      meta.textContent = `${row.id ?? "(no id)"} \xB7 ${formatDate(row.mtime)} \xB7 rel ${row.relations.resolved}/${row.relations.unresolved}` + (row.relations.contradiction > 0 ? ` \xB7 contra ${row.relations.contradiction}` : "");
+      btn.addEventListener("click", () => {
+        void this.deps.navigation.open({ path: row.path }, "normal");
+      });
+    }
+  }
+  /** §9/INV-01: logical relations needing attention on EITHER
+   * dimension — contradiction classification or unresolved endpoint.
+   * §22 invariants: E != F, raw labels visible, logical dedup already
+   * done by the index. */
+  renderAttention(shell, data) {
+    const section3 = this.section(shell, "Attention");
+    const items = data.attention.filter((item) => {
+      const unresolved = item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS";
+      if (this.filter === "unresolved") return unresolved;
+      if (this.filter === "contradictions") return item.isContradiction;
+      return true;
+    });
+    if (items.length === 0) {
+      createChild(section3, "div", { cls: "rdi-state", text: "Nothing requires attention." });
+      return;
+    }
+    for (const item of items) {
+      this.renderAttentionRow(section3, item);
+    }
+  }
+  renderAttentionRow(section3, item) {
+    const navigable = item.targetPath !== null && item.targetResolution === "RESOLVED";
+    const row = createChild(section3, navigable ? "button" : "div", { cls: "rdi-att" });
+    if (!navigable) row.setAttribute("aria-disabled", "true");
+    const line = createChild(row, "span", { cls: "rdi-att-line" });
+    line.textContent = `${item.sourceLabel} ${item.predicate} ${item.targetLabel}`;
+    if (item.isContradiction) {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = "CONTRADICTION";
+      badge.setAttribute("data-kind", "CONTRADICTION");
+    }
+    if (item.resolution === "BROKEN" || item.resolution === "AMBIGUOUS") {
+      const badge = createChild(row, "span", { cls: "rdi-badge" });
+      badge.textContent = item.resolution;
+      badge.setAttribute("data-kind", item.resolution);
+    }
+    if (navigable && item.targetPath !== null) {
+      const path = item.targetPath;
+      row.setAttribute("aria-label", `Open ${item.targetLabel}`);
+      row.addEventListener("click", () => {
+        void this.deps.navigation.open({ path }, "normal");
+      });
+    }
+  }
+  /** §12: current filesystem metadata only; no history, no log. */
+  renderRecent(shell, data) {
+    const section3 = this.section(shell, "Recent");
+    if (data.recent.length === 0) {
+      createChild(section3, "div", { cls: "rdi-state", text: "No recent objects." });
+      return;
+    }
+    for (const object of data.recent) {
+      const btn = createChild(section3, "button", { cls: "rdi-recent" });
+      btn.setAttribute("aria-label", `Open ${object.title}`);
+      const line = createChild(btn, "span", { cls: "rdi-recent-line" });
+      line.textContent = `${object.type} \xB7 ${object.title}`;
+      const meta = createChild(btn, "span", { cls: "rdi-meta" });
+      meta.textContent = formatDate(object.mtime);
+      btn.addEventListener("click", () => {
+        void this.deps.navigation.open({ path: object.path }, "normal");
+      });
+    }
+  }
+  section(shell, title) {
+    const section3 = createChild(shell, "section", { cls: "rdi-section" });
+    createChild(section3, "h3", { cls: "rdi-section-title", text: title });
+    return section3;
+  }
+};
+
+// src/views/rd-workspace-view.ts
+var RD_WORKSPACE_VIEW_TYPE = "rd-workspace";
+var AREAS = [
+  { key: "Knowledge Panel", question: "What is this object?", state: "live in workspace" },
+  { key: "Provenance Explorer", question: "Why do we believe this?", state: "live in workspace" },
+  { key: "Lineage Explorer", question: "How did this change?", state: "live in workspace" },
+  { key: "Relation Explorer", question: "What is it connected to?", state: "live in workspace" },
+  {
+    key: "Collaboration View",
+    question: "Who worked on this and what happened?",
+    state: "live in workspace"
+  },
+  {
+    key: "Agent Contribution View",
+    question: "What did Agents do here?",
+    state: "live in workspace"
+  }
+];
+var SURFACES = [
+  { key: "Collaboration", mode: "collaboration" },
+  { key: "Knowledge Panel", viewType: RD_KNOWLEDGE_PANEL_VIEW_TYPE },
+  { key: "Graph Intelligence", viewType: RD_GRAPH_VIEW_TYPE },
+  { key: "Loop Workspace", viewType: RD_LOOP_VIEW_TYPE },
+  { key: "Investigation", viewType: RD_INVESTIGATION_VIEW_TYPE }
+];
+var REVIEW_LIMIT = 5;
+var CONTRIBUTION_LIMIT = 3;
+var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
+  constructor(leaf, deps) {
+    super(leaf);
+    this.unsubscribe = null;
+    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
+    this.sourceDetail = void 0;
+    this.observer = null;
+    this.mode = "investigation";
+    this.browser = new CollaborationBrowser();
+    this.collabDetail = null;
+    this.deps = deps;
+  }
+  getViewType() {
+    return RD_WORKSPACE_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Workspace";
+  }
+  getIcon() {
+    return "library";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
+    shell.setAttribute(RD_THEME_ATTR, "");
+    shell.setAttribute("data-rd-tokens", RD_TOKEN_VERSION);
+    this.buildMasthead(createChild(shell, "div", { cls: "rdws-masthead" }), shell);
+    createChild(shell, "div", { cls: "rdws-body" });
+    if (this.deps.themeController !== void 0) {
+      applyRDTheme(shell, this.deps.themeController.getCurrent());
+    }
+    this.unsubscribe = this.deps.store.subscribe(() => this.renderBody());
+    this.observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
+      shell.classList.toggle("rdws-mid", width >= 700 && width < 1100);
+    });
+    this.observer.observe(shell);
+    await this.refreshAvailability();
+    if (this.deps.collaborationSource !== void 0) {
+      void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
+    }
+    this.renderBody();
+  }
+  async onClose() {
+    this.observer?.disconnect();
+    this.observer = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.browser.dispose();
+    emptyEl(this.contentEl);
+  }
+  /** Masthead: investigation title + workspace scope on the left;
+   * theme and exact-id query on the right. */
+  buildMasthead(head, shell) {
+    const left = createChild(head, "div", { cls: "rdws-masthead-left" });
+    createChild(left, "h1", {
+      cls: "rdws-masthead-title",
+      text: "Rational Delirium"
+    });
+    createChild(left, "div", {
+      cls: "rdws-masthead-scope",
+      text: `investigation workspace \xB7 ${this.deps.store.getState().workspaceLabel}`
+    });
+    const right = createChild(head, "div", { cls: "rdws-masthead-right" });
+    const controller = this.deps.themeController;
+    if (controller !== void 0) {
+      const select = createChild(right, "select", { cls: "rdws-theme-select" });
+      select.setAttribute("aria-label", "RD theme (presentation only)");
+      for (const theme of controller.list()) {
+        const option = createChild(select, "option", { text: theme.label });
+        option.value = theme.id;
+        if (theme.id === controller.getCurrent().id) {
+          option.selected = true;
+        }
+      }
+      select.addEventListener("change", () => {
+        try {
+          const theme = controller.setTheme(select.value);
+          applyRDTheme(shell, theme);
+        } catch {
+        }
+      });
+    }
+    const input = createChild(right, "input", { cls: "rdws-object-input" });
+    input.type = "text";
+    input.placeholder = "inspect exact object_id";
+    input.setAttribute("aria-label", "Knowledge object id (exact match)");
+    const go = () => {
+      const id = input.value.trim();
+      if (id !== "") {
+        this.mode = "investigation";
+        this.deps.store.setSelectedObject(id);
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") go();
+    });
+    createChild(right, "button", { cls: "rdws-button", text: "Inspect" }).addEventListener("click", go);
+  }
+  /** v1.8: explicit Human decision recording — the only write.
+   * Records the decision, then re-reads artifacts and re-opens the
+   * same proposal so the Human sees the recorded state. */
+  async recordProposalDecision(decision, path) {
+    const port = this.deps.decisionPort;
+    const source = this.deps.collaborationSource;
+    if (port === void 0 || source === void 0) return;
+    const result = await port.recordDecision(path, decision);
+    if (result.state === "written") {
+      await this.browser.refresh(source);
+      this.browser.select("proposal", path);
+      await this.refreshCollabDetail();
+    }
+  }
+  /** Load the detail for the current collaboration selection
+   * (exact path), then re-render. Read-only. */
+  async refreshCollabDetail() {
+    if (this.deps.collaborationSource === void 0) return;
+    this.collabDetail = await resolveDetail(
+      this.deps.collaborationSource,
+      this.browser.getState()
+    );
+    this.renderBody();
+  }
+  /** Explicit re-read of derived-state availability and snapshot. */
+  async refreshAvailability() {
+    this.graphLoad = await loadGraphFromSource(this.deps.source);
+    const load = this.graphLoad;
+    if (load.state === "available") {
+      this.deps.store.setSnapshotAvailability({
+        state: "available",
+        note: `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations (freshness unverified)`
+      });
+    } else if (load.state === "missing") {
+      this.deps.store.setSnapshotAvailability({
+        state: "missing",
+        note: "Graph artifact missing \u2014 this does not mean no knowledge exists."
+      });
+    } else if (load.state === "invalid") {
+      this.deps.store.setSnapshotAvailability({
+        state: "invalid",
+        note: `Graph artifact invalid (${load.reason}).`
+      });
+    } else {
+      this.deps.store.setSnapshotAvailability({
+        state: "unavailable",
+        note: `Graph artifact unavailable (${load.reason}).`
+      });
+    }
+  }
+  async resolveSourceAndRender(objectId) {
+    if (this.deps.sourceReader === void 0) return;
+    const detail = await this.deps.sourceReader.resolve(objectId);
+    this.sourceDetail = detail;
+    this.renderBody();
+  }
+  /** Enter collaboration mode focused on one proposal (from the
+   * review-attention list). Explicit navigation, read-only. */
+  openProposalInCollaboration(path) {
+    this.mode = "collaboration";
+    const source = this.deps.collaborationSource;
+    if (source === void 0) return;
+    void this.browser.refresh(source).then(() => {
+      this.browser.select("proposal", path);
+      return this.refreshCollabDetail();
+    }).then(() => this.renderBody());
+  }
+  renderBody() {
+    const body = this.contentEl.querySelector(".rdws-body");
+    if (!(body instanceof HTMLElement)) return;
+    emptyEl(body);
+    const state = this.deps.store.getState();
+    const status = createChild(body, "div", { cls: "rdws-statusline" });
+    status.setAttribute("data-state", state.snapshot.state);
+    status.textContent = `snapshot: ${state.snapshot.state} \u2014 ${state.snapshot.note}`;
+    if (state.selectedObjectId !== null) {
+      createChild(status, "span", {
+        cls: "rdws-statusline-trail",
+        text: ` \xB7 inspecting ${state.selectedObjectId} (UI pointer; not a lifecycle state)`
+      });
+    }
+    const layout = createChild(body, "div", { cls: "rdws-planes" });
+    this.renderNavRail(layout, state.selectedObjectId);
+    const center = createChild(layout, "div", { cls: "rdws-plane-center" });
+    if (this.mode === "collaboration") {
+      const host = createChild(center, "div", { cls: "rdws-collaboration-host" });
+      renderCollaboration(host, this.browser.getState(), this.collabDetail, {
+        onSelect: (kind, path) => {
+          this.browser.select(kind, path);
+          void this.refreshCollabDetail();
+        },
+        onBack: () => {
+          this.browser.back();
+          void this.refreshCollabDetail();
+        },
+        onDecide: (decision, path) => {
+          void this.recordProposalDecision(decision, path);
+        }
+      });
+      return;
+    }
+    if (this.graphLoad.state === "available" && state.selectedObjectId !== null) {
+      this.renderReading(center, state.selectedObjectId);
+      void this.resolveSourceAndRender(state.selectedObjectId);
+    } else {
+      this.renderDeskHome(center);
+    }
+    this.renderInspectionPlane(layout, state.selectedObjectId);
+  }
+  /** LEFT — navigation rail: current selection, knowledge objects,
+   * surface destinations. 200–240px; collapses under 700px. */
+  renderNavRail(layout, selected) {
+    const rail = createChild(layout, "nav", { cls: "rdws-plane-left" });
+    rail.setAttribute("aria-label", "RD workspace navigation");
+    const current = createChild(rail, "div", { cls: "rdws-nav-group" });
+    createChild(current, "div", { cls: "rdws-nav-label", text: "Investigation" });
+    if (selected !== null) {
+      const sel = createChild(current, "div", { cls: "rdws-nav-selection" });
+      createChild(sel, "div", { cls: "rdws-nav-selection-id", text: selected });
+      const back = createChild(current, "button", {
+        cls: "rdws-button rdws-back",
+        text: "\u25C0 Back"
+      });
+      back.setAttribute("aria-label", "Back along investigation trail");
+      back.addEventListener("click", () => this.deps.store.back());
+    } else {
+      createChild(current, "div", {
+        cls: "rdws-nav-hint",
+        text: "nothing selected \u2014 query an exact id or choose an object"
+      });
+    }
+    const objects = createChild(rail, "div", { cls: "rdws-nav-group rdws-nav-objects" });
+    createChild(objects, "div", { cls: "rdws-nav-label", text: "Knowledge Objects" });
+    if (this.graphLoad.state !== "available") {
+      createChild(objects, "div", {
+        cls: "rdws-nav-empty",
+        text: "snapshot unavailable \u2014 the vault still contains its knowledge; regenerate the derived graph with the projector when needed"
+      });
+    } else {
+      const nodes = [...this.graphLoad.graph.nodes].sort((a, b) => a.object_id.localeCompare(b.object_id));
+      if (nodes.length === 0) {
+        createChild(objects, "div", { cls: "rdws-nav-empty", text: "no objects in this snapshot" });
+      }
+      for (const node2 of nodes) {
+        const row = createChild(objects, "button", { cls: "rdws-object-row" });
+        row.setAttribute("aria-label", `inspect ${node2.object_id}`);
+        if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
+        createChild(row, "span", { cls: "rdws-object-row-id", text: node2.object_id });
+        createChild(row, "span", {
+          cls: "rdws-object-row-meta",
+          text: `${node2.kind} \xB7 ${node2.status}`
+        });
+        createChild(row, "span", {
+          cls: "rdws-object-row-title",
+          text: node2.title
+        });
+        row.addEventListener("click", () => {
+          this.mode = "investigation";
+          this.deps.store.setSelectedObject(node2.object_id);
+        });
+      }
+    }
+    const surfaces = createChild(rail, "div", { cls: "rdws-nav-group" });
+    createChild(surfaces, "div", { cls: "rdws-nav-label", text: "Surfaces" });
+    for (const surface of SURFACES) {
+      const row = createChild(surfaces, "button", { cls: "rdws-surface-row" });
+      row.textContent = surface.key;
+      if (surface.mode === "collaboration") {
+        row.classList.add("rdws-collab-toggle");
+        row.setAttribute("aria-pressed", String(this.mode === "collaboration"));
+        row.addEventListener("click", () => {
+          this.mode = this.mode === "collaboration" ? "investigation" : "collaboration";
+          if (this.mode === "collaboration" && this.deps.collaborationSource !== void 0) {
+            void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
+          }
+          this.renderBody();
+        });
+      } else if (surface.viewType !== void 0) {
+        const viewType = surface.viewType;
+        row.addEventListener("click", () => {
+          void this.deps.openView(viewType);
+        });
+      }
+    }
+  }
+  /** CENTER — dominant reading surface. */
+  renderReading(center, selected) {
+    if (this.graphLoad.state !== "available") return;
+    const node2 = this.graphLoad.graph.nodes.find((n) => n.object_id === selected);
+    const host = createChild(center, "div", { cls: "rdws-reading" });
+    const head = createChild(host, "div", { cls: "rdws-ko-head" });
+    createChild(head, "h2", {
+      cls: "rdws-ko-title",
+      text: node2 !== void 0 && node2.title !== "" ? node2.title : selected
+    });
+    const idLine = createChild(head, "div", { cls: "rdws-ko-identity" });
+    idLine.textContent = node2 !== void 0 ? `${node2.object_id} \xB7 ${node2.kind} (declared classification) \xB7 ${node2.status} (declared lifecycle; not a validity badge)` : `${selected} \xB7 not in snapshot (declared data unavailable here)`;
+    const reading = createChild(host, "div", { cls: "rdws-reading-inner" });
+    const model = buildKnowledgePanelModel({
+      load: this.graphLoad,
+      workspace: this.deps.store.getState().workspaceLabel,
+      objectId: selected,
+      sourceDetail: this.sourceDetail
+    });
+    renderKnowledgePanel(reading, model, {
+      onSelectObject: (objectId) => {
+        this.deps.store.setSelectedObject(objectId);
+      }
+    });
+    createChild(host, "div", {
+      cls: "rdws-reading-note",
+      text: "declared data only \u2014 projection eligibility is not Knowledge Object validity; no ranking, no recommendation"
+    });
+  }
+  /** CENTER — the desk home when nothing is selected. */
+  renderDeskHome(center) {
+    const desk = createChild(center, "div", { cls: "rdws-desk" });
+    createChild(desk, "h2", {
+      cls: "rdws-desk-title",
+      text: "An investigation desk for your knowledge archive"
+    });
+    const lead = createChild(desk, "p", { cls: "rdws-desk-lead" });
+    lead.textContent = "Inspect any Knowledge Object by its exact id \u2014 identity, provenance, lineage and relations as declared. Agents contribute proposals and records; Humans decide; nothing here certifies truth.";
+    const map2 = createChild(desk, "div", { cls: "rdws-desk-map" });
+    createChild(map2, "div", { cls: "rdws-desk-map-title", text: "Where do I go?" });
+    const list2 = createChild(map2, "dl", { cls: "rdws-desk-areas" });
+    for (const area of AREAS) {
+      const row = createChild(list2, "div", { cls: "rdws-area" });
+      row.setAttribute("data-live", String(area.state === "live in workspace"));
+      createChild(row, "dt", { text: area.key });
+      createChild(row, "dd", { text: area.question });
+    }
+    if (this.graphLoad.state !== "available") {
+      createChild(desk, "div", {
+        cls: "rdws-desk-snapshot-note",
+        text: this.deps.store.getState().snapshot.note + " Object inspection needs the derived snapshot; everything else in this workspace works without it."
+      });
+    }
+  }
+  /** RIGHT — inspection plane: Human review attention, recent
+   * contributions, diagnostics for the selection. 280–340px;
+   * collapses under 1100px. Collaboration summaries live here,
+   * visually separate from knowledge state. */
+  renderInspectionPlane(layout, selected) {
+    const plane = createChild(layout, "aside", { cls: "rdws-plane-right" });
+    plane.setAttribute("aria-label", "RD inspection");
+    const model = this.browser.getState().model;
+    const review = createChild(plane, "section", { cls: "rdws-insp-group" });
+    createChild(review, "div", { cls: "rdws-insp-label", text: "Human review" });
+    const pending = model !== null ? model.proposals.filter((p) => p.status === "pending") : [];
+    if (model === null) {
+      createChild(review, "div", {
+        cls: "rdws-nav-empty",
+        text: "reading proposal records\u2026"
+      });
+    } else if (pending.length === 0) {
+      createChild(review, "div", {
+        cls: "rdws-nav-empty",
+        text: model.proposals.length > 0 ? "No proposals awaiting decision \u2014 all recorded proposals are decided." : "No proposal records found."
+      });
+    } else {
+      createChild(review, "div", {
+        cls: "rdws-insp-count",
+        text: `${pending.length} awaiting your decision`
+      });
+      for (const p of pending.slice(0, REVIEW_LIMIT)) {
+        const row = createChild(review, "button", { cls: "rdws-review-row" });
+        row.setAttribute("aria-label", `review ${p.id ?? p.path}`);
+        createChild(row, "span", {
+          cls: "rdws-review-id",
+          text: p.id ?? "(no id declared)"
+        });
+        createChild(row, "span", {
+          cls: "rdws-review-meta",
+          text: p.target !== null ? `\u2192 ${p.target}` : p.authorAgent ?? "author not declared"
+        });
+        row.addEventListener("click", () => this.openProposalInCollaboration(p.path));
+      }
+      if (pending.length > REVIEW_LIMIT) {
+        createChild(review, "div", {
+          cls: "rdws-insp-more",
+          text: `+ ${pending.length - REVIEW_LIMIT} more in Collaboration`
+        });
+      }
+    }
+    const contribs = createChild(plane, "section", { cls: "rdws-insp-group" });
+    createChild(contribs, "div", {
+      cls: "rdws-insp-label",
+      text: "Recent contributions"
+    });
+    const records = model !== null ? [...model.contributions].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, CONTRIBUTION_LIMIT) : [];
+    if (records.length === 0) {
+      createChild(contribs, "div", {
+        cls: "rdws-nav-empty",
+        text: "No contribution records found."
+      });
+    } else {
+      for (const c of records) {
+        const row = createChild(contribs, "button", { cls: "rdws-contrib-row" });
+        row.setAttribute("aria-label", `inspect ${c.id ?? c.path}`);
+        createChild(row, "span", {
+          cls: "rdws-review-id",
+          text: c.id ?? "(no id declared)"
+        });
+        createChild(row, "span", {
+          cls: "rdws-review-meta",
+          text: [
+            c.performedOperation,
+            c.createdAt
+          ].filter((x) => x !== null).join(" \xB7 ")
+        });
+        row.addEventListener("click", () => {
+          this.mode = "collaboration";
+          if (this.deps.collaborationSource === void 0) return;
+          void this.browser.refresh(this.deps.collaborationSource).then(() => {
+            this.browser.select("contribution", c.path);
+            return this.refreshCollabDetail();
+          }).then(() => this.renderBody());
+        });
+      }
+    }
+    if (this.graphLoad.state === "available" && selected !== null) {
+      const graph = this.graphLoad.graph;
+      const unresolvedCount = graph.unresolved.filter((e) => e.source === selected || e.target === selected).length;
+      const relationCount = graph.edges.filter((e) => e.source === selected || e.target === selected).length;
+      const diagCount = graph.diagnostics.filter((d) => d.object_id === selected).length;
+      const diag = createChild(plane, "section", { cls: "rdws-insp-group" });
+      createChild(diag, "div", { cls: "rdws-insp-label", text: "Diagnostics" });
+      const line = createChild(diag, "div", { cls: "rdws-diag-line" });
+      line.textContent = `${relationCount} declared relation(s) \xB7 ${unresolvedCount} unresolved \xB7 ${diagCount} diagnostic(s) \u2014 observations, not repair requests`;
+    }
+  }
+};
+
+// src/views/context-view.ts
+var import_obsidian7 = require("obsidian");
+
+// src/views/object-summary.ts
+function renderObjectSummary(container, data, pinned, callbacks) {
+  const hadFocus = container.contains(document.activeElement);
+  const focusedCls = document.activeElement instanceof HTMLElement ? document.activeElement.className : null;
+  emptyEl(container);
+  const head = createChild(container, "div", { cls: "rdc-head" });
+  if (data.object) {
+    createChild(head, "span", { cls: "rdc-id", text: data.object.id });
+  }
+  const pin = createChild(head, "button", {
+    cls: "rdc-pin",
+    text: pinned ? "Unpin" : "Pin"
+  });
+  pin.setAttribute("aria-pressed", pinned ? "true" : "false");
+  pin.setAttribute(
+    "aria-label",
+    pinned ? "Unpin context target" : "Pin context target"
+  );
+  pin.addEventListener("click", callbacks.onPinToggle);
+  if (data.phase === "ERROR") {
+    createChild(container, "div", {
+      cls: "rdc-state rdc-error",
+      text: data.pinnedDeleted ? "Pinned target deleted" : "Context error"
+    });
+    return;
+  }
+  if (data.phase === "NO_ACTIVE_OBJECT" || !data.object) {
+    createChild(container, "div", {
+      cls: "rdc-state",
+      text: data.indexState === "INDEXING" ? "INDEXING" : "No active RD object"
+    });
+    return;
+  }
+  createChild(container, "div", { cls: "rdc-title", text: data.object.title });
+  const badges = createChild(container, "div");
+  const statusBadge = createChild(badges, "span", {
+    cls: "rdc-badge",
+    text: data.object.status || "(no status)"
+  });
+  statusBadge.setAttribute("data-kind", "status");
+  if (data.object.proof) {
+    const b = createChild(badges, "span", { cls: "rdc-badge", text: "proof" });
+    b.setAttribute("data-kind", "proof");
+  }
+  if (data.object.demo) {
+    const b = createChild(badges, "span", { cls: "rdc-badge", text: "demo" });
+    b.setAttribute("data-kind", "demo");
+  }
+  const verify = createChild(badges, "span", {
+    cls: "rdc-badge",
+    text: data.object.lastVerified ? `verified ${data.object.lastVerified}` : "never verified"
+  });
+  verify.setAttribute("data-kind", "verification");
+  if (hadFocus && focusedCls !== null) {
+    const again = container.querySelector("." + focusedCls.trim().replace(/\s+/g, "."));
+    again?.focus();
+  }
+}
+
+// src/views/relation-list.ts
+function renderRelationList(container, data, expanded, callbacks) {
+  emptyEl(container);
+  if (data.indexState === "INDEXING" && data.sections.length === 0) {
+    createChild(container, "div", { cls: "rdc-state", text: "INDEXING" });
+    container.setAttribute("aria-busy", "true");
+    return;
+  }
+  container.removeAttribute("aria-busy");
+  for (const section3 of data.sections) {
+    const sectionEl = createChild(container, "div", { cls: "rdc-section" });
+    const title = createChild(sectionEl, "button", {
+      cls: "rdc-section-title",
+      text: section3.title
+    });
+    const isOpen = expanded.has(section3.key);
+    title.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    const body = createChild(sectionEl, "div", { cls: "rdc-section-body" });
+    body.style.display = isOpen ? "" : "none";
+    title.addEventListener("click", () => {
+      const nowOpen = body.style.display === "none";
+      body.style.display = nowOpen ? "" : "none";
+      title.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+      callbacks.onToggleSection(section3.key, nowOpen);
+    });
+    for (const row of section3.rows) {
+      const btn = createChild(body, "button", { cls: "rdc-rel" });
+      const label = createChild(btn, "span", { cls: "rdc-pred" });
+      label.textContent = (row.direction === "incoming" ? "\u2190 " : "\u2192 ") + row.predicate + (row.ordinary ? " (" + (row.direction === "incoming" ? "backlink" : "linked") + ")" : "");
+      createChild(btn, "span", { text: " " + row.targetTitle });
+      const state = createChild(btn, "span", {
+        cls: "rdc-badge",
+        text: row.resolution
+      });
+      state.setAttribute("data-state", row.resolution);
+      const actions = createChild(btn, "span", { cls: "rdc-actions" });
+      const tabBtn = createChild(actions, "button", {
+        cls: "rdc-act rdc-act-tab",
+        text: "\u21D7"
+      });
+      tabBtn.setAttribute("aria-label", "Open in new tab");
+      tabBtn.title = "Open in new tab";
+      tabBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        callbacks.onSelectRelationTab(row);
+      });
+      const splitBtn = createChild(actions, "button", {
+        cls: "rdc-act rdc-act-split",
+        text: "\u25A4"
+      });
+      splitBtn.setAttribute("aria-label", "Open in split");
+      splitBtn.title = "Open in split";
+      splitBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        callbacks.onSelectRelationSplit(row);
+      });
+      if (row.sourcePath !== null) {
+        const src = createChild(actions, "button", {
+          cls: "rdc-act rdc-src",
+          text: row.sourceLine !== null ? "@" + row.sourceLine : "@"
+        });
+        src.setAttribute(
+          "aria-label",
+          row.sourceLine !== null ? "Jump to source line " + row.sourceLine : "Open source file"
+        );
+        src.title = "Open source";
+        src.addEventListener("click", (e) => {
+          e.stopPropagation();
+          callbacks.onSelectRelation({ ...row, _sourceAction: true });
+        });
+      }
+      btn.addEventListener("click", () => callbacks.onSelectRelation(row));
+    }
+  }
+}
+
+// src/views/context-view.ts
+var RD_CONTEXT_VIEW_TYPE = "rd-context";
+var RDContextView = class extends import_obsidian7.ItemView {
+  constructor(leaf, controller, navigation) {
+    super(leaf);
+    this.unsubscribe = null;
+    this.container = null;
+    this.controller = controller;
+    this.nav = navigation;
+  }
+  getViewType() {
+    return RD_CONTEXT_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "RD Context";
+  }
+  getIcon() {
+    return "file-search";
+  }
+  async onOpen() {
+    emptyEl(this.contentEl);
+    this.container = createChild(this.contentEl, "div", { cls: "rd-context" });
+    this.unsubscribe = this.controller.subscribe(() => this.render());
+    await this.controller.reattach();
+    this.render();
+  }
+  async onClose() {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    emptyEl(this.contentEl);
+  }
+  render() {
+    const shell = this.container;
+    if (shell === null) return;
+    const controller = this.controller;
+    const projection = controller.projection;
+    const session = controller.session;
+    const focusKey = this.captureFocusKey(shell);
+    emptyEl(shell);
+    if (projection === null) {
+      createChild(shell, "div", {
+        cls: "rdc-state",
+        text: controller.phase === "LOADING" ? "Loading\u2026" : "No context"
+      });
+      return;
+    }
+    const summary = createChild(shell, "div", { cls: "rdc-summary" });
+    const relations = createChild(shell, "div", { cls: "rdc-relations" });
+    renderObjectSummary(summary, projection, session.mode === "PINNED", {
+      onPinToggle: () => void this.togglePin()
+    });
+    renderRelationList(relations, projection, session.expandedSections, {
+      onSelectRelation: (row) => this.navigateRelation(row, "normal"),
+      onSelectRelationTab: (row) => this.navigateRelation(row, "tab"),
+      onSelectRelationSplit: (row) => this.navigateRelation(row, "split"),
+      onToggleSection: (key, expanded) => {
+        controller.setSectionExpanded(key, expanded);
+      }
+    });
+    this.restoreFocus(shell, focusKey);
+  }
+  async togglePin() {
+    if (this.controller.session.mode === "PINNED") await this.controller.unpin();
+    else await this.controller.pin();
+  }
+  /** RR-03 §29: primary action opens TARGET; source action opens the
+   * declaration source. RD-10 §26: tab/split mode also supported. */
+  navigateRelation(row, mode = "normal") {
+    if (row._sourceAction === true) {
+      if (row.sourcePath === null) return;
+      const target2 = { path: row.sourcePath };
+      if (row.sourceLine !== null && row.sourceLine !== void 0) {
+        target2.line = row.sourceLine;
+        if (row.sourceRevision !== null) target2.sourceRevision = row.sourceRevision;
+        target2.sourceLocator = row.sourceLocator;
+      }
+      this.nav.open(target2, target2.line !== void 0 ? "source" : "normal");
+      return;
+    }
+    if (row.resolution !== "RESOLVED") return;
+    const targetPath = row.targetPath ?? null;
+    if (targetPath === null || targetPath.length === 0) return;
+    const target = { path: targetPath };
+    if (row.subpath !== null) target.subpath = row.subpath;
+    this.nav.open(target, mode);
+  }
+  captureFocusKey(shell) {
+    const active = document.activeElement;
+    if (active === null || !(active instanceof HTMLElement)) return null;
+    if (!shell.contains(active)) return null;
+    if (active.classList.contains("rdc-pin")) return "pin";
+    for (const toggle of shell.querySelectorAll(".rdc-section-title")) {
+      if (toggle === active) return "section:" + (toggle.textContent ?? "");
+    }
+    for (const rel of shell.querySelectorAll(".rdc-rel")) {
+      if (rel === active) return "rel:" + (rel.textContent ?? "").slice(0, 40);
+    }
+    return null;
+  }
+  restoreFocus(shell, key) {
+    if (key === null) return;
+    if (key === "pin") {
+      shell.querySelector(".rdc-pin")?.focus();
+      return;
+    }
+    if (key.startsWith("section:")) {
+      const title = key.slice("section:".length);
+      for (const toggle of shell.querySelectorAll(".rdc-section-title")) {
+        if (toggle.textContent === title) {
+          toggle.focus();
+          return;
+        }
+      }
+      shell.querySelector(".rdc-summary")?.setAttribute("tabindex", "-1");
+      shell.querySelector(".rdc-summary")?.focus();
+      return;
+    }
+    if (key.startsWith("rel:")) {
+      const prefix = key.slice("rel:".length);
+      for (const rel of shell.querySelectorAll(".rdc-rel")) {
+        if ((rel.textContent ?? "").slice(0, 40) === prefix) {
+          rel.focus();
+          return;
+        }
+      }
+      shell.setAttribute("tabindex", "-1");
+      shell.focus();
+      return;
+    }
+    shell.setAttribute("tabindex", "-1");
+    shell.focus();
   }
 };
 
