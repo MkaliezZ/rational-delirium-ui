@@ -1110,10 +1110,12 @@
   min-height: 0;
 }
 .rd-workspace-shell .rdws-plane-left {
-  flex: 0 0 224px;
+  /* Phase 2.1: rail holds 240px (contract maximum) so the object id
+     and its lifecycle share one baseline line without truncation. */
+  flex: 0 0 240px;
   min-width: 0;
   border-right: 1px solid var(--rd-surface-rule, #34322D);
-  padding: 12px 12px 24px 12px;
+  padding: 12px 10px 24px 10px;
   overflow-y: auto;
 }
 .rd-workspace-shell .rdws-plane-center {
@@ -1752,3 +1754,155 @@
   margin-right: 16px;
   padding-right: 16px;
 }
+
+/* ============================================================
+   RD Product Surface Refactor Phase 2.1 — visual hardening
+   (independent review of the real screenshots: left-index row
+   collisions, ultra-wide dead space, flat inspector, narrow
+   first-screen economy). Layout and hierarchy only — no new
+   capabilities, no semantic change. Every color rides a token.
+   ============================================================ */
+
+/* Left archival index — every object row is a deliberate two-line
+   structure: id and lifecycle share a baseline row (lifecycle
+   right-aligned, never concatenated), the declared title takes its
+   own wrapping line, and rows breathe before the next row or the
+   next kind divider. */
+.rd-workspace-shell .rdws-object-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
+  padding: 6px 6px;
+  margin: 0 0 6px 0;
+}
+.rd-workspace-shell .rdws-object-row-id {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rd-workspace-shell .rdws-object-row-meta {
+  flex: 0 0 auto;
+}
+.rd-workspace-shell .rdws-object-row-title {
+  flex: 1 1 100%;
+  margin-top: 2px;
+}
+
+/* Kind group headings read as archival index dividers: a hairline
+   above each new kind, breathing room, quiet count. The first kind
+   after the section label needs no second rule. */
+.rd-workspace-shell .rdws-nav-kind {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 18px 0 6px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-nav-label + .rdws-nav-kind,
+.rd-workspace-shell .rdws-nav-empty + .rdws-nav-kind {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 10px;
+}
+
+/* Ultra-wide composition — the letterhead bands and the three
+   planes form one bounded, centered composition. Prose measure
+   stays constrained inside the dossier; the inspector stays
+   spatially adjacent. No giant internal gulf at any width. */
+.rd-workspace-shell .rdws-masthead,
+.rd-workspace-shell .rdws-statusline,
+.rd-workspace-shell .rdws-planes {
+  max-width: 1720px;
+  margin: 0 auto;
+}
+
+/* Inspector hierarchy — the selected object's context is primary;
+   the workspace zone (recorded Human decisions and Agent work) is
+   subordinate and visually separated; diagnostics stay quietest. */
+.rd-workspace-shell .rdws-insp-zone-label {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #77736B);
+  margin-bottom: 10px;
+}
+.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
+}
+.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-insp-label,
+.rd-workspace-shell .rdws-plane-right > .rdws-insp-group > .rdws-insp-label {
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 18px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rd-identity-meta-text, #A19C92);
+  padding-bottom: 4px;
+}
+.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-insp-count,
+.rd-workspace-shell .rdws-insp-zone[data-zone="workspace"] .rdws-review-id {
+  font-size: 13px;
+}
+
+/* Narrow economy — reading-first without hiding state: compact
+   letterhead, wrapping controls, compact statusline, a bounded
+   navigation block, and the dossier arriving early in the first
+   viewport. */
+.rd-workspace-shell.rdws-narrow .rdws-masthead {
+  padding: 10px 14px 8px 14px;
+  gap: 8px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-masthead-title {
+  font-size: 22px;
+  line-height: 28px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-masthead-scope {
+  font-size: 11px;
+  line-height: 16px;
+  margin-top: 2px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-masthead-right {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-object-input {
+  min-width: 120px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-statusline {
+  font-size: 12px;
+  line-height: 17px;
+  padding: 4px 14px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-nav-group { margin-bottom: 12px; }
+.rd-workspace-shell.rdws-narrow .rdws-nav-label {
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-plane-left {
+  max-height: 26vh;
+  padding: 8px 12px 12px 12px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-object-row {
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-nav-kind {
+  margin: 12px 0 4px 0;
+  padding-top: 8px;
+}
+/* Reading-first: in the stacked narrow layout the dossier leads
+   and the archival index follows below it (the masthead's exact-id
+   input still reaches any object directly). Presentation order
+   only — the navigation is fully present, never removed. */
+.rd-workspace-shell.rdws-narrow .rdws-plane-center { order: -1; }
+.rd-workspace-shell.rdws-narrow .rdws-plane-center {
+  padding: 14px 16px 24px 16px;
+}
+.rd-workspace-shell.rdws-narrow .rdws-dossier { margin-bottom: 12px; }
+.rd-workspace-shell.rdws-narrow .rdws-reading-inner { margin-top: 16px; }

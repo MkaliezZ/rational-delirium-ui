@@ -170,8 +170,15 @@ describe("phase2 inspector", () => {
     const groups = [...view.contentEl.querySelectorAll(".rdws-plane-right .rdws-insp-group")];
     const labels = groups.map((g) => g.querySelector(".rdws-insp-label")?.textContent);
     expect(labels).toEqual([
-      "Object", "Linked objects", "Human review", "Recent contributions", "Diagnostics",
+      "Object", "Linked objects", "Workspace review", "Recent workspace contributions",
+      "Diagnostics",
     ]);
+    // phase2.1 hierarchy: object context zone, then the subordinate
+    // workspace zone; diagnostics quiet at the bottom
+    const zones = [...view.contentEl.querySelectorAll(".rdws-insp-zone")];
+    expect(zones.map((z) => z.getAttribute("data-zone"))).toEqual(["object", "workspace"]);
+    expect(zones[0].querySelectorAll(".rdws-insp-group").length).toBe(2);
+    expect(zones[1].querySelectorAll(".rdws-insp-group").length).toBe(2);
 
     const objectGroup = groups[0];
     expect(objectGroup.textContent).toContain("FICT-CASE-0001");
@@ -207,7 +214,7 @@ describe("phase2 inspector", () => {
     // "reading proposal records…" placeholder
     const reviewNow = () =>
       [...view.contentEl.querySelectorAll(".rdws-insp-group")]
-        .find((g) => g.querySelector(".rdws-insp-label")?.textContent === "Human review");
+        .find((g) => g.querySelector(".rdws-insp-label")?.textContent === "Workspace review");
     expect(reviewNow()).toBeDefined();
     await vi.waitFor(() => {
       expect(reviewNow()?.textContent).toContain("No proposal records found.");
@@ -284,5 +291,28 @@ describe("phase2 semantic ban list and CSS contract", () => {
     // no scoring visuals: no gradients, no shadows
     expect(p2).not.toContain("linear-gradient");
     expect(p2).not.toContain("box-shadow");
+  });
+
+  it("phase2.1 CSS: left rows are two-line flex, kinds divide, composition is bounded", () => {
+    const p21 = css.slice(css.indexOf("RD Product Surface Refactor Phase 2.1"));
+    // deliberate row structure: id/lifecycle baseline, title own line
+    expect(p21).toMatch(/\.rdws-object-row \{[\s\S]*?display: flex;/);
+    expect(p21).toMatch(/\.rdws-object-row-meta \{[\s\S]*?flex: 0 0 auto;/);
+    expect(p21).toMatch(/\.rdws-object-row-title \{[\s\S]*?flex: 1 1 100%;/);
+    // kind headings are index dividers with breathing room
+    expect(p21).toMatch(/\.rdws-nav-kind \{[\s\S]*?border-top: 1px solid/);
+    // ultra-wide composition is bounded and centered on all bands
+    for (const sel of [".rdws-masthead,", ".rdws-statusline,", ".rdws-planes"]) {
+      expect(p21).toContain(sel);
+    }
+    expect(p21).toMatch(/max-width: 1720px;/);
+    expect(p21).toMatch(/margin: 0 auto;/);
+    // inspector hierarchy zones exist and workspace is subordinate
+    expect(p21).toContain('[data-zone="workspace"]');
+    // narrow economy: bounded nav block, compact letterhead,
+    // reading-first order (dossier leads the stacked layout)
+    expect(p21).toMatch(/rdws-narrow \.rdws-plane-left \{[\s\S]*?max-height: 26vh;/);
+    expect(p21).toMatch(/rdws-narrow \.rdws-plane-center \{ order: -1; \}/);
+    expect(p21).toMatch(/rdws-narrow \.rdws-masthead-title[\s\S]*?font-size: 22px;/);
   });
 });

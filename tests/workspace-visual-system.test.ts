@@ -37,9 +37,9 @@ describe("phase1 workspace structure", () => {
   });
 
   it("right plane: review attention + contributions from declared data only", () => {
-    expect(viewSrc).toContain('"Human review"');
+    expect(viewSrc).toContain('"Workspace review"');
     expect(viewSrc).toContain("status === \"pending\"");
-    expect(viewSrc).toContain('"Recent contributions"');
+    expect(viewSrc).toContain('"Recent workspace contributions"');
     expect(viewSrc).toContain("Diagnostics");
     expect(viewSrc).toContain("observations, not repair requests");
     // review rows navigate read-only into collaboration
@@ -82,7 +82,7 @@ describe("phase1 typography contract (CSS)", () => {
     expect(css).toMatch(/\.rdws-object-row-id[\s\S]*?font-size: 13px;/);
     // center plane dominates; sides are fixed
     expect(css).toContain(".rdws-plane-center {");
-    expect(css).toMatch(/\.rdws-plane-left[\s\S]*?flex: 0 0 224px;/);
+    expect(css).toMatch(/\.rdws-plane-left[\s\S]*?flex: 0 0 240px;/);
     expect(css).toMatch(/\.rdws-plane-right[\s\S]*?flex: 0 0 312px;/);
   });
 
