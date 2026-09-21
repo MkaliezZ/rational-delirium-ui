@@ -769,13 +769,16 @@
 }
 
 /* Phase 1 — micro interactions: shared interaction transition.
-   Color/border/background only; no transform on hover, no radiance. */
+   Color/border/background only; no transform on hover, no radiance.
+   V2-04 (review fix): the dock leaves carry NO transition at all —
+   archive-nav object rows switch hover/focus/selected states
+   instantly; only the center workspace and the knowledge panel
+   keep the micro interaction below. */
 .rd-knowledge-panel .rdkp-nav,
 .rd-knowledge-panel .rdkp-section-title,
 .rd-workspace-shell .rdws-button,
 .rd-workspace-shell .rdws-theme-select,
-.rd-workspace-shell .rdws-object-input,
-.rd-archive-nav .rdan-object-row {
+.rd-workspace-shell .rdws-object-input {
   transition:
     color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
     background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out),
@@ -794,13 +797,10 @@
   outline-offset: 1px;
 }
 
-/* Phase 1 — selection feedback: current object row eases in its
-   neutral selection outline (position feedback, not importance). */
-.rd-archive-nav .rdan-object-row[aria-pressed="true"] {
-  transition:
-    outline-color var(--rd-motion-duration, 140ms) var(--rd-motion-ease, ease-out),
-    background-color var(--rd-motion-duration-fast, 100ms) var(--rd-motion-ease, ease-out);
-}
+/* Phase 1 — selection feedback: the dock's selected object row
+   (aria-pressed) is INSTANT (V2-04 review fix: no transition rule
+   for dock rows at all — the selected colors apply immediately;
+   see the .rdan-object-row[aria-pressed="true"] state rules). */
 
 /* Phase 1 — expand/collapse reveal: newly opened section content
    fades in once (progressive disclosure, 140ms). */
@@ -1107,18 +1107,28 @@ body.rd-rational-archive-shell {
   --vault-profile-color-hover: var(--rd-identity-title-text, #D4D0C8);
 }
 
-/* Generic interaction ink remaps only inside the workspace frame —
-   settings, modals and popovers keep the host theme's values. */
+/* Generic interaction ink remaps live ONLY on explicit chrome
+   containers — the ribbon, the tab header bands, the leaf view
+   headers, the status bar, the sidebar toggles. They must never
+   be defined on the whole `.workspace` (nor on a dock split):
+   those ancestors also host editor content, properties, the file
+   explorer and third-party leaves, and inheritable variables
+   would leak into them. Settings, modals and popovers likewise
+   keep the host theme's values. */
 body.rd-rational-archive-shell .workspace {
   background: var(--rd-surface-base, #11110F);
+}
+body.rd-rational-archive-shell .workspace-ribbon,
+body.rd-rational-archive-shell .workspace-tab-header-container,
+body.rd-rational-archive-shell .view-header,
+body.rd-rational-archive-shell .status-bar,
+body.rd-rational-archive-shell .sidebar-toggle-button {
   --icon-color: var(--rd-identity-meta-text, #A19C92);
   --icon-color-hover: var(--rd-identity-title-text, #D4D0C8);
   --icon-color-focused: var(--rd-identity-title-text, #D4D0C8);
   --icon-color-active: var(--rd-surface-focus-rule, #D8C89D);
   --background-modifier-hover: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 82%, transparent);
   --background-modifier-active: var(--rd-surface-raised, #1D1C19);
-  --nav-item-background-hover: color-mix(in srgb, var(--rd-surface-raised, #1D1C19) 82%, transparent);
-  --nav-item-background-selected: var(--rd-surface-raised, #1D1C19);
   --interactive-normal: var(--rd-surface-raised, #1D1C19);
   --interactive-hover: var(--rd-surface-raised, #1D1C19);
 }
@@ -1195,15 +1205,39 @@ body.rd-rational-archive-shell .view-header-title-parent {
 }
 
 /* Icon buttons across the chrome (ribbon actions, view actions,
-   tab actions, sidebar toggles) — muted ink, quiet hover. */
-body.rd-rational-archive-shell .workspace .clickable-icon {
+   tab actions, sidebar toggles) and inside the explicit RD roots —
+   muted ink, quiet hover. Deliberately NOT workspace-wide: editor
+   content, properties, the file explorer and third-party leaves
+   keep the host theme's icon treatment. */
+body.rd-rational-archive-shell .workspace-ribbon .clickable-icon,
+body.rd-rational-archive-shell .workspace-tab-header-container .clickable-icon,
+body.rd-rational-archive-shell .view-header .clickable-icon,
+body.rd-rational-archive-shell .status-bar .clickable-icon,
+body.rd-rational-archive-shell .sidebar-toggle-button .clickable-icon,
+body.rd-rational-archive-shell .rd-archive-nav .clickable-icon,
+body.rd-rational-archive-shell .rd-inspector .clickable-icon,
+body.rd-rational-archive-shell .rd-workspace-shell .clickable-icon {
   color: var(--rd-identity-meta-text, #A19C92);
 }
-body.rd-rational-archive-shell .workspace .clickable-icon:hover {
+body.rd-rational-archive-shell .workspace-ribbon .clickable-icon:hover,
+body.rd-rational-archive-shell .workspace-tab-header-container .clickable-icon:hover,
+body.rd-rational-archive-shell .view-header .clickable-icon:hover,
+body.rd-rational-archive-shell .status-bar .clickable-icon:hover,
+body.rd-rational-archive-shell .sidebar-toggle-button .clickable-icon:hover,
+body.rd-rational-archive-shell .rd-archive-nav .clickable-icon:hover,
+body.rd-rational-archive-shell .rd-inspector .clickable-icon:hover,
+body.rd-rational-archive-shell .rd-workspace-shell .clickable-icon:hover {
   background: var(--rd-surface-raised, #1D1C19);
   color: var(--rd-identity-title-text, #D4D0C8);
 }
-body.rd-rational-archive-shell .workspace .clickable-icon.is-active {
+body.rd-rational-archive-shell .workspace-ribbon .clickable-icon.is-active,
+body.rd-rational-archive-shell .workspace-tab-header-container .clickable-icon.is-active,
+body.rd-rational-archive-shell .view-header .clickable-icon.is-active,
+body.rd-rational-archive-shell .status-bar .clickable-icon.is-active,
+body.rd-rational-archive-shell .sidebar-toggle-button .clickable-icon.is-active,
+body.rd-rational-archive-shell .rd-archive-nav .clickable-icon.is-active,
+body.rd-rational-archive-shell .rd-inspector .clickable-icon.is-active,
+body.rd-rational-archive-shell .rd-workspace-shell .clickable-icon.is-active {
   color: var(--rd-surface-focus-rule, #D8C89D);
 }
 
