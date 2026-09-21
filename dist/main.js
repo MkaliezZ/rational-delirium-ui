@@ -15237,8 +15237,14 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
      * completed detail instead of rereading). */
     this.sourceDetail = void 0;
     this.sourceDetailObjectId = null;
-    this.sourceReadInFlightFor = null;
+    /** Per-object in-flight ownership: at most one read per object id,
+     * so re-selecting an object whose read is still pending never
+     * starts a duplicate (review fix G/H). */
+    this.sourceReadInFlight = /* @__PURE__ */ new Set();
     this.sourceReadToken = 0;
+    /** Latest read generation per object id — a completion applies
+     * only if it is still its object's latest read. */
+    this.sourceReadTokenByObject = /* @__PURE__ */ new Map();
     this.observer = null;
     this.mode = "investigation";
     this.browser = new CollaborationBrowser();
@@ -15390,21 +15396,31 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     return this.sourceDetailObjectId === objectId ? this.sourceDetail : void 0;
   }
   /** One source read per selection change. Rerenders of the same
-   * selection reuse the completed detail; a read in flight for the
-   * same object is not duplicated; a completion superseded by a
-   * newer selection's read is dropped. No timers, no retries —
-   * state ownership only. Explicit future reread actions may call
-   * this again after ownership changes. */
+   * selection reuse the completed detail; a read in flight for an
+   * object is never duplicated for that object (selection
+   * oscillation A→B→A does not create a second A read). A
+   * completion applies only when BOTH hold: the read is still this
+   * object's latest (a per-object generation token), and the
+   * object is still the CURRENT selection — a stale completion for
+   * a no-longer-selected object is discarded without touching the
+   * cache and without triggering a render. No timers, no retries —
+   * state ownership only. */
   ensureSourceDetail(objectId) {
     const reader = this.deps.sourceReader;
     if (reader === void 0) return;
     if (this.sourceDetailObjectId === objectId && this.sourceDetail !== void 0) return;
-    if (this.sourceReadInFlightFor === objectId) return;
-    this.sourceReadInFlightFor = objectId;
+    if (this.sourceReadInFlight.has(objectId)) return;
+    this.sourceReadInFlight.add(objectId);
     const token = ++this.sourceReadToken;
+    this.sourceReadTokenByObject.set(objectId, token);
     void reader.resolve(objectId).then((detail) => {
-      if (this.sourceReadInFlightFor === objectId) this.sourceReadInFlightFor = null;
-      if (token !== this.sourceReadToken) return;
+      this.sourceReadInFlight.delete(objectId);
+      if ((this.sourceReadTokenByObject.get(objectId) ?? 0) !== token) {
+        return;
+      }
+      if (this.deps.store.getState().selectedObjectId !== objectId) {
+        return;
+      }
       this.sourceDetail = detail;
       this.sourceDetailObjectId = objectId;
       this.renderBody();
@@ -15656,10 +15672,16 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     const plane = createChild(layout, "aside", { cls: "rdws-plane-right" });
     plane.setAttribute("aria-label", "RD inspection");
     const model = this.browser.getState().model;
+    let objectZone = null;
+    if (this.graphLoad.state === "available" && selected !== null) {
+      objectZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
+      objectZone.setAttribute("data-zone", "object");
+      createChild(objectZone, "div", { cls: "rdws-insp-zone-label", text: "Selected object" });
+    }
     if (this.graphLoad.state === "available" && selected !== null) {
       const graph = this.graphLoad.graph;
       const node2 = graph.nodes.find((n) => n.object_id === selected);
-      const obj = createChild(plane, "section", { cls: "rdws-insp-group" });
+      const obj = createChild(objectZone, "section", { cls: "rdws-insp-group" });
       createChild(obj, "div", { cls: "rdws-insp-label", text: "Object" });
       if (node2 === void 0) {
         createChild(obj, "div", {
@@ -15681,7 +15703,7 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
     }
     if (this.graphLoad.state === "available" && selected !== null) {
       const graph = this.graphLoad.graph;
-      const linked = createChild(plane, "section", { cls: "rdws-insp-group" });
+      const linked = createChild(objectZone, "section", { cls: "rdws-insp-group" });
       createChild(linked, "div", { cls: "rdws-insp-label", text: "Linked objects" });
       const edges = graph.edges.filter((e) => e.source === selected || e.target === selected);
       const unresolved = graph.unresolved.filter((e) => e.source === selected || e.target === selected);
@@ -15721,8 +15743,11 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
         }
       }
     }
-    const review = createChild(plane, "section", { cls: "rdws-insp-group" });
-    createChild(review, "div", { cls: "rdws-insp-label", text: "Human review" });
+    const workspaceZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
+    workspaceZone.setAttribute("data-zone", "workspace");
+    createChild(workspaceZone, "div", { cls: "rdws-insp-zone-label", text: "Workspace" });
+    const review = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
+    createChild(review, "div", { cls: "rdws-insp-label", text: "Workspace review" });
     const pending = model !== null ? model.proposals.filter((p) => p.status === "pending") : [];
     if (model === null) {
       createChild(review, "div", {
@@ -15759,10 +15784,10 @@ var RDWorkspaceShellView = class extends import_obsidian6.ItemView {
         });
       }
     }
-    const contribs = createChild(plane, "section", { cls: "rdws-insp-group" });
+    const contribs = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
     createChild(contribs, "div", {
       cls: "rdws-insp-label",
-      text: "Recent contributions"
+      text: "Recent workspace contributions"
     });
     const records = model !== null ? [...model.contributions].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, CONTRIBUTION_LIMIT) : [];
     if (records.length === 0) {

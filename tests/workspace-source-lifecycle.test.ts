@@ -3,6 +3,10 @@
  *
  * A. selecting B after A loaded must not render A's source data on B
  * B. a late async completion for A must never apply after B is read
+ * G. (phase2.1) A resolved → B pending → back to A → B late: B is
+ *    discarded, A cache intact, A read count stays 1
+ * H. (phase2.1) A pending → B → back to A: no duplicate A read,
+ *    A applies when current, late B cannot overwrite
  * C. B eventually shows only B's own source/provenance
  * D. a stable selection is read once; rerenders never reread
  * E. identity-strip snapshot label says "derived projection", not
@@ -179,6 +183,44 @@ describe("review fix — source-read lifecycle", () => {
     await new Promise((r) => setTimeout(r, 30));
     expect(reader.calls.filter((c) => c === "ko-20260921-0001")).toHaveLength(1);
     expect(renderedText(view)).toContain("PROVENANCE-A");
+  });
+
+  it("G. A resolved → B pending → back to A → B resolves late: B discarded", async () => {
+    const { view, reader, select } = await openWorkspace("ko-20260921-0001");
+    reader.settle("ko-20260921-0001", detailFor("ko-20260921-0001", "NOTES/a.md", "PROVENANCE-A"));
+    await vi.waitFor(() => expect(renderedText(view)).toContain("PROVENANCE-A"));
+    select("ko-20260921-0002"); // B read starts, stays pending
+    await vi.waitFor(() => expect(reader.calls).toContain("ko-20260921-0002"));
+    select("ko-20260921-0001"); // back to A — A is cached, no new read
+    await vi.waitFor(() => {
+      expect(view.contentEl.querySelector("h2.rdws-ko-title")?.textContent).toBe("Object A");
+    });
+    // B completes late: current selection is A → discard entirely
+    reader.settle("ko-20260921-0002", detailFor("ko-20260921-0002", "NOTES/b-late.md", "STALE-B"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(view.contentEl.querySelector("h2.rdws-ko-title")?.textContent).toBe("Object A");
+    expect(renderedText(view)).toContain("PROVENANCE-A"); // A cache not displaced
+    expect(renderedText(view)).not.toContain("STALE-B");
+    expect(renderedText(view)).not.toContain("NOTES/b-late.md");
+    expect(reader.calls.filter((c) => c === "ko-20260921-0001")).toHaveLength(1);
+  });
+
+  it("H. A pending → B → back to A: no duplicate A read; A applies; late B ignored", async () => {
+    const { view, reader, select } = await openWorkspace("ko-20260921-0001");
+    await vi.waitFor(() => expect(reader.calls.filter((c) => c === "ko-20260921-0001").length).toBe(1));
+    select("ko-20260921-0002"); // B read starts too
+    await vi.waitFor(() => expect(reader.calls.filter((c) => c === "ko-20260921-0002").length).toBe(1));
+    select("ko-20260921-0001"); // A still pending — must NOT start a second A read
+    // original A resolves while A is current — applies
+    reader.settle("ko-20260921-0001", detailFor("ko-20260921-0001", "NOTES/a.md", "PROVENANCE-A"));
+    await vi.waitFor(() => expect(renderedText(view)).toContain("PROVENANCE-A"));
+    // late B completion cannot displace A
+    reader.settle("ko-20260921-0002", detailFor("ko-20260921-0002", "NOTES/b-late.md", "STALE-B"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(renderedText(view)).toContain("PROVENANCE-A");
+    expect(renderedText(view)).not.toContain("STALE-B");
+    expect(reader.calls.filter((c) => c === "ko-20260921-0001")).toHaveLength(1);
+    expect(reader.calls.filter((c) => c === "ko-20260921-0002")).toHaveLength(1);
   });
 
   it("E. identity strip calls the snapshot a derived projection, never declared", async () => {

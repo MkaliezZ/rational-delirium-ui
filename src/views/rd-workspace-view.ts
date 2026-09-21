@@ -102,8 +102,14 @@ export class RDWorkspaceShellView extends ItemView {
    * completed detail instead of rereading). */
   private sourceDetail: KoDetailResult | undefined = undefined;
   private sourceDetailObjectId: string | null = null;
-  private sourceReadInFlightFor: string | null = null;
+  /** Per-object in-flight ownership: at most one read per object id,
+   * so re-selecting an object whose read is still pending never
+   * starts a duplicate (review fix G/H). */
+  private readonly sourceReadInFlight = new Set<string>();
   private sourceReadToken = 0;
+  /** Latest read generation per object id — a completion applies
+   * only if it is still its object's latest read. */
+  private readonly sourceReadTokenByObject = new Map<string, number>();
   private observer: ResizeObserver | null = null;
   private mode: "investigation" | "collaboration" = "investigation";
   private readonly browser = new CollaborationBrowser();
@@ -271,21 +277,31 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   /** One source read per selection change. Rerenders of the same
-   * selection reuse the completed detail; a read in flight for the
-   * same object is not duplicated; a completion superseded by a
-   * newer selection's read is dropped. No timers, no retries —
-   * state ownership only. Explicit future reread actions may call
-   * this again after ownership changes. */
+   * selection reuse the completed detail; a read in flight for an
+   * object is never duplicated for that object (selection
+   * oscillation A→B→A does not create a second A read). A
+   * completion applies only when BOTH hold: the read is still this
+   * object's latest (a per-object generation token), and the
+   * object is still the CURRENT selection — a stale completion for
+   * a no-longer-selected object is discarded without touching the
+   * cache and without triggering a render. No timers, no retries —
+   * state ownership only. */
   private ensureSourceDetail(objectId: string): void {
     const reader = this.deps.sourceReader;
     if (reader === undefined) return;
     if (this.sourceDetailObjectId === objectId && this.sourceDetail !== undefined) return;
-    if (this.sourceReadInFlightFor === objectId) return;
-    this.sourceReadInFlightFor = objectId;
+    if (this.sourceReadInFlight.has(objectId)) return;
+    this.sourceReadInFlight.add(objectId);
     const token = ++this.sourceReadToken;
+    this.sourceReadTokenByObject.set(objectId, token);
     void reader.resolve(objectId).then((detail) => {
-      if (this.sourceReadInFlightFor === objectId) this.sourceReadInFlightFor = null;
-      if (token !== this.sourceReadToken) return; // an older selection's read never applies
+      this.sourceReadInFlight.delete(objectId);
+      if ((this.sourceReadTokenByObject.get(objectId) ?? 0) !== token) {
+        return; // superseded by a newer read for the same object
+      }
+      if (this.deps.store.getState().selectedObjectId !== objectId) {
+        return; // object no longer selected — never displace the cache
+      }
       this.sourceDetail = detail;
       this.sourceDetailObjectId = objectId;
       this.renderBody();
@@ -584,12 +600,23 @@ export class RDWorkspaceShellView extends ItemView {
 
     const model = this.browser.getState().model;
 
+    // Inspector hierarchy (review fix): the PRIMARY zone carries the
+    // selected Knowledge Object's own context; the workspace zone is
+    // visually subordinate so review/contribution records never read
+    // as peer knowledge properties.
+    let objectZone: HTMLElement | null = null;
+    if (this.graphLoad.state === "available" && selected !== null) {
+      objectZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
+      objectZone.setAttribute("data-zone", "object");
+      createChild(objectZone, "div", { cls: "rdws-insp-zone-label", text: "Selected object" });
+    }
+
     // Object — declared identity of the current selection. Metadata
     // only; nothing here validates the object.
     if (this.graphLoad.state === "available" && selected !== null) {
       const graph = this.graphLoad.graph;
       const node = graph.nodes.find((n) => n.object_id === selected);
-      const obj = createChild(plane, "section", { cls: "rdws-insp-group" });
+      const obj = createChild(objectZone!, "section", { cls: "rdws-insp-group" });
       createChild(obj, "div", { cls: "rdws-insp-label", text: "Object" });
       if (node === undefined) {
         createChild(obj, "div", {
@@ -613,7 +640,7 @@ export class RDWorkspaceShellView extends ItemView {
     // Navigation only; the listing carries no evaluation.
     if (this.graphLoad.state === "available" && selected !== null) {
       const graph = this.graphLoad.graph;
-      const linked = createChild(plane, "section", { cls: "rdws-insp-group" });
+      const linked = createChild(objectZone!, "section", { cls: "rdws-insp-group" });
       createChild(linked, "div", { cls: "rdws-insp-label", text: "Linked objects" });
       const edges = graph.edges
         .filter((e) => e.source === selected || e.target === selected);
@@ -655,9 +682,16 @@ export class RDWorkspaceShellView extends ItemView {
       }
     }
 
+    // Workspace zone — recorded Human actions and Agent work on the
+    // archive. Distinct from, and subordinate to, the selected
+    // object's declared context above.
+    const workspaceZone = createChild(plane, "div", { cls: "rdws-insp-zone" });
+    workspaceZone.setAttribute("data-zone", "workspace");
+    createChild(workspaceZone, "div", { cls: "rdws-insp-zone-label", text: "Workspace" });
+
     // Human review attention — pending proposals, existing data only.
-    const review = createChild(plane, "section", { cls: "rdws-insp-group" });
-    createChild(review, "div", { cls: "rdws-insp-label", text: "Human review" });
+    const review = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
+    createChild(review, "div", { cls: "rdws-insp-label", text: "Workspace review" });
     const pending = model !== null
       ? model.proposals.filter((p) => p.status === "pending")
       : [];
@@ -697,9 +731,9 @@ export class RDWorkspaceShellView extends ItemView {
     }
 
     // Recent contributions — provenance of what agents did, not proof.
-    const contribs = createChild(plane, "section", { cls: "rdws-insp-group" });
+    const contribs = createChild(workspaceZone, "section", { cls: "rdws-insp-group" });
     createChild(contribs, "div", {
-      cls: "rdws-insp-label", text: "Recent contributions",
+      cls: "rdws-insp-label", text: "Recent workspace contributions",
     });
     const records = model !== null
       ? [...model.contributions].sort((a, b) =>
