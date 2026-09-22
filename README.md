@@ -1,202 +1,156 @@
 # Rational Delirium
 
-A Human-guided knowledge workspace for [Obsidian](https://obsidian.md).
+**An Obsidian plugin for human-governed knowledge organization.**
 
-Rational Delirium helps people use AI agents for research and knowledge work while keeping human judgment, decisions, and history visible. It records what an agent suggested, what a person approved, and how knowledge changed over time.
+Rational Delirium brings an archival reading and navigation experience to your notes: an Archive Home, Knowledge Object surfaces, declared relationships, provenance, and visible contribution history.
 
-Rational Delirium is **not** an agent platform, **not** an agent runtime, and **not** an autonomous AI system.
+**v1.7.0 — Archive Home Experience** is the frozen baseline for personal use. Start with a copy of your Vault and the tagged build described below.
 
-It is:
+[简体中文](README_zh-CN.md) · [v1.7.0 release notes](docs/releases/v1.7.0-archive-home-experience.md)
 
-- an Obsidian plugin for knowledge exploration and workflow visibility;
-- an Agent Skill contract that guides external agents;
-- a human-controlled workflow connecting proposals, decisions, and contribution records.
+## Overview
 
-External agents contribute proposals, not authority. Humans decide. RD displays the history.
+Markdown remains the source. Obsidian remains the environment. RD provides a knowledge presentation and organization layer inside that environment.
 
-[简体中文](README_zh-CN.md)
+A Knowledge Object is a note with declared identity, type, lifecycle, and supporting context. Its appearance in RD does not certify that its claims are true. Workflow artifacts, such as proposals and contribution records, remain distinct from Knowledge Objects.
 
-## Why Rational Delirium?
+RD is not a separate database, an AI replacement, or an autonomous knowledge manager. It does not run agents or turn their suggestions into accepted knowledge automatically.
 
-AI agents can help with research, analysis, and knowledge organization. However, useful work also needs:
+## Features
 
-- clear reasoning history;
-- visible human decisions;
-- separation between suggestions and accepted changes;
-- records of what actually happened.
+### Archive Home
 
-Rational Delirium provides that layer inside Obsidian.
+Enter your personal knowledge archive through **RD Workspace**. When no object is selected, Archive Home shows:
 
-## Screenshots
+- a landscape of declared objects, kinds, lifecycle states, and titles;
+- existing Proposal and Contribution records;
+- declared relations, unresolved declarations, and snapshot diagnostics.
 
-*Real screenshots from Obsidian on macOS using DEMO content.*
+Counts and lists describe the loaded snapshot or available artifact records, not a live census or a quality score. Returning Home preserves the session's selection history.
 
-| Knowledge Workspace | Semantic Graph |
-| --- | --- |
-| ![Workspace](docs/images/01-workspace.png) | ![Graph](docs/images/02-graph.png) |
+![Archive Home with Archive Navigation and Inspector in Obsidian](docs/images/01-workspace.png)
 
-| Collaboration Surface | Human Decision | Contribution Record |
-| --- | --- | --- |
-| ![Collaboration](docs/images/03-collaboration.png) | ![Decision](docs/images/04-human-decision.png) | ![Contribution](docs/images/05-contribution-record.png) |
+### Knowledge Object Surface
 
-## How It Works
+Read identity, provenance, relations, and lineage alongside the native Markdown experience. Inspect exact object identities and follow declared connections without replacing the underlying note.
 
-```text
-External Agent
-      |
-      v
-RD Skill Contract
-      |
-      v
-Proposal
-      |
-      v
-Human Decision
-      |
-      v
-External Agent executes only explicitly Human-approved scope
-      |
-      v
-Contribution Record
-      |
-      v
-Rational Delirium displays the history
-```
+Provenance separates Observation, Evidence, Inference, and Conclusion. Missing or unresolved information remains visible rather than being filled in by an agent or by the interface.
 
-A proposal is not an action. Human approval is a recorded decision, not truth validation. A contribution record records reported execution provenance, not proof of correctness.
+![Knowledge Object identity, provenance and relations in a native Obsidian note](docs/images/06-knowledge-object.png)
 
-## Architecture Overview
+### Graph Intelligence
 
-```text
-Knowledge data + derived projections
-        |
-        v
-Knowledge Workspace / Graph Views
+Explore declared semantic relationships, their direction, and source context. Navigate between objects while retaining provenance and explicit unresolved states.
 
-Workflow artifacts
-.proposals/
-.contributions/
-.organization-proposals/
-        |
-        v
-Collaboration Surface
-Proposal / Human Decision / Contribution Record
-```
+Graph Intelligence is not Obsidian's general Markdown-link graph, a similarity engine, or a recommendation system. Relationships do not imply confidence, importance, or correctness.
 
-Knowledge views read knowledge data and derived projections. Collaboration reads workflow artifacts independently of the semantic graph snapshot.
+![Graph Intelligence displaying a selected fixture with no declared relations](docs/images/02-graph.png)
 
-The plugin can record explicit Human decisions. It does not execute approved knowledge modifications. An external Agent performs only explicitly Human-approved operations outside RD; the Contribution Record records reported execution provenance, not independent verification.
+*This Graph Intelligence sample has no declared relations; RD shows that empty state rather than inventing connections.*
 
-Knowledge Object (KO) means a note or artifact with identity, provenance, and relationships.
+### Inspector
 
-## Core Features
+The right dock keeps object context, declared fields, and diagnostics accessible while you navigate. Selection is a presentation state; selecting an object does not change its lifecycle or validate its contents.
 
-- **Knowledge Workspace** — explore identity, provenance, lineage, relations, and context.
-- **Semantic Graph Projection** — deterministic read-only graph projection from declared relationships.
-- **Collaboration Surface** — view proposals, decisions, and contribution history.
-- **Human Decision Recording** — explicit approval or rejection of pending proposals.
-- **Agent Skill Contract** — guidance for external agents: propose, wait, execute approved scope, record.
-- **Theme System** — Rational Archive visual language with semantic UI tokens.
+### Obsidian Integration
 
-## Design Principles
+RD uses real Obsidian views and dock leaves. Your Vault, native Markdown, Live Preview, Properties, and ordinary note editing remain part of the host application.
 
-- **Knowledge ≠ Truth** — stored objects record claims and provenance.
-- **Projection ≠ Authority** — appearing in a graph does not prove correctness.
-- **Agent Contribution ≠ Human Decision** — agent output is input for human judgment.
-- **Relationship ≠ Confidence** — declared relations carry no score or weight.
-- **Visibility ≠ Validation** — being displayed is not endorsement.
+The left Archive Navigator, central Workspace, and right Inspector work together without replacing Obsidian. RD styles its own surfaces and identified Knowledge Object presentation; ordinary notes retain their native editing experience.
 
-No truth scores, confidence meters, rankings, or automatic merging.
+*Screenshots above are from the actual v1.7.0 plugin running in Obsidian 1.13.7 on macOS, using fictional validation content. They are not mockups or research evidence.*
 
-## 5-Minute Quick Start
+## Quick Start
 
-### For Obsidian users
+This checkpoint uses manual desktop installation. The frozen manifest requires **Obsidian 1.13.7 or later** and marks the plugin as desktop-only.
 
-1. Obtain the four plugin files from `dist/` (see the build steps below): `main.js`, `manifest.json`, `styles.css`, and `tokens-rational-archive.css`.
-2. Copy all four files into `<vault>/.obsidian/plugins/rational-delirium/`.
-3. Enable Rational Delirium in Obsidian settings.
-4. Use the command palette to run **Open RD Workspace**.
-5. Open **Collaboration** from RD Workspace to view existing Proposals, Human Decisions, and Contribution Records. External agents create the workflow artifacts; RD does not run agents.
+1. Obtain these four files from the frozen tag's `dist/` directory:
+   - `main.js`
+   - `manifest.json`
+   - `styles.css`
+   - `tokens-rational-archive.css`
+2. Copy them into `<vault>/.obsidian/plugins/rational-delirium/`.
+3. Enable Rational Delirium under Obsidian's Community plugins settings.
+4. Run **Open RD Workspace** from the command palette.
+5. Use **Archive Home** in the left navigator, select an existing object, or open **Collaboration** to inspect workflow records.
 
-### For developers building from source
+To build the exact checkpoint from source, with Node.js and npm installed:
 
 ```bash
-git clone https://github.com/MkaliezZ/rational-delirium-ui
+git clone https://github.com/MkaliezZ/rational-delirium-ui.git
 cd rational-delirium-ui
+git checkout v1.7.0-archive-home-experience
 npm ci
 npm run build
 ```
 
-Copy the four generated plugin files listed above from `dist/` into:
+Copy the four resulting files from `dist/` as described above. RD does not populate your Vault with sample knowledge or create a semantic snapshot during installation.
+
+The release/checkpoint label is **v1.7.0**. The frozen plugin manifest still reports **0.4.4**; that is the expected installed version label for this tag, not evidence that a different checkpoint was installed. Use the tag to identify the build.
+
+## Using Agents with Rational Delirium
+
+External agents can assist research, prepare Knowledge Objects, and propose organizational changes. They remain contributors; humans retain knowledge authority.
 
 ```text
-<vault>/.obsidian/plugins/rational-delirium/
+External Agent
+      ↓
+Read the RD Skill
+      ↓
+Prepare proposed Knowledge Object creation / organization
+      ↓
+Explicit Human review and scoped decision
+      ↓
+Human applies the approved change under the documented workflow
+      ↓
+Markdown in the Obsidian Vault + contribution records
+      ↓
+RD presentation
 ```
 
-## Agent Workflow Example
+Begin with the [Rational Delirium Agent Skill](skills/rational-delirium-agent-skill.md). The bundled Skill's default workflow ends in **Human apply**. Loading it grants no write permission and does not install an agent runtime.
 
-1. Agent reads the RD Skill.
-2. Agent inspects knowledge objects.
-3. Agent creates a Proposal.
-4. Human approves or rejects in Obsidian.
-5. External Agent performs only the explicitly Human-approved operation outside RD.
-6. Agent creates a Contribution Record.
-7. RD displays the complete chain.
+An agent should inspect exact object identities, preserve sources and uncertainty, and submit traceable proposals. Do not treat a proposal, model confidence, or previous approval as permission for another change. Any separately authorized external execution must stay within the explicit Human-approved scope; RD does not execute that operation for the agent.
 
-Example:
+The Collaboration surface reads `.proposals/`, `.contributions/`, and `.organization-proposals/`. The plugin can record explicit Human decisions. A decision is not truth validation, and a Contribution Record describes reported work rather than independently proving success or correctness.
+
+## Architecture and Boundaries
 
 ```text
-Proposal:
-ADD_RELATION — Evidence supports Hypothesis
+Obsidian Vault: Markdown declarations and workflow artifacts
+   ├─ Knowledge data / derived projections → RD knowledge views
+   └─ Proposal / Contribution artifacts    → Collaboration
 
-Decision:
-Approved by Human
-
-Execution:
-External Agent performs only explicitly Human-approved scope
-
-Record:
-Contribution Record stores reported execution provenance
+Human decisions remain separate from Agent contributions.
 ```
 
-## Current Status — FROZEN
+Archive Home and Workspace consume the shared semantic snapshot. Graph Intelligence retains its existing index-derived relationship projection; the two contracts are not merged into a second source of truth. Neither view generates missing relations or repairs source knowledge.
 
-Development is paused after validation milestones.
+- **Knowledge ≠ Truth**
+- **Projection ≠ Authority**
+- **Agent Contribution ≠ Human Decision**
+- **Relationship ≠ Confidence**
+- **Visibility ≠ Validation**
 
-| Milestone | Status |
-| --- | --- |
-| v1.9 Agent Skill Workflow Validation | FROZEN |
-| v1.10 Real Agent Usage Validation | PASSED |
+No confidence scores, AI ranking, automatic approval, or automatic organization are introduced by this release.
 
-Real Obsidian usage has been validated with:
+## Validation and Current Status
 
-- Codex on macOS;
-- WorkBuddy + GLM 5.3 on Windows.
+Frozen tag: `v1.7.0-archive-home-experience`
 
-Validated workflow:
+Runtime commit: `3d542ff22e9fd8e309201546b6609b54302dd60d`
 
-```text
-Proposal → Human Decision → Contribution Record → Relation Display
-```
+The v1.7.0 checkpoint passed the automated suite, TypeScript checking, and build. Real Obsidian validation on macOS covered cold launch, restored workspace, warm reopen, Archive Home, Knowledge Object Surface, Inspector, Graph Intelligence, Loop, and Collaboration. Knowledge files remained unchanged during the read-only runtime checks.
 
-Validation covered external Agent workflow compatibility, cross-device artifact compatibility, Obsidian cold start, and warm reload.
+Earlier workflow trials covered Codex on macOS and WorkBuddy + GLM 5.3 on Windows, including Proposal → Human Decision → Contribution Record → Relation Display. Those trials do not establish a new Windows v1.7.0 runtime result, universal agent compatibility, or autonomous approval.
 
-These results cover the tested environments and workflow. They do not establish compatibility with all Agents or validate all multi-Agent scenarios or autonomous approval. Relation display shows a declared relationship, not truth validation.
+## Availability and Limitations
 
-## Limitations
+Workspace views that depend on the semantic snapshot require a valid `semantic-graph/graph.json`. RD does not automatically generate or repair it. Missing, invalid, unavailable, and empty snapshots are distinct states. A missing snapshot does not mean the Vault has no knowledge and does not block Collaboration.
 
-Views depending on semantic graph snapshots require a valid `semantic-graph/graph.json`. The plugin does not automatically generate or repair this snapshot. A missing snapshot does not mean the Vault has no knowledge and does not block the Collaboration workflow.
+Snapshot loading does not establish freshness. An unresolved declaration reports target resolution, not a task or a verdict. Diagnostics do not certify truth. Contribution records may be incomplete and are displayed as recorded.
 
-Rational Delirium intentionally does not:
-
-- run or schedule agents;
-- call AI models;
-- replace human decisions;
-- automatically organize your vault;
-- automatically validate truth;
-- perform autonomous vault changes.
-
-Development resumes only from real usage feedback, clear user pain points, or concrete validation needs.
+Use this baseline for human-led organization and exploration. It is not a background agent service, automatic conflict resolver, or replacement for your review and backup practices.
 
 ## License
 
