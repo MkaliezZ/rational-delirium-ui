@@ -536,3 +536,26 @@ describe("KO surface shared snapshot subscription", () => {
     expect(leaf.view.containerEl.querySelector(".rd-ko-surface")).toBeNull();
   });
 });
+
+describe("restored deferred Markdown leaves", () => {
+  it("waits for a real file without reading an undefined path, then resolves on the next event", async () => {
+    const { plugin, workspace, vault, controller } = makeHost();
+    const leaf = new FakeLeaf(null);
+    Object.assign(leaf.view, { file: undefined });
+    workspace.leaves.push(leaf);
+    const read = vi.spyOn(vault, "cachedRead");
+    await controller.refresh(); expect(read).not.toHaveBeenCalled(); expect(leaf.marked).toBe(false);
+    vault.files.set("ko.md", KO_TEXT); leaf.view.file = { path: "ko.md" };
+    workspace.fire("file-open");
+    await vi.waitFor(() => expect(leaf.marked).toBe(true));
+    plugin.unload();
+  });
+  it("discards a read when its leaf becomes deferred again", async () => {
+    const { plugin, workspace, vault, controller } = makeHost();
+    const leaf = new FakeLeaf("ko.md"); workspace.leaves.push(leaf);
+    const resolve = vault.deferNextRead(); const pending = controller.refresh();
+    Object.assign(leaf.view, { file: undefined }); resolve(KO_TEXT); await pending;
+    expect(leaf.marked).toBe(false); expect(leaf.view.containerEl.querySelector(".rd-ko-surface")).toBeNull();
+    plugin.unload();
+  });
+});

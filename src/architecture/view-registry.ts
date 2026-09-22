@@ -84,6 +84,16 @@ export async function activateRDView(
   plugin: Plugin,
   reg: RDViewRegistration,
 ): Promise<void> {
+  const workspace = plugin.app.workspace;
+  if (workspace.layoutReady === false) {
+    const ready = await new Promise<boolean>((resolve) => {
+      // A queued user activation must not revive views after plugin unload.
+      let cancelled = false;
+      plugin.register(() => { cancelled = true; resolve(false); });
+      workspace.onLayoutReady(() => resolve(!cancelled));
+    });
+    if (!ready) return;
+  }
   const existing = plugin.app.workspace.getLeavesOfType(reg.viewType);
   const leaf = existing[0] ??
     (reg.placement === "right"

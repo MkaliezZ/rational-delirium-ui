@@ -12884,6 +12884,18 @@ var RDViewRegistry = class {
   }
 };
 async function activateRDView(plugin, reg) {
+  const workspace = plugin.app.workspace;
+  if (workspace.layoutReady === false) {
+    const ready = await new Promise((resolve) => {
+      let cancelled = false;
+      plugin.register(() => {
+        cancelled = true;
+        resolve(false);
+      });
+      workspace.onLayoutReady(() => resolve(!cancelled));
+    });
+    if (!ready) return;
+  }
   const existing = plugin.app.workspace.getLeavesOfType(reg.viewType);
   const leaf = existing[0] ?? (reg.placement === "right" ? plugin.app.workspace.getRightLeaf(false) : reg.placement === "left" ? plugin.app.workspace.getLeftLeaf(false) : plugin.app.workspace.getLeaf(true));
   if (leaf === null) return;
@@ -14408,6 +14420,8 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
      * only if it is still its object's latest read. */
     this.sourceReadTokenByObject = /* @__PURE__ */ new Map();
     this.observer = null;
+    this.active = false;
+    this.openGeneration = 0;
     /** V2: the desk mode lives in the shared store; this local mirror
      * exists only so the view can detect entering collaboration mode
      * and drive the one explicit artifact re-read for that entry. */
@@ -14428,6 +14442,9 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     return "library";
   }
   async onOpen() {
+    if (this.active) return;
+    this.active = true;
+    const generation = ++this.openGeneration;
     emptyEl(this.contentEl);
     this.deps.shellController?.attach(this);
     const shell = createChild(this.contentEl, "div", { cls: "rd-workspace-shell" });
@@ -14451,13 +14468,16 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     });
     this.observer.observe(shell);
     await this.coordinator.ensureLoaded();
+    if (!this.active || generation !== this.openGeneration) return;
     if (this.deps.collaborationSource !== void 0) {
       void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
     }
     this.renderBody();
   }
   async onClose() {
-    this.deps.shellController?.release();
+    this.active = false;
+    this.openGeneration += 1;
+    this.deps.shellController?.release(this);
     this.observer?.disconnect();
     this.observer = null;
     this.unsubscribe?.();
@@ -14599,6 +14619,7 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     }).then(() => this.renderBody());
   }
   renderBody() {
+    if (!this.active) return;
     const body = this.contentEl.querySelector(".rdws-body");
     if (!(body instanceof HTMLElement)) return;
     emptyEl(body);
@@ -16315,6 +16336,8 @@ var RDShellController = class {
     this.app = app;
     this.store = store;
     this.attached = false;
+    this.generation = 0;
+    this.disposed = false;
     /** The one open workspace view (activateRDView reuses the leaf,
      * so at most one exists). Set on attach, cleared on release. */
     this.workspaceView = null;
@@ -16323,7 +16346,18 @@ var RDShellController = class {
    * exist. Idempotent — repeated attachment never creates duplicate
    * leaves and never steals focus. */
   attach(view) {
+    if (this.disposed || this.workspaceView === view) return;
     this.workspaceView = view;
+    const generation = ++this.generation;
+    const workspace = this.app.workspace;
+    const activate = () => {
+      if (this.disposed || generation !== this.generation || this.workspaceView !== view) return;
+      this.attachReady();
+    };
+    if (workspace.layoutReady === false) workspace.onLayoutReady(activate);
+    else activate();
+  }
+  attachReady() {
     document.body.classList.add(RD_SHELL_BODY_CLASS);
     if (this.attached) return;
     this.attached = true;
@@ -16338,7 +16372,9 @@ var RDShellController = class {
   /** Shell inactive: remove the body scope and detach the two dock
    * leaves. Controlled — only the workspace view's own close path
    * (or dispose) calls this. Idempotent. */
-  release() {
+  release(view) {
+    if (view !== void 0 && this.workspaceView !== view) return;
+    this.generation += 1;
     this.workspaceView = null;
     if (!this.attached) return;
     this.attached = false;
@@ -16349,6 +16385,7 @@ var RDShellController = class {
   }
   /** Plugin unload path — the idempotent release. */
   dispose() {
+    this.disposed = true;
     this.release();
   }
   /** Inspector review row → open the proposal in the workspace's
@@ -16650,7 +16687,7 @@ var RDKoLeafThemeController = class {
     const generation = this.bumpGeneration(leaf);
     const view = leaf.view;
     const file = view.file;
-    if (file === null) {
+    if (file == null) {
       this.unmark(leaf);
       return;
     }
@@ -16665,7 +16702,7 @@ var RDKoLeafThemeController = class {
     if (this.disposed || this.generations.get(leaf) !== generation) return;
     if (!this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE).includes(leaf)) return;
     const current = leaf.view.file;
-    if (current === null || current.path !== file.path) return;
+    if (leaf.view !== view || current == null || current.path !== file.path) return;
     const block = extractFrontmatterBlock(text3);
     const frontmatter = block === null ? null : parseKoFrontmatter(block);
     if (frontmatter === null) {

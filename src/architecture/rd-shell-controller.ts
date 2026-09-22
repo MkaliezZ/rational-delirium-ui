@@ -27,6 +27,8 @@ export const RD_SHELL_BODY_CLASS = "rd-rational-archive-shell";
 
 export class RDShellController {
   private attached = false;
+  private generation = 0;
+  private disposed = false;
   /** The one open workspace view (activateRDView reuses the leaf,
    * so at most one exists). Set on attach, cleared on release. */
   private workspaceView: RDWorkspaceShellView | null = null;
@@ -40,7 +42,20 @@ export class RDShellController {
    * exist. Idempotent — repeated attachment never creates duplicate
    * leaves and never steals focus. */
   attach(view: RDWorkspaceShellView): void {
+    if (this.disposed || this.workspaceView === view) return;
     this.workspaceView = view;
+    const generation = ++this.generation;
+    const workspace = this.app.workspace;
+    const activate = () => {
+      if (this.disposed || generation !== this.generation || this.workspaceView !== view) return;
+      this.attachReady();
+    };
+    // Restored dock leaves must be enumerated AFTER Obsidian restores the layout.
+    if (workspace.layoutReady === false) workspace.onLayoutReady(activate);
+    else activate();
+  }
+
+  private attachReady(): void {
     document.body.classList.add(RD_SHELL_BODY_CLASS);
     if (this.attached) return;
     this.attached = true;
@@ -56,7 +71,9 @@ export class RDShellController {
   /** Shell inactive: remove the body scope and detach the two dock
    * leaves. Controlled — only the workspace view's own close path
    * (or dispose) calls this. Idempotent. */
-  release(): void {
+  release(view?: RDWorkspaceShellView): void {
+    if (view !== undefined && this.workspaceView !== view) return;
+    this.generation += 1;
     this.workspaceView = null;
     if (!this.attached) return;
     this.attached = false;
@@ -68,6 +85,7 @@ export class RDShellController {
 
   /** Plugin unload path — the idempotent release. */
   dispose(): void {
+    this.disposed = true;
     this.release();
   }
 

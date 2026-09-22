@@ -118,6 +118,8 @@ export class RDWorkspaceShellView extends ItemView {
    * only if it is still its object's latest read. */
   private readonly sourceReadTokenByObject = new Map<string, number>();
   private observer: ResizeObserver | null = null;
+  private active = false;
+  private openGeneration = 0;
   /** V2: the desk mode lives in the shared store; this local mirror
    * exists only so the view can detect entering collaboration mode
    * and drive the one explicit artifact re-read for that entry. */
@@ -142,6 +144,9 @@ export class RDWorkspaceShellView extends ItemView {
   getIcon(): string { return "library"; }
 
   async onOpen(): Promise<void> {
+    if (this.active) return;
+    this.active = true;
+    const generation = ++this.openGeneration;
     emptyEl(this.contentEl);
     // V2: activating the workspace brings up the real shell scope
     // (body class + dock leaves), without stealing focus.
@@ -176,6 +181,7 @@ export class RDWorkspaceShellView extends ItemView {
     });
     this.observer.observe(shell);
     await this.coordinator.ensureLoaded();
+    if (!this.active || generation !== this.openGeneration) return;
     // Read-only collaboration summaries for the inspector dock.
     if (this.deps.collaborationSource !== undefined) {
       void this.browser.refresh(this.deps.collaborationSource)
@@ -185,9 +191,11 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.active = false;
+    this.openGeneration += 1;
     // V2: closing the workspace releases the shell scope and the
     // dock leaves with it.
-    this.deps.shellController?.release();
+    this.deps.shellController?.release(this);
     this.observer?.disconnect();
     this.observer = null;
     this.unsubscribe?.();
@@ -347,6 +355,7 @@ export class RDWorkspaceShellView extends ItemView {
   }
 
   private renderBody(): void {
+    if (!this.active) return;
     const body = this.contentEl.querySelector(".rdws-body");
     if (!(body instanceof HTMLElement)) return;
     emptyEl(body);

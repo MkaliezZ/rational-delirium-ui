@@ -132,8 +132,9 @@ export class RDKoLeafThemeController {
   private async evaluate(leaf: WorkspaceLeaf): Promise<void> {
     const generation = this.bumpGeneration(leaf);
     const view = leaf.view as MarkdownView;
-    const file = view.file as TFile | null;
-    if (file === null) {
+    const file = view.file as TFile | null | undefined;
+    // Restored Markdown leaves can still be deferred views without a file.
+    if (file == null) {
       this.unmark(leaf);
       return;
     }
@@ -150,7 +151,7 @@ export class RDKoLeafThemeController {
     if (this.disposed || this.generations.get(leaf) !== generation) return;
     if (!this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE).includes(leaf)) return;
     const current = (leaf.view as MarkdownView).file as TFile | null;
-    if (current === null || current.path !== file.path) return;
+    if (leaf.view !== view || current == null || current.path !== file.path) return;
     const block = extractFrontmatterBlock(text);
     const frontmatter = block === null ? null : parseKoFrontmatter(block);
     if (frontmatter === null) { this.unmark(leaf); return; }
