@@ -103,6 +103,10 @@ export class RDInspectorView extends ItemView {
     const selected = state.selectedObjectId;
     const snapshot = state.graphSnapshot;
     const available = snapshot !== null && snapshot.state === "available";
+    const graphSelection = state.selectionSource === "graph-intelligence";
+    const matches = available && selected !== null && snapshot !== null
+      ? snapshot.graph.nodes.filter((node) => node.object_id === selected) : [];
+    const graphSelectionUnavailable = graphSelection && matches.length !== 1;
 
     const plane = createChild(this.contentEl, "aside", { cls: "rd-inspector" });
     plane.setAttribute("aria-label", "RD inspection");
@@ -114,10 +118,19 @@ export class RDInspectorView extends ItemView {
     // visually subordinate so review/contribution records never read
     // as peer knowledge properties.
     let objectZone: HTMLElement | null = null;
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       objectZone = createChild(plane, "div", { cls: "rdin-zone" });
       objectZone.setAttribute("data-zone", "object");
       createChild(objectZone, "div", { cls: "rdin-zone-label", text: "Selected object" });
+    } else if (graphSelectionUnavailable) {
+      const emptyZone = createChild(plane, "div", { cls: "rdin-zone" });
+      emptyZone.setAttribute("data-zone", "object");
+      createChild(emptyZone, "div", { cls: "rdin-zone-label", text: "Selected object" });
+      createChild(emptyZone, "div", { cls: "rdin-empty",
+        text: "Current object unavailable in workspace snapshot" });
+      createChild(emptyZone, "div", { cls: "rdin-empty", text: selected === null
+        ? "Graph selection has no declared identity."
+        : `${selected} · ${matches.length > 1 ? "ambiguous identity" : "no unique snapshot match"}` });
     } else if (selected === null) {
       // Honest empty state: no fabricated object context.
       const emptyZone = createChild(plane, "div", { cls: "rdin-zone" });
@@ -130,7 +143,7 @@ export class RDInspectorView extends ItemView {
 
     // Object — declared identity of the current selection. Metadata
     // only; nothing here validates the object.
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const node = graph.nodes.find((n) => n.object_id === selected);
       const obj = createChild(objectZone!, "section", { cls: "rdin-group" });
@@ -155,7 +168,7 @@ export class RDInspectorView extends ItemView {
 
     // Linked objects — declared relations touching the selection.
     // Navigation only; the listing carries no evaluation.
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const linked = createChild(objectZone!, "section", { cls: "rdin-group" });
       createChild(linked, "div", { cls: "rdin-label", text: "Linked objects" });
@@ -284,7 +297,7 @@ export class RDInspectorView extends ItemView {
     }
 
     // Diagnostics for the current selection — declared data only.
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const unresolvedCount = graph.unresolved
         .filter((e) => e.source === selected || e.target === selected).length;

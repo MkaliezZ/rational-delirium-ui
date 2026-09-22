@@ -443,34 +443,37 @@
 
 /* v0.4.4 Graph Intelligence — everything scoped under .rd-graph.
    Same RD design language: archival charcoal, serif headings, mono
-   metadata, thin borders. No graph canvas, no neon. */
+   metadata, thin borders. Native relation field, no inferred topology. */
 
 .rd-graph {
-  padding: 14px 16px;
+  padding: 24px;
+  overflow: auto;
   font-size: 13px;
-  color: #D4D0C8;
-  background: #11110F;
+  color: var(--rd-identity-title-text, #D4D0C8);
+  background: var(--rd-surface-base, #11110F);
 }
 
 .rd-graph .rdg-head { margin-bottom: 10px; }
 .rd-graph .rdg-title {
-  font-family: var(--font-text);
-  font-size: 16px;
-  color: #D4D0C8;
+  font-family: var(--rd-font-narrative, Georgia, serif);
+  font-weight: normal;
+  margin: 8px 0;
+  font-size: 28px;
+  color: var(--rd-identity-title-text, #D4D0C8);
 }
 
 .rd-graph .rdg-section {
   margin: 12px 0 0;
-  border-top: 1px solid #292824;
+  border-top: 1px solid var(--rd-surface-rule, #292824);
   padding-top: 8px;
 }
 
 .rd-graph .rdg-section-title {
   font-family: var(--font-monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #77736B;
+  color: var(--rd-identity-meta-text, #77736B);
   margin: 0 0 6px;
   font-weight: normal;
 }
@@ -482,7 +485,7 @@
 
 .rd-graph .rdg-meta {
   display: block;
-  color: #77736B;
+  color: var(--rd-identity-meta-text, #77736B);
   font-size: 11px;
   font-family: var(--font-monospace);
 }
@@ -494,18 +497,18 @@
 .rd-graph .rdg-hop-toggle {
   background: none;
   border: none;
-  color: #D4D0C8;
+  color: var(--rd-identity-title-text, #D4D0C8);
   text-align: left;
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .rd-graph button.rdg-pick { display: block; width: 100%; padding: 3px 4px; cursor: pointer; }
-.rd-graph button.rdg-pick:hover { background: #1D1C19; }
+.rd-graph button.rdg-pick:hover { background: var(--rd-surface-raised, #1D1C19); }
 /* GI-02: row is a non-interactive container; endpoint and disclosure
    are separate sibling buttons. */
 .rd-graph .rdg-rel { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 2px 0; }
 .rd-graph button.rdg-endpoint { cursor: pointer; }
-.rd-graph .rdg-rel[aria-disabled="true"] { cursor: default; color: #A19C92; }
+.rd-graph .rdg-rel[aria-disabled="true"] { cursor: default; color: var(--rd-identity-meta-text, #A19C92); }
 
 .rd-graph .rdg-rel-line,
 .rd-graph .rdg-pick-title {
@@ -515,31 +518,31 @@
 
 .rd-graph .rdg-badge {
   display: inline-block;
-  border: 1px solid #34322D;
-  border-radius: 4px;
+  border: 1px solid var(--rd-surface-rule, #34322D);
+  border-radius: 0;
   padding: 0 5px;
   font-family: var(--font-monospace);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.05em;
-  color: #A19C92;
-  background: #171714;
+  color: var(--rd-identity-meta-text, #A19C92);
+  background: var(--rd-surface-raised, #171714);
 }
 
-.rd-graph .rdg-badge[data-state="RESOLVED"] { color: #76908D; }
+.rd-graph .rdg-badge[data-state="RESOLVED"] { color: var(--rd-provenance-evidence-text, #76908D); }
 .rd-graph .rdg-badge[data-state="BROKEN"],
 .rd-graph .rdg-badge[data-state="AMBIGUOUS"],
-.rd-graph .rdg-badge[data-state="OUT_OF_SCOPE"] { color: #8B3A3A; }
-.rd-graph .rdg-badge[data-state="PENDING"] { color: #77736B; }
+.rd-graph .rdg-badge[data-state="OUT_OF_SCOPE"] { color: var(--rd-conflict-marker-text, #8B3A3A); }
+.rd-graph .rdg-badge[data-state="PENDING"] { color: var(--rd-identity-meta-text, #77736B); }
 
 .rd-graph .rdg-hop-toggle,
 .rd-graph .rdg-endpoint,
 .rd-graph .rdg-src,
 .rd-graph .rdg-native {
   font-family: var(--font-monospace);
-  font-size: 10px;
-  color: #A19C92;
-  border: 1px solid #34322D;
-  background: #171714;
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
+  border: 1px solid var(--rd-surface-rule, #34322D);
+  background: var(--rd-surface-raised, #171714);
   padding: 0 6px;
   margin-left: 6px;
   cursor: pointer;
@@ -549,35 +552,61 @@
 .rd-graph .rdg-prov-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .rd-graph .rdg-prov-line {
   font-family: var(--font-monospace);
-  font-size: 10px;
-  color: #77736B;
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #77736B);
 }
 
 .rd-graph .rdg-branch { margin: 6px 0 0 10px; }
 .rd-graph .rdg-branch-title {
   font-family: var(--font-monospace);
-  font-size: 10px;
-  color: #A19C92;
+  font-size: 11px;
+  color: var(--rd-identity-meta-text, #A19C92);
   margin: 4px 0 2px;
 }
 
 .rd-graph .rdg-state {
-  color: #77736B;
+  color: var(--rd-identity-meta-text, #77736B);
   font-family: var(--font-monospace);
   font-size: 11px;
   margin: 6px 0;
 }
 
-.rd-graph .rdg-error { color: #8B3A3A; }
+.rd-graph .rdg-error { color: var(--rd-conflict-marker-text, #8B3A3A); }
 
 .rd-graph button:focus-visible {
-  outline: 2px solid #76908D;
+  outline: 2px solid var(--rd-provenance-evidence-text, #76908D);
   outline-offset: 1px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .rd-graph * { transition: none !important; animation: none !important; }
 }
+
+/* Deterministic geometry, no simulation, animation or persistent layout. */
+.rd-graph .rdg-eyebrow,
+.rd-graph .rdg-map-caption { font: 11px var(--font-monospace); letter-spacing: .09em; color: var(--rd-identity-meta-text, #A19C92); }
+.rd-graph .rdg-intro { color: var(--rd-identity-meta-text, #A19C92); line-height: 1.6; }
+.rd-graph .rdg-map-caption { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; margin: 24px 0 12px; }
+.rd-graph .rdg-map-viewport { overflow: auto; max-height: 65vh; border-block: 1px solid var(--rd-surface-rule, #34322D); }
+.rd-graph .rdg-map-viewport:focus-visible { outline: 2px solid var(--rd-surface-focus-rule, #D8C89D); outline-offset: 2px; }
+.rd-graph .rdg-map-stage { position: relative; }
+.rd-graph .rdg-map-lines { position: absolute; inset: 0; pointer-events: none; }
+.rd-graph .rdg-map-edge path,
+.rd-graph .rdg-arrow { fill: none; stroke: var(--rd-identity-meta-text, #A19C92); stroke-width: 1; }
+.rd-graph .rdg-map-edge[data-resolution="BROKEN"] path,
+.rd-graph .rdg-map-edge[data-resolution="AMBIGUOUS"] path,
+.rd-graph .rdg-map-edge[data-resolution="OUT_OF_SCOPE"] path { stroke-dasharray: 4 4; }
+.rd-graph .rdg-map-edge text { font: 11px var(--font-monospace); fill: var(--rd-identity-meta-text, #A19C92); paint-order: stroke; stroke: var(--rd-surface-base, #11110F); stroke-width: 4px; stroke-linejoin: round; }
+.rd-graph .rdg-map-node { position: absolute; box-sizing: border-box; width: 280px; height: 116px; padding: 12px 14px; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 5px; text-align: left; border: 1px solid var(--rd-surface-rule, #34322D); border-radius: 0; background: var(--rd-surface-base, #11110F); color: var(--rd-identity-title-text, #D4D0C8); }
+.rd-graph button.rdg-map-node { cursor: pointer; }
+.rd-graph button.rdg-map-node:hover { background: var(--rd-surface-raised, #1D1C19); }
+.rd-graph .rdg-map-node[aria-pressed="true"] { border-color: var(--rd-surface-focus-rule, #D8C89D); border-left-width: 3px; }
+.rd-graph .rdg-map-node[aria-disabled="true"] { border-style: dashed; }
+.rd-graph .rdg-node-kind,
+.rd-graph .rdg-node-id,
+.rd-graph .rdg-node-status { font: 11px var(--font-monospace); color: var(--rd-identity-meta-text, #A19C92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-graph .rdg-node-kind { letter-spacing: .07em; text-transform: uppercase; }
+.rd-graph .rdg-node-title { font: 17px/1.25 var(--rd-font-narrative, Georgia, serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* v1.3.1 Knowledge Panel — read-only presentation adapter. All
    selectors scoped under .rd-knowledge-panel; states are

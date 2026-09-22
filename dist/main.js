@@ -12895,6 +12895,7 @@ async function activateRDView(plugin, reg) {
 var INITIAL = Object.freeze({
   workspaceLabel: "default",
   selectedObjectId: null,
+  selectionSource: "workspace",
   navigation: Object.freeze([]),
   snapshot: Object.freeze({ state: "not_loaded", note: "not loaded yet" }),
   workspaceMode: "investigation",
@@ -12924,9 +12925,10 @@ var RDWorkspaceStore = class {
   }
   /** UI pointer to the object being inspected. Setting it does not
    * read, validate, resolve or change any knowledge object. */
-  setSelectedObject(objectId) {
+  setSelectedObject(objectId, selectionSource = "workspace") {
     this.update({
       selectedObjectId: objectId,
+      selectionSource,
       navigation: objectId === null ? this.state.navigation : [...this.state.navigation, objectId]
     });
   }
@@ -12934,12 +12936,13 @@ var RDWorkspaceStore = class {
    * trail is exhausted. */
   back() {
     if (this.state.navigation.length === 0) {
-      this.update({ selectedObjectId: null });
+      this.update({ selectedObjectId: null, selectionSource: "workspace" });
       return;
     }
     const navigation = this.state.navigation.slice(0, -1);
     this.update({
       navigation,
+      selectionSource: "workspace",
       selectedObjectId: navigation.length > 0 ? navigation[navigation.length - 1] : null
     });
   }
@@ -12950,6 +12953,7 @@ var RDWorkspaceStore = class {
   setWorkspaceLabel(label) {
     this.update({
       workspaceLabel: label,
+      selectionSource: "workspace",
       selectedObjectId: null,
       navigation: []
     });
@@ -14847,11 +14851,126 @@ function buildSecondHop(index2, neighborPath, rootPath) {
   return edgesFor(index2, neighborPath, typeByPath, excludeKeys, rootPath);
 }
 
+// src/views/graph-presentation.ts
+var NS = "http://www.w3.org/2000/svg";
+var WIDTH = 1140;
+var NODE_W = 280;
+var NODE_H = 116;
+var STEP = 160;
+function svg(parent, tag, attributes, text3) {
+  const el = document.createElementNS(NS, tag);
+  for (const [key, value] of Object.entries(attributes)) el.setAttribute(key, value);
+  if (text3 !== void 0) el.textContent = text3;
+  parent.appendChild(el);
+  return el;
+}
+function renderGraphSurface(host, data, objectAt, select, markerId) {
+  const root = data.selectedObject;
+  if (root === null) return;
+  const caption = createChild(host, "div", { cls: "rdg-map-caption" });
+  createChild(caption, "span", { text: "RELATION FIELD \xB7 FIRST HOP" });
+  createChild(caption, "span", { text: "Declared connections \xB7 positions are not importance" });
+  const viewport = createChild(host, "div", { cls: "rdg-map-viewport" });
+  viewport.tabIndex = 0;
+  viewport.setAttribute("role", "region");
+  viewport.setAttribute("aria-label", "Declared relation field; scroll to explore");
+  const stage = createChild(viewport, "div", { cls: "rdg-map-stage" });
+  const keyFor = (edge) => edge.resolution === "RESOLVED" && edge.otherPath !== null ? edge.otherPath : `unresolved:${edge.key}`;
+  const neighbors = /* @__PURE__ */ new Map();
+  for (const edge of data.firstHop) {
+    if (edge.otherPath !== root.path) neighbors.set(keyFor(edge), edge);
+  }
+  const entries = [...neighbors].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  const left = entries.filter(([, edge]) => edge.direction === "incoming");
+  const right = entries.filter(([, edge]) => edge.direction === "outgoing");
+  const height = Math.max(340, Math.max(left.length, right.length) * STEP + 72);
+  stage.style.width = `${WIDTH}px`;
+  stage.style.height = `${height}px`;
+  const positions = /* @__PURE__ */ new Map();
+  const rootPos = { x: 430, y: (height - NODE_H) / 2 };
+  positions.set(root.path, rootPos);
+  for (const [list2, x] of [[left, 24], [right, 836]]) {
+    list2.forEach(([key], n) => positions.set(key, { x, y: 36 + n * STEP }));
+  }
+  const drawing = svg(stage, "svg", {
+    class: "rdg-map-lines",
+    width: String(WIDTH),
+    height: String(height),
+    viewBox: `0 0 ${WIDTH} ${height}`,
+    "aria-hidden": "true",
+    focusable: "false"
+  });
+  const marker = svg(svg(drawing, "defs", {}), "marker", {
+    id: markerId,
+    viewBox: "0 0 10 10",
+    refX: "9",
+    refY: "5",
+    markerWidth: "7",
+    markerHeight: "7",
+    orient: "auto-start-reverse"
+  });
+  svg(marker, "path", { d: "M 1 1 L 9 5 L 1 9", class: "rdg-arrow" });
+  const bundles = /* @__PURE__ */ new Map();
+  for (const edge of data.firstHop) {
+    const other = positions.get(edge.otherPath === root.path ? root.path : keyFor(edge));
+    const from = edge.direction === "outgoing" ? rootPos : other;
+    const to = edge.direction === "outgoing" ? other : rootPos;
+    const isSelf = from === to;
+    const rightward = to.x > from.x;
+    const sx = from.x + (rightward || isSelf ? NODE_W : 0);
+    const tx = to.x + (rightward ? 0 : NODE_W);
+    const sy = from.y + NODE_H / 2, ty = to.y + NODE_H / 2;
+    const bundle = keyFor(edge);
+    const lane = bundles.get(bundle) ?? 0;
+    bundles.set(bundle, lane + 1);
+    const offset = lane * 24;
+    const mx = (sx + tx) / 2;
+    const path = isSelf ? `M ${sx} ${sy} C ${sx + 70} ${sy} ${sx + 70} ${from.y - 28 - offset} ${from.x + NODE_W / 2} ${from.y - 28 - offset} L ${from.x + NODE_W / 2} ${from.y}` : `M ${sx} ${sy} C ${mx} ${sy - offset} ${mx} ${ty - offset} ${tx} ${ty}`;
+    const group = svg(drawing, "g", {
+      class: "rdg-map-edge",
+      "data-predicate": edge.predicate,
+      "data-direction": edge.direction,
+      "data-resolution": edge.resolution
+    });
+    svg(group, "path", { d: path, "marker-end": `url(#${markerId})` });
+    const labelY = isSelf ? from.y - 32 - offset : (sy + ty) / 2 - 8 - offset;
+    svg(group, "text", { x: String(isSelf ? sx : mx), y: String(labelY), "text-anchor": "middle" }, edge.predicate);
+  }
+  const node2 = (position2, identity, fallback, resolution, current) => {
+    const el = createChild(stage, identity === null ? "div" : "button", { cls: "rdg-map-node" });
+    el.style.left = `${position2.x}px`;
+    el.style.top = `${position2.y}px`;
+    el.setAttribute("data-resolution", resolution);
+    if (identity !== null) {
+      el.setAttribute("data-object-path", identity.path);
+      el.setAttribute("data-object-id", identity.id ?? "");
+      el.setAttribute("aria-label", `Inspect ${identity.id ?? "identity unavailable"}: ${identity.title || "title unavailable"}`);
+      el.setAttribute("aria-pressed", String(current));
+      el.addEventListener("click", () => select(identity.path));
+    } else {
+      el.setAttribute("aria-disabled", "true");
+    }
+    el.title = identity === null ? `${fallback} \xB7 ${resolution}` : `${identity.title || "Title unavailable"} \xB7 ${identity.id || "Identity unavailable"} \xB7 ${identity.type} \xB7 ${identity.status || "Lifecycle unavailable"}`;
+    createChild(el, "span", { cls: "rdg-node-kind", text: identity?.type || `${resolution} endpoint` });
+    createChild(el, "span", { cls: "rdg-node-title", text: identity !== null ? identity.title || "Title unavailable" : fallback });
+    createChild(el, "span", { cls: "rdg-node-id", text: identity?.id || "Identity unavailable" });
+    createChild(el, "span", { cls: "rdg-node-status", text: identity !== null ? `lifecycle \xB7 ${identity.status || "unavailable"}` : "Not a resolved knowledge object" });
+  };
+  node2(rootPos, root, "", "RESOLVED", true);
+  for (const [key, edge] of entries) {
+    const object = edge.resolution === "RESOLVED" && edge.otherPath !== null ? objectAt(edge.otherPath) : null;
+    node2(positions.get(key), object, edge.otherLabel, object === null && edge.resolution === "RESOLVED" ? "UNAVAILABLE" : edge.resolution, false);
+  }
+}
+
 // src/views/graph-intelligence-view.ts
+var graphViewSequence = 0;
 var RD_GRAPH_VIEW_TYPE = "rd-graph-intelligence";
 var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
   constructor(leaf, deps) {
     super(leaf);
+    this.active = false;
+    this.markerId = `rdg-arrow-${++graphViewSequence}`;
     this.unsubscribeIndex = null;
     this.unsubscribeActive = null;
     this.container = null;
@@ -14879,6 +14998,9 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     return "git-fork";
   }
   async onOpen() {
+    this.unsubscribeIndex?.();
+    this.unsubscribeActive?.();
+    this.active = true;
     emptyEl(this.contentEl);
     this.container = createChild(this.contentEl, "div", { cls: "rd-graph" });
     this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
@@ -14889,6 +15011,9 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     this.render();
   }
   async onClose() {
+    this.active = false;
+    this.resetNativeGraphState();
+    this.container = null;
     this.unsubscribeIndex?.();
     this.unsubscribeActive?.();
     this.unsubscribeIndex = null;
@@ -14902,6 +15027,12 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
     }
     this.selectedPath = path;
     this.render();
+    if (this.active) {
+      this.deps.onSelectIdentity?.({
+        objectId: path === null ? null : this.deps.index.objectAt(path)?.id ?? null,
+        source: "graph-intelligence"
+      });
+    }
   }
   get selected() {
     return this.selectedPath;
@@ -14948,34 +15079,26 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
   }
   render() {
     const shell = this.container;
-    if (shell === null) return;
+    if (!this.active || shell === null) return;
+    const previousViewport = shell.querySelector(".rdg-map-viewport");
+    const previousRoot = shell.querySelector('.rdg-map-node[aria-pressed="true"]')?.dataset.objectPath;
+    const previousScroll = previousViewport === null ? null : { left: previousViewport.scrollLeft, top: previousViewport.scrollTop };
     emptyEl(shell);
     const data = buildGraphProjection(this.deps.index, this.selectedPath);
-    const restoreFocus = this.focusRestoreNeighbor;
-    this.focusRestoreNeighbor = null;
-    if (restoreFocus !== null) {
-      window.setTimeout(() => {
-        for (const toggle of this.container?.querySelectorAll(
-          ".rdg-hop-toggle"
-        ) ?? []) {
-          if (toggle.dataset.neighborPath === restoreFocus) {
-            toggle.focus();
-            return;
-          }
-        }
-      }, 0);
-    }
     const head = createChild(shell, "div", { cls: "rdg-head" });
-    createChild(head, "div", { cls: "rdg-title", text: "Graph Intelligence" });
+    createChild(head, "div", { cls: "rdg-eyebrow", text: "RATIONAL ARCHIVE / RELATIONS" });
+    createChild(head, "h2", { cls: "rdg-title", text: "Graph Intelligence" });
+    createChild(head, "p", { cls: "rdg-intro", text: "Explore declared connections. Selection is a reading focus \u2014 not importance, confidence or approval." });
     if (data.indexState === "INDEXING") {
-      createChild(shell, "div", { cls: "rdg-state", text: "Indexing archive\u2026" });
+      createChild(shell, "div", { cls: "rdg-state", text: "Indexing archive\u2026 Graph loading." });
       return;
     }
     if (data.indexState === "ERROR") {
-      createChild(shell, "div", { cls: "rdg-state rdg-error", text: "Index unavailable." });
+      createChild(shell, "div", { cls: "rdg-state rdg-error", text: "Index unavailable. Graph unavailable." });
       return;
     }
     if (data.phase !== "READY" || data.selectedObject === null) {
+      createChild(shell, "div", { cls: "rdg-state", text: data.phase === "NO_SUCH_OBJECT" ? "Selected object unavailable in the current index." : "No object selected. Choose a declared object to explore." });
       const section3 = this.section(shell, "RD Objects");
       if (data.selectableObjects.length === 0) {
         createChild(shell, "div", { cls: "rdg-state", text: "No RD object selected." });
@@ -14993,11 +15116,41 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
       return;
     }
     this.renderIdentity(shell, data.selectedObject);
+    renderGraphSurface(shell, data, (path) => this.deps.index.objectAt(path), (path) => {
+      this.selectObject(path);
+      for (const button of shell.querySelectorAll(".rdg-map-node")) {
+        if (button.dataset.objectPath === path) {
+          button.focus({ preventScroll: true });
+          break;
+        }
+      }
+    }, this.markerId);
+    const viewport = shell.querySelector(".rdg-map-viewport");
+    const selectedNode = shell.querySelector('.rdg-map-node[aria-pressed="true"]');
+    if (viewport !== null && selectedNode !== null) {
+      if (previousRoot === data.selectedObject.path && previousScroll !== null) {
+        viewport.scrollLeft = previousScroll.left;
+        viewport.scrollTop = previousScroll.top;
+      } else {
+        viewport.scrollLeft = Math.max(0, selectedNode.offsetLeft + selectedNode.offsetWidth / 2 - viewport.clientWidth / 2);
+        viewport.scrollTop = Math.max(0, selectedNode.offsetTop + selectedNode.offsetHeight / 2 - viewport.clientHeight / 2);
+      }
+    }
     this.renderFirstHop(shell, data);
     if (this.expandedNeighbors.size > 0) {
       this.renderSecondHop(shell, data.selectedObject.path);
     }
     this.renderNativeGraph(shell, data.selectedObject.path);
+    const restoreFocus = this.focusRestoreNeighbor;
+    this.focusRestoreNeighbor = null;
+    if (restoreFocus !== null) {
+      for (const toggle of shell.querySelectorAll(".rdg-hop-toggle")) {
+        if (toggle.dataset.neighborPath === restoreFocus) {
+          toggle.focus({ preventScroll: true });
+          break;
+        }
+      }
+    }
   }
   /** §6: canonical identity fields only. */
   renderIdentity(shell, identity) {
@@ -15111,14 +15264,14 @@ var RDGraphIntelligenceView = class extends import_obsidian4.ItemView {
       const generation = this.nativeGraphGeneration;
       const rootAtClick = this.selectedPath;
       if (opener === void 0) {
-        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
+        if (!this.active || generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
         this.nativeGraphState = "UNAVAILABLE";
         this.nativeGraphRoot = rootAtClick;
         this.render();
         return;
       }
       void opener.call(this.deps.navigation, path).then((result) => {
-        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
+        if (!this.active || generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
           return;
         }
         this.nativeGraphState = result;
@@ -15886,14 +16039,26 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
     const selected = state.selectedObjectId;
     const snapshot = state.graphSnapshot;
     const available = snapshot !== null && snapshot.state === "available";
+    const graphSelection = state.selectionSource === "graph-intelligence";
+    const matches = available && selected !== null && snapshot !== null ? snapshot.graph.nodes.filter((node2) => node2.object_id === selected) : [];
+    const graphSelectionUnavailable = graphSelection && matches.length !== 1;
     const plane = createChild(this.contentEl, "aside", { cls: "rd-inspector" });
     plane.setAttribute("aria-label", "RD inspection");
     const model = this.deps.browser.getState().model;
     let objectZone = null;
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       objectZone = createChild(plane, "div", { cls: "rdin-zone" });
       objectZone.setAttribute("data-zone", "object");
       createChild(objectZone, "div", { cls: "rdin-zone-label", text: "Selected object" });
+    } else if (graphSelectionUnavailable) {
+      const emptyZone = createChild(plane, "div", { cls: "rdin-zone" });
+      emptyZone.setAttribute("data-zone", "object");
+      createChild(emptyZone, "div", { cls: "rdin-zone-label", text: "Selected object" });
+      createChild(emptyZone, "div", {
+        cls: "rdin-empty",
+        text: "Current object unavailable in workspace snapshot"
+      });
+      createChild(emptyZone, "div", { cls: "rdin-empty", text: selected === null ? "Graph selection has no declared identity." : `${selected} \xB7 ${matches.length > 1 ? "ambiguous identity" : "no unique snapshot match"}` });
     } else if (selected === null) {
       const emptyZone = createChild(plane, "div", { cls: "rdin-zone" });
       emptyZone.setAttribute("data-zone", "object");
@@ -15903,7 +16068,7 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
         text: "nothing selected \u2014 query an exact id or choose an object"
       });
     }
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const node2 = graph.nodes.find((n) => n.object_id === selected);
       const obj = createChild(objectZone, "section", { cls: "rdin-group" });
@@ -15926,7 +16091,7 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
         if (node2.successor !== null) metaRow("successor", node2.successor);
       }
     }
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const linked = createChild(objectZone, "section", { cls: "rdin-group" });
       createChild(linked, "div", { cls: "rdin-label", text: "Linked objects" });
@@ -16043,7 +16208,7 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
         });
       }
     }
-    if (available && selected !== null && snapshot !== null) {
+    if (!graphSelectionUnavailable && available && selected !== null && snapshot !== null) {
       const graph = snapshot.graph;
       const unresolvedCount = graph.unresolved.filter((e) => e.source === selected || e.target === selected).length;
       const relationCount = graph.edges.filter((e) => e.source === selected || e.target === selected).length;
@@ -16664,7 +16829,12 @@ function buildRDViewRegistry() {
     commandId: "open-rd-graph-intelligence",
     commandName: "Open RD Graph Intelligence",
     ribbonIcon: "git-fork",
-    createView: (leaf, services) => new RDGraphIntelligenceView(leaf, liveDeps(services))
+    createView: (leaf, services) => new RDGraphIntelligenceView(leaf, {
+      ...liveDeps(services),
+      onSelectIdentity: ({ objectId, source }) => {
+        services.workspaceStore.setSelectedObject(objectId, source);
+      }
+    })
   });
   registry.add({
     viewType: RD_KNOWLEDGE_PANEL_VIEW_TYPE,

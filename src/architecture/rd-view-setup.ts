@@ -99,7 +99,12 @@ export function buildRDViewRegistry(): RDViewRegistry {
     commandName: "Open RD Graph Intelligence",
     ribbonIcon: "git-fork",
     createView: (leaf: WorkspaceLeaf, services: S): ItemView =>
-      new RDGraphIntelligenceView(leaf, liveDeps(services)),
+      new RDGraphIntelligenceView(leaf, {
+        ...liveDeps(services),
+        onSelectIdentity: ({ objectId, source }) => {
+          (services.workspaceStore as RDWorkspaceStore).setSelectedObject(objectId, source);
+        },
+      }),
   });
 
   registry.add({

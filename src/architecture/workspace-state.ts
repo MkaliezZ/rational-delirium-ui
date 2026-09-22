@@ -35,6 +35,7 @@ export interface RDSnapshotAvailability {
 export interface RDWorkspaceUIState {
   readonly workspaceLabel: string;
   readonly selectedObjectId: string | null;
+  readonly selectionSource: "workspace" | "graph-intelligence";
   /** UI navigation trail of visited object ids (most recent last).
    * A presentation breadcrumb — it records where the USER walked,
    * not any knowledge lineage. */
@@ -56,6 +57,7 @@ export type RDWorkspaceMode = "investigation" | "collaboration";
 const INITIAL: RDWorkspaceUIState = Object.freeze({
   workspaceLabel: "default",
   selectedObjectId: null,
+  selectionSource: "workspace",
   navigation: Object.freeze([]),
   snapshot: Object.freeze({ state: "not_loaded", note: "not loaded yet" }),
   workspaceMode: "investigation",
@@ -88,9 +90,10 @@ export class RDWorkspaceStore {
 
   /** UI pointer to the object being inspected. Setting it does not
    * read, validate, resolve or change any knowledge object. */
-  setSelectedObject(objectId: string | null): void {
+  setSelectedObject(objectId: string | null, selectionSource: RDWorkspaceUIState["selectionSource"] = "workspace"): void {
     this.update({
       selectedObjectId: objectId,
+      selectionSource,
       navigation: objectId === null
         ? this.state.navigation
         : [...this.state.navigation, objectId],
@@ -101,12 +104,13 @@ export class RDWorkspaceStore {
    * trail is exhausted. */
   back(): void {
     if (this.state.navigation.length === 0) {
-      this.update({ selectedObjectId: null });
+      this.update({ selectedObjectId: null, selectionSource: "workspace" });
       return;
     }
     const navigation = this.state.navigation.slice(0, -1);
     this.update({
       navigation,
+      selectionSource: "workspace",
       selectedObjectId: navigation.length > 0 ? navigation[navigation.length - 1] : null,
     });
   }
@@ -118,6 +122,7 @@ export class RDWorkspaceStore {
   setWorkspaceLabel(label: string): void {
     this.update({
       workspaceLabel: label,
+      selectionSource: "workspace",
       selectedObjectId: null,
       navigation: [],
     });
