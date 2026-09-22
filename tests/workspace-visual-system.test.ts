@@ -16,74 +16,93 @@ import { RDWorkspaceStore } from "../src/architecture/workspace-state";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const viewSrc = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
+const navSrc = readFileSync(join(root, "src", "views", "archive-nav-view.ts"), "utf-8");
+const inspSrc = readFileSync(join(root, "src", "views", "inspector-view.ts"), "utf-8");
 const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
 
-describe("phase1 workspace structure", () => {
-  it("renders the three-plane structure with semantic landmarks", () => {
-    expect(viewSrc).toContain('createChild(layout, "nav", { cls: "rdws-plane-left" })');
-    expect(viewSrc).toContain('createChild(layout, "aside", { cls: "rdws-plane-right" })');
-    expect(viewSrc).toContain('"rdws-plane-center"');
+describe("phase1 workspace structure (V2 real shell)", () => {
+  it("workspace view is center-only; nav and inspector are real dock leaves", () => {
+    // no internal planes remain in the workspace view
+    expect(viewSrc).not.toContain("rdws-plane-left");
+    expect(viewSrc).not.toContain("rdws-plane-right");
+    expect(viewSrc).not.toContain("rdws-planes");
+    expect(viewSrc).toContain('"rdws-center"');
     expect(viewSrc).toContain("rdws-masthead");
     expect(viewSrc).toContain("rdws-ko-title");
     expect(viewSrc).toContain("rdws-desk-title");
+    // semantic landmarks live in the dock views now
+    expect(navSrc).toContain('createChild(this.contentEl, "nav", { cls: "rd-archive-nav" })');
+    expect(inspSrc).toContain('createChild(this.contentEl, "aside", { cls: "rd-inspector" })');
+    // no plane-era CSS survives
+    expect(css).not.toContain(".rdws-plane-left");
+    expect(css).not.toContain(".rdws-plane-right");
+    expect(css).not.toContain(".rdws-planes");
+    expect(css).not.toContain("rdws-mid");
   });
 
-  it("left rail: selection group, neutral object list, surface destinations", () => {
+  it("left dock: selection group, neutral object list, surface destinations", () => {
     // object rows sorted by id (neutral order)
-    expect(viewSrc).toContain("localeCompare(b.object_id)");
+    expect(navSrc).toContain("localeCompare(b.object_id)");
     // surfaces include collaboration as first-class destination
-    expect(viewSrc).toContain('{ key: "Collaboration", mode: "collaboration" }');
-    expect(viewSrc).toContain("rdws-collab-toggle");
+    expect(navSrc).toContain('{ key: "Collaboration", mode: "collaboration" }');
+    expect(navSrc).toContain("rdan-collab-toggle");
+    // archive identity head carries the brand and the workspace label
+    expect(navSrc).toContain("Rational Delirium");
+    expect(navSrc).toContain("investigation archive ·");
   });
 
-  it("right plane: review attention + contributions from declared data only", () => {
-    expect(viewSrc).toContain('"Workspace review"');
-    expect(viewSrc).toContain("status === \"pending\"");
-    expect(viewSrc).toContain('"Recent workspace contributions"');
-    expect(viewSrc).toContain("Diagnostics");
-    expect(viewSrc).toContain("observations, not repair requests");
-    // review rows navigate read-only into collaboration
+  it("right dock: review attention + contributions from declared data only", () => {
+    expect(inspSrc).toContain('"Workspace review"');
+    expect(inspSrc).toContain("status === \"pending\"");
+    expect(inspSrc).toContain('"Recent workspace contributions"');
+    expect(inspSrc).toContain("Diagnostics");
+    expect(inspSrc).toContain("observations, not repair requests");
+    // review rows navigate read-only into the workspace collaboration
+    expect(inspSrc).toContain("openProposalInWorkspace");
     expect(viewSrc).toContain("openProposalInCollaboration");
   });
 
   it("honest unavailable snapshot state, workspace not broken", () => {
-    expect(viewSrc).toContain("snapshot unavailable — the vault still contains its knowledge");
-    expect(viewSrc).toContain("does not mean no knowledge exists");
+    expect(navSrc).toContain("snapshot unavailable — the vault still contains its knowledge");
     expect(viewSrc).toContain("workspace works without it");
+    const stateSrc = readFileSync(join(root, "src", "architecture", "workspace-state.ts"), "utf-8");
+    expect(stateSrc).toContain("does not mean no knowledge exists");
   });
 
   it("no new action controls: decision buttons remain the only write", () => {
     for (const banned of ["Run Agent", "runAgent(", "Execute(", "Automation", "autoApprove"]) {
       expect(viewSrc).not.toContain(banned);
+      expect(navSrc).not.toContain(banned);
+      expect(inspSrc).not.toContain(banned);
     }
     // the decision path is unchanged (single port)
     expect(viewSrc).toContain("recordProposalDecision");
     expect(viewSrc).toContain("recordDecision(path, decision)");
   });
 
-  it("responsive classes follow the pane-width contract", () => {
+  it("responsive classes follow the pane-width contract (narrow dossier only)", () => {
     expect(viewSrc).toContain('classList.toggle("rdws-narrow"');
-    expect(viewSrc).toContain('classList.toggle("rdws-mid"');
     expect(viewSrc).toContain("width < 700");
-    expect(viewSrc).toContain("width < 1100");
-    // right plane folds before left rail; reading surface unsqueezed
-    expect(css).toContain(".rd-workspace-shell.rdws-mid .rdws-plane-right { display: none; }");
-    expect(css).toContain(".rd-workspace-shell.rdws-narrow .rdws-plane-right { display: none; }");
+    // the internal-plane folding rules are gone with the planes;
+    // narrow now only compacts the dossier typography
+    expect(viewSrc).not.toContain("rdws-mid");
+    expect(css).toMatch(/rdws-narrow \.rdws-ko-title[\s\S]*?font-size: 26px;/);
   });
 });
 
 describe("phase1 typography contract (CSS)", () => {
   it("applies the archival scale: serif titles, mono metadata, 4px rhythm", () => {
     expect(css).toContain("--rd-font-serif:");
-    expect(css).toMatch(/\.rdws-masthead-title[\s\S]*?font-size: 28px;\s*\n\s*line-height: 36px;/);
+    // the archive identity head moved to the left dock, dock-scale serif
+    expect(css).toMatch(/\.rdan-brand-title[\s\S]*?font-family: var\(--rd-font-serif/);
     // Phase 2 raised the KO dossier title to the display scale
     expect(css).toMatch(/\.rdws-ko-title[\s\S]*?font-size: 30px;\s*\n\s*line-height: 38px;/);
     expect(css).toMatch(/\.rdws-desk-lead[\s\S]*?font-size: 16px;\s*\n\s*line-height: 26px;/);
-    expect(css).toMatch(/\.rdws-object-row-id[\s\S]*?font-size: 13px;/);
-    // center plane dominates; sides are fixed
-    expect(css).toContain(".rdws-plane-center {");
-    expect(css).toMatch(/\.rdws-plane-left[\s\S]*?flex: 0 0 240px;/);
-    expect(css).toMatch(/\.rdws-plane-right[\s\S]*?flex: 0 0 312px;/);
+    expect(css).toMatch(/\.rdan-object-row-id[\s\S]*?font-size: 13px;/);
+    // center band exists; fixed side planes are gone
+    expect(css).toContain(".rd-workspace-shell .rdws-center {");
+    expect(css).not.toContain(".rdws-plane-left");
+    expect(css).not.toContain(".rdws-plane-right");
   });
 
   it("no dashboard patterns: no KPI tiles, no big radii, no border-left walls", () => {

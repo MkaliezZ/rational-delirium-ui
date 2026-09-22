@@ -67,12 +67,13 @@ const view = (viewType: string): RDViewRegistration => ({
 /* ---------- §2 view registry ---------- */
 
 describe("v1.6.1 §2 view registry", () => {
-  it("registers six RD views with the existing command surface preserved", () => {
+  it("registers eight RD views: the existing six byte-for-byte, then the two V2 docks", () => {
     const registry = buildRDViewRegistry();
     const types = registry.registrations_().map((r) => r.viewType);
     expect(types).toEqual([
       "rd-context", "rd-investigation-dashboard", "rd-loop-workspace",
       "rd-graph-intelligence", "rd-knowledge-panel", "rd-workspace",
+      "rd-archive-nav", "rd-inspector",
     ]);
     const byCommand = new Map(registry.registrations_().map((r) => [r.commandId, r]));
     // v0.4/v1.3.1 command ids/names preserved byte-for-byte
@@ -83,6 +84,11 @@ describe("v1.6.1 §2 view registry", () => {
       .toBe("Open RD Graph Intelligence");
     expect(byCommand.get("open-rd-knowledge-panel")?.commandName).toBe("Open RD Knowledge Panel");
     expect(byCommand.get("open-rd-workspace")?.commandName).toBe("Open RD Workspace");
+    // V2 Phase A dock leaves, appended after the existing six
+    expect(byCommand.get("open-rd-archive-nav")?.commandName).toBe("Open RD Archive Navigation");
+    expect(byCommand.get("open-rd-inspector")?.commandName).toBe("Open RD Inspector");
+    expect(registry.get("rd-archive-nav")?.placement).toBe("left");
+    expect(registry.get("rd-inspector")?.placement).toBe("right");
   });
 
   it("rejects duplicate view types (no silent overwrite)", () => {
@@ -174,8 +180,8 @@ describe("v1.6.1 §3 workspace UI state", () => {
     const methods = Object.getOwnPropertyNames(proto)
       .filter((m) => m !== "constructor" && m !== "update");
     expect(methods.sort()).toEqual([
-      "back", "dispose", "getState", "setSelectedObject",
-      "setSnapshotAvailability", "setWorkspaceLabel", "subscribe",
+      "back", "dispose", "getState", "setGraphSnapshot", "setSelectedObject",
+      "setSnapshotAvailability", "setWorkspaceLabel", "setWorkspaceMode", "subscribe",
     ].sort());
     for (const banned of ["vault", "write", "modify", "delete", "promote", "adopt", "approve"]) {
       expect(methods.join(" ").toLowerCase()).not.toContain(banned);
@@ -240,14 +246,20 @@ describe("v1.6.1 §4 theme token foundation", () => {
 describe("v1.6.1 §1 workspace shell boundary", () => {
   it("shell source: no auto-open, no timers, no background service, honest placeholders", () => {
     const src = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
+    const navSrc = readFileSync(join(root, "src", "views", "archive-nav-view.ts"), "utf-8");
+    const stateSrc = readFileSync(join(root, "src", "architecture", "workspace-state.ts"), "utf-8");
     for (const banned of ["setInterval", "setTimeout", "registerInterval", "onLayoutReady"]) {
       expect(src).not.toContain(banned);
+      expect(navSrc).not.toContain(banned);
     }
     // v1.7.4-A: collaboration/agent areas are live in the workspace;
     // the honest empty state lives in the collaboration surface.
-    expect(src).toContain("rdws-collab-toggle");
+    // V2: the collaboration toggle moved to the archive-nav dock.
+    expect(navSrc).toContain("rdan-collab-toggle");
     expect(src).toContain("browser.refresh");
-    expect(src).toContain("does not mean no knowledge exists"); // missing-artifact honesty
+    // V2: the missing-artifact honesty string is published through
+    // the single shared-store path.
+    expect(stateSrc).toContain("does not mean no knowledge exists");
   });
 
   it("no schema/projector modification (contract markers intact, untouched)", () => {

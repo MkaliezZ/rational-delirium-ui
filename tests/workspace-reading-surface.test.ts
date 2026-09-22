@@ -3,21 +3,33 @@
  * declared fields only, declared-kind index, structured provenance
  * layers and relation rows, mature inspector (object + linked
  * objects + review), and the semantic ban list (no confidence, no
- * truth, no rank) held against source and rendered DOM. */
+ * truth, no rank) held against source and rendered DOM.
+ *
+ * V2 Phase A: the rail and the inspector are real dock leaves now
+ * (rd-archive-nav / rd-inspector) sharing the session store with
+ * the workspace view; the DOM assertions for them run against the
+ * dock views. Dossier, strip, layer and relation assertions stay
+ * on the workspace view. */
 
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { WorkspaceLeaf } from "obsidian";
+import type { App, WorkspaceLeaf } from "obsidian";
 import { GRAPH_SCHEMA_TAG, parseGraphSnapshot } from "../src/semantic-graph/graph-loader";
 import { renderKnowledgePanel, buildKnowledgePanelModel } from "../src/semantic-graph/knowledge-panel";
 import type { KoDetailResult, KoSourceReader } from "../src/semantic-graph/ko-detail-reader";
 import { RDWorkspaceShellView } from "../src/views/rd-workspace-view";
+import { RDArchiveNavView } from "../src/views/archive-nav-view";
+import { RDInspectorView } from "../src/views/inspector-view";
 import { RDWorkspaceStore } from "../src/architecture/workspace-state";
+import { RDShellController } from "../src/architecture/rd-shell-controller";
+import { CollaborationBrowser } from "../src/collaboration/collaboration-surface";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const viewSrc = readFileSync(join(root, "src", "views", "rd-workspace-view.ts"), "utf-8");
+const navSrc = readFileSync(join(root, "src", "views", "archive-nav-view.ts"), "utf-8");
+const inspSrc = readFileSync(join(root, "src", "views", "inspector-view.ts"), "utf-8");
 const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
 
 const GRAPH_JSON = JSON.stringify({
@@ -68,24 +80,58 @@ const sourceReader: KoSourceReader = {
 
 const emptyCollab = { readDir: async () => ({ state: "missing" as const }) };
 
-const views: RDWorkspaceShellView[] = [];
+/** Minimal shell-side app fake: the controller only needs the leaf
+ * bookkeeping surface. */
+const fakeApp = {
+  workspace: {
+    getLeavesOfType: () => [],
+    ensureSideLeaf: async () => ({}),
+    detachLeavesOfType: () => {},
+    revealLeaf: async () => {},
+  },
+} as unknown as App;
+
+interface ShellViews {
+  view: RDWorkspaceShellView;
+  nav: RDArchiveNavView;
+  inspector: RDInspectorView;
+}
+
+const shells: ShellViews[] = [];
 afterEach(async () => {
-  for (const view of views.splice(0)) await view.onClose();
+  for (const shell of shells.splice(0)) {
+    await shell.view.onClose();
+    await shell.nav.onClose();
+    await shell.inspector.onClose();
+  }
   document.body.replaceChildren();
 });
 
-async function openWorkspace(selected: string | null): Promise<RDWorkspaceShellView> {
+async function openWorkspace(selected: string | null): Promise<ShellViews> {
   const store = new RDWorkspaceStore();
   if (selected !== null) store.setSelectedObject(selected);
+  const source = { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) };
+  const browser = new CollaborationBrowser();
+  const shellController = new RDShellController(fakeApp, store);
   const view = new RDWorkspaceShellView({} as WorkspaceLeaf, {
     store,
-    source: { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) },
+    source,
     sourceReader,
     collaborationSource: emptyCollab,
     openView: async () => {},
+    browser,
   });
-  views.push(view);
+  const nav = new RDArchiveNavView({} as WorkspaceLeaf, {
+    store, source, openView: async () => {},
+  });
+  const inspector = new RDInspectorView({} as WorkspaceLeaf, {
+    store, source, browser, shellController,
+  });
+  const shell: ShellViews = { view, nav, inspector };
+  shells.push(shell);
   await view.onOpen();
+  await nav.onOpen();
+  await inspector.onOpen();
   await vi.waitFor(
     () => {
       // with a selection the reading plane is a dossier (present or
@@ -98,12 +144,12 @@ async function openWorkspace(selected: string | null): Promise<RDWorkspaceShellV
     },
     { timeout: 3000 },
   );
-  return view;
+  return shell;
 }
 
 describe("phase2 dossier header", () => {
   it("renders eyebrow → serif title → identity line → identity strip", async () => {
-    const view = await openWorkspace("FICT-CASE-0001");
+    const { view } = await openWorkspace("FICT-CASE-0001");
     await vi.waitFor(() => {
       expect(view.contentEl.textContent).toContain("resolved · current-source read");
     });
@@ -129,7 +175,7 @@ describe("phase2 dossier header", () => {
   });
 
   it("identity strip degrades honestly when no declaring note exists", async () => {
-    const view = await openWorkspace("FICT-CASE-0002");
+    const { view } = await openWorkspace("FICT-CASE-0002");
     const strip = view.contentEl.querySelector(".rdws-identity-strip");
     const sourceItem = [...strip!.querySelectorAll(".rdws-strip-item")]
       .find((el) => el.querySelector("dt")?.textContent === "source");
@@ -138,7 +184,7 @@ describe("phase2 dossier header", () => {
   });
 
   it("a selection absent from the snapshot shows honest unavailability", async () => {
-    const view = await openWorkspace("FICT-CASE-9999");
+    const { view } = await openWorkspace("FICT-CASE-9999");
     expect(view.contentEl.querySelector(".rdws-dossier-eyebrow")?.textContent)
       .toContain("not in snapshot");
     const values = [...view.contentEl.querySelectorAll(".rdws-strip-item dd")]
@@ -148,37 +194,52 @@ describe("phase2 dossier header", () => {
   });
 });
 
-describe("phase2 declared-kind archive index", () => {
+describe("phase2 declared-kind archive index (left dock)", () => {
   it("groups by declared kind only; neutral kind and id order; real counts", async () => {
-    const view = await openWorkspace(null);
-    const kinds = [...view.contentEl.querySelectorAll(".rdws-nav-kind-name")]
+    const { nav } = await openWorkspace(null);
+    const kinds = [...nav.contentEl.querySelectorAll(".rdan-kind-name")]
       .map((el) => el.textContent);
     expect(kinds).toEqual(["concept", "hypothesis"]); // alphabetical, declared kinds only
-    const counts = [...view.contentEl.querySelectorAll(".rdws-nav-kind-count")]
+    const counts = [...nav.contentEl.querySelectorAll(".rdan-kind-count")]
       .map((el) => el.textContent);
     expect(counts).toEqual(["· 1", "· 2"]);
     // kind groups first, ids in neutral order within each group
-    const order = [...view.contentEl.querySelectorAll(".rdws-object-row-id")]
+    const order = [...nav.contentEl.querySelectorAll(".rdan-object-row-id")]
       .map((el) => el.textContent);
     expect(order).toEqual(["FICT-CASE-0002", "FICT-CASE-0001", "FICT-CASE-0003"]);
   });
+
+  it("object rows carry the same aria contract and select through the shared store", async () => {
+    const { view, nav } = await openWorkspace(null);
+    const row = nav.contentEl
+      .querySelector<HTMLButtonElement>('.rdan-object-row[aria-label="inspect FICT-CASE-0001"]')!;
+    expect(row).not.toBeNull();
+    row.click();
+    await vi.waitFor(() => {
+      expect(view.contentEl.querySelector("h2.rdws-ko-title")?.textContent)
+        .toBe("The corridor encodes its own history");
+      expect(nav.contentEl
+        .querySelector('.rdan-object-row[aria-label="inspect FICT-CASE-0001"]')
+        ?.getAttribute("aria-pressed")).toBe("true");
+    });
+  });
 });
 
-describe("phase2 inspector", () => {
+describe("phase2 inspector (right dock)", () => {
   it("shows Object metadata and Linked objects from declared graph data", async () => {
-    const view = await openWorkspace("FICT-CASE-0001");
-    const groups = [...view.contentEl.querySelectorAll(".rdws-plane-right .rdws-insp-group")];
-    const labels = groups.map((g) => g.querySelector(".rdws-insp-label")?.textContent);
+    const { inspector } = await openWorkspace("FICT-CASE-0001");
+    const groups = [...inspector.contentEl.querySelectorAll(".rd-inspector .rdin-group")];
+    const labels = groups.map((g) => g.querySelector(".rdin-label")?.textContent);
     expect(labels).toEqual([
       "Object", "Linked objects", "Workspace review", "Recent workspace contributions",
       "Diagnostics",
     ]);
     // phase2.1 hierarchy: object context zone, then the subordinate
     // workspace zone; diagnostics quiet at the bottom
-    const zones = [...view.contentEl.querySelectorAll(".rdws-insp-zone")];
+    const zones = [...inspector.contentEl.querySelectorAll(".rdin-zone")];
     expect(zones.map((z) => z.getAttribute("data-zone"))).toEqual(["object", "workspace"]);
-    expect(zones[0].querySelectorAll(".rdws-insp-group").length).toBe(2);
-    expect(zones[1].querySelectorAll(".rdws-insp-group").length).toBe(2);
+    expect(zones[0].querySelectorAll(".rdin-group").length).toBe(2);
+    expect(zones[1].querySelectorAll(".rdin-group").length).toBe(2);
 
     const objectGroup = groups[0];
     expect(objectGroup.textContent).toContain("FICT-CASE-0001");
@@ -186,18 +247,19 @@ describe("phase2 inspector", () => {
     expect(objectGroup.textContent).toContain("FICT-CASE-0003");
 
     const linked = groups[1];
-    const rows = [...linked.querySelectorAll(".rdws-link-row")];
+    const rows = [...linked.querySelectorAll(".rdin-link-row")];
     expect(rows.length).toBe(3); // supports + contradicts + unresolved derived_from
     const contradicts = rows.find((r) => r.getAttribute("data-relation") === "contradicts");
-    expect(contradicts?.querySelector(".rdws-link-type")?.textContent).toContain("← contradicts");
-    const unresolvedRow = rows.find((r) => r.classList.contains("rdws-link-unresolved"));
+    expect(contradicts?.querySelector(".rdin-link-type")?.textContent).toContain("← contradicts");
+    const unresolvedRow = rows.find((r) => r.classList.contains("rdin-link-unresolved"));
     expect(unresolvedRow?.tagName).toBe("DIV"); // unresolved targets never navigate
+    expect(unresolvedRow?.getAttribute("aria-disabled")).toBe("true");
     expect(unresolvedRow?.textContent).toContain("unresolved");
   });
 
-  it("linked rows navigate by exact object_id", async () => {
-    const view = await openWorkspace("FICT-CASE-0001");
-    const row = [...view.contentEl.querySelectorAll<HTMLButtonElement>(".rdws-link-row")]
+  it("linked rows navigate by exact object_id through the shared store", async () => {
+    const { view, inspector } = await openWorkspace("FICT-CASE-0001");
+    const row = [...inspector.contentEl.querySelectorAll<HTMLButtonElement>(".rdin-link-row")]
       .find((el) => el.getAttribute("aria-label") === "inspect FICT-CASE-0002")!;
     row.click();
     await vi.waitFor(() => {
@@ -207,18 +269,27 @@ describe("phase2 inspector", () => {
   });
 
   it("Human review stays separate from object knowledge state", async () => {
-    const view = await openWorkspace("FICT-CASE-0001");
+    const { inspector } = await openWorkspace("FICT-CASE-0001");
     // the collaboration model lands asynchronously on open and each
     // landing rebuilds the inspector — re-query the live node and
     // wait for the settled empty state rather than the transient
     // "reading proposal records…" placeholder
     const reviewNow = () =>
-      [...view.contentEl.querySelectorAll(".rdws-insp-group")]
-        .find((g) => g.querySelector(".rdws-insp-label")?.textContent === "Workspace review");
+      [...inspector.contentEl.querySelectorAll(".rdin-group")]
+        .find((g) => g.querySelector(".rdin-label")?.textContent === "Workspace review");
     expect(reviewNow()).toBeDefined();
     await vi.waitFor(() => {
       expect(reviewNow()?.textContent).toContain("No proposal records found.");
     }, { timeout: 3000 });
+  });
+
+  it("honest empty state when nothing is selected (no fabricated object)", async () => {
+    const { inspector } = await openWorkspace(null);
+    const objectZone = inspector.contentEl.querySelector('.rdin-zone[data-zone="object"]');
+    expect(objectZone?.textContent).toContain("nothing selected");
+    // workspace zone still renders; no knowledge-object metadata invented
+    expect(inspector.contentEl.querySelector('.rdin-zone[data-zone="workspace"]')).not.toBeNull();
+    expect(inspector.contentEl.textContent).not.toContain("predecessor");
   });
 });
 
@@ -266,16 +337,20 @@ describe("phase2 structured panel sections", () => {
 });
 
 describe("phase2 semantic ban list and CSS contract", () => {
-  it("no confidence/truth/rank vocabulary in the surface source", () => {
+  it("no confidence/truth/rank vocabulary in the surface sources", () => {
     const banned = ["confidence", "truth score", "importance", "correctness", "AI judge", "autoApprove"];
-    for (const b of banned) expect(viewSrc.toLowerCase()).not.toContain(b.toLowerCase());
+    for (const src of [viewSrc, navSrc, inspSrc]) {
+      for (const b of banned) expect(src.toLowerCase()).not.toContain(b.toLowerCase());
+    }
   });
 
   it("rendered surface carries no scoring vocabulary", async () => {
-    const view = await openWorkspace("FICT-CASE-0001");
-    const text = (view.contentEl.textContent ?? "").toLowerCase();
-    for (const b of ["confidence", "truth score", "importance", "correctness", "verified-true"]) {
-      expect(text).not.toContain(b);
+    const { view, nav, inspector } = await openWorkspace("FICT-CASE-0001");
+    for (const el of [view.contentEl, nav.contentEl, inspector.contentEl]) {
+      const text = (el.textContent ?? "").toLowerCase();
+      for (const b of ["confidence", "truth score", "importance", "correctness", "verified-true"]) {
+        expect(text).not.toContain(b);
+      }
     }
   });
 
@@ -285,34 +360,49 @@ describe("phase2 semantic ban list and CSS contract", () => {
     expect(p2).toContain(".rdws-strip-item:last-child");
     expect(p2).toMatch(/\.rdkp-layer\[data-state="available"\] \.rdkp-layer-text[\s\S]*?font-style: italic;/);
     expect(p2).toContain('.rdkp-relation-row[data-relation="contradicts"] .rdkp-rel-type');
-    expect(p2).toContain('.rdws-link-row[data-relation="contradicts"] .rdws-link-type');
-    expect(p2).toContain('content: "§"');
+    // V2: the inspector linked-row accent moved to the dock classes
+    expect(p2).toContain('.rdin-link-row[data-relation="contradicts"] .rdin-link-type');
+    // V2 Phase B: the uniform § section marker yielded to restrained
+    // geometric line-markers — one per dossier section, CSS-only
+    // pseudo-elements (aria-hidden by construction), always paired
+    // with the pinned text label. Equivalent marker assertion: every
+    // dossier section and every provenance layer carries its mark.
+    expect(p2).toContain('.rdkp-provenance > .rdkp-section-title::before');
+    expect(p2).toContain('.rdkp-relations > .rdkp-section-title::before');
+    expect(p2).toContain('.rdkp-lineage > .rdkp-section-title::before');
+    expect(p2).toContain('.rdkp-record > .rdkp-section-title::before');
+    expect(p2).toContain('.rdkp-diagnostics > .rdkp-section-title::before');
+    expect(p2).toContain('.rdkp-layer[data-layer="observation"] .rdkp-layer-marker::before');
+    expect(p2).toContain('.rdkp-layer[data-layer="evidence"] .rdkp-layer-marker::before');
+    expect(p2).toContain('.rdkp-layer[data-layer="inference"] .rdkp-layer-marker::before');
+    expect(p2).toContain('.rdkp-layer[data-layer="conclusion"] .rdkp-layer-marker::before');
     expect(p2).toMatch(/rdws-narrow \.rdws-ko-title[\s\S]*?font-size: 26px;/);
     // no scoring visuals: no gradients, no shadows
     expect(p2).not.toContain("linear-gradient");
     expect(p2).not.toContain("box-shadow");
   });
 
-  it("phase2.1 CSS: left rows are two-line flex, kinds divide, composition is bounded", () => {
+  it("phase2.1 CSS (V2 dock surfaces): left rows are two-line flex, kinds divide, composition is bounded", () => {
     const p21 = css.slice(css.indexOf("RD Product Surface Refactor Phase 2.1"));
     // deliberate row structure: id/lifecycle baseline, title own line
-    expect(p21).toMatch(/\.rdws-object-row \{[\s\S]*?display: flex;/);
-    expect(p21).toMatch(/\.rdws-object-row-meta \{[\s\S]*?flex: 0 0 auto;/);
-    expect(p21).toMatch(/\.rdws-object-row-title \{[\s\S]*?flex: 1 1 100%;/);
+    expect(p21).toMatch(/\.rdan-object-row \{[\s\S]*?display: flex;/);
+    expect(p21).toMatch(/\.rdan-object-row-meta \{[\s\S]*?flex: 0 0 auto;/);
+    expect(p21).toMatch(/\.rdan-object-row-title \{[\s\S]*?flex: 1 1 100%;/);
     // kind headings are index dividers with breathing room
-    expect(p21).toMatch(/\.rdws-nav-kind \{[\s\S]*?border-top: 1px solid/);
+    expect(p21).toMatch(/\.rdan-kind \{[\s\S]*?border-top: 1px solid/);
     // ultra-wide composition is bounded and centered on all bands
-    for (const sel of [".rdws-masthead,", ".rdws-statusline,", ".rdws-planes"]) {
+    for (const sel of [".rdws-masthead,", ".rdws-statusline,", ".rdws-center"]) {
       expect(p21).toContain(sel);
     }
     expect(p21).toMatch(/max-width: 1720px;/);
     expect(p21).toMatch(/margin: 0 auto;/);
     // inspector hierarchy zones exist and workspace is subordinate
     expect(p21).toContain('[data-zone="workspace"]');
-    // narrow economy: bounded nav block, compact letterhead,
-    // reading-first order (dossier leads the stacked layout)
-    expect(p21).toMatch(/rdws-narrow \.rdws-plane-left \{[\s\S]*?max-height: 26vh;/);
-    expect(p21).toMatch(/rdws-narrow \.rdws-plane-center \{ order: -1; \}/);
-    expect(p21).toMatch(/rdws-narrow \.rdws-masthead-title[\s\S]*?font-size: 22px;/);
+    // narrow economy: compact bar and statusline; dossier typography
+    // stays compact (the internal planes and their folding rules
+    // are gone with the V1 architecture)
+    expect(p21).toMatch(/rdws-narrow \.rdws-masthead[\s\S]*?padding: 8px 14px;/);
+    expect(p21).toMatch(/rdws-narrow \.rdws-statusline[\s\S]*?font-size: 12px;/);
+    expect(css).toMatch(/rdws-narrow \.rdws-ko-title[\s\S]*?font-size: 26px;/);
   });
 });

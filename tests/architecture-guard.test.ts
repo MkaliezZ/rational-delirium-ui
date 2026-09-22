@@ -156,7 +156,7 @@ describe("v0.4.4 graph intelligence narrow guard", () => {
 });
 
 describe("v0.4.2 CSS scope isolation (§30)", () => {
-  it("every stylesheet selector is scoped under .rd-context, .rd-investigation, .rd-loop, .rd-graph, .rd-knowledge-panel or the theme attribute", () => {
+  it("every stylesheet selector is scoped under a known RD root or the theme attribute", () => {
     const css = ["styles.css", "tokens-rational-archive.css"]
       .map((f) => readFileSync(join(root, "styles", f), "utf-8"))
       .join("\n");
@@ -182,7 +182,12 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
           s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
             || s.startsWith(".rd-loop") || s.startsWith(".rd-graph")
             || s.startsWith(".rd-knowledge-panel")
+            || /^\.rd-ko-surface(?:\s|$)/.test(s)
             || s.startsWith(".rd-workspace")
+            // V2 Phase A: the two dock leaves and the shell body scope
+            || s.startsWith(".rd-archive-nav")
+            || s.startsWith(".rd-inspector")
+            || s.startsWith("body.rd-rational-archive-shell")
             || s.startsWith("[data-rd-theme"),
           `unscoped selector: ${s}`,
         ).toBe(true);

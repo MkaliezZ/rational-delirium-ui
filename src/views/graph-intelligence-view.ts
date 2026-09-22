@@ -4,7 +4,7 @@
  * the selection on non-RD activity; second hop is explicitly expanded
  * per resolved neighbor and reset when the root changes; native Local
  * Graph handoff goes through the single NavigationPort boundary. No
- * renderer, no canvas, no graph DOM. */
+ * external graph renderer or native graph DOM access. */
 
 import { ItemView, type WorkspaceLeaf } from "obsidian";
 import type { NavigationPort } from "../platform/navigation-core";
@@ -17,6 +17,13 @@ import {
   type GraphProvenance,
 } from "../graph/graph-projection";
 import { createChild, emptyEl } from "./dom-helpers";
+import { renderGraphSurface } from "./graph-presentation";
+
+let graphViewSequence = 0;
+export interface GraphSelectionIdentity {
+  readonly objectId: string | null;
+  readonly source: "graph-intelligence";
+}
 
 export const RD_GRAPH_VIEW_TYPE = "rd-graph-intelligence";
 
@@ -26,10 +33,14 @@ export interface GraphDeps {
   readonly onActiveFile: (cb: (path: string | null) => void) => () => void;
   readonly activeFileProvider?: () => string | null;
   readonly navigation: NavigationPort;
+  /** Identity only: no graph data crosses into the workspace. */
+  readonly onSelectIdentity?: (identity: GraphSelectionIdentity) => void;
 }
 
 export class RDGraphIntelligenceView extends ItemView {
   private readonly deps: GraphDeps;
+  private active = false;
+  private readonly markerId = `rdg-arrow-${++graphViewSequence}`;
   private unsubscribeIndex: (() => void) | null = null;
   private unsubscribeActive: (() => void) | null = null;
   private container: HTMLElement | null = null;
@@ -56,6 +67,9 @@ export class RDGraphIntelligenceView extends ItemView {
   getIcon(): string { return "git-fork"; }
 
   async onOpen(): Promise<void> {
+    this.unsubscribeIndex?.();
+    this.unsubscribeActive?.();
+    this.active = true;
     emptyEl(this.contentEl);
     this.container = createChild(this.contentEl, "div", { cls: "rd-graph" });
     this.unsubscribeIndex = this.deps.onIndexCommit(() => this.onIndexChanged());
@@ -67,6 +81,9 @@ export class RDGraphIntelligenceView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.active = false;
+    this.resetNativeGraphState();
+    this.container = null;
     this.unsubscribeIndex?.();
     this.unsubscribeActive?.();
     this.unsubscribeIndex = null;
@@ -83,6 +100,12 @@ export class RDGraphIntelligenceView extends ItemView {
     }
     this.selectedPath = path;
     this.render();
+    if (this.active) {
+      this.deps.onSelectIdentity?.({
+        objectId: path === null ? null : this.deps.index.objectAt(path)?.id ?? null,
+        source: "graph-intelligence",
+      });
+    }
   }
 
   get selected(): string | null { return this.selectedPath; }
@@ -132,41 +155,32 @@ export class RDGraphIntelligenceView extends ItemView {
 
   render(): void {
     const shell = this.container;
-    if (shell === null) return;
+    if (!this.active || shell === null) return;
+    const previousViewport = shell.querySelector<HTMLElement>(".rdg-map-viewport");
+    const previousRoot = shell.querySelector<HTMLElement>('.rdg-map-node[aria-pressed="true"]')?.dataset.objectPath;
+    const previousScroll = previousViewport === null ? null
+      : { left: previousViewport.scrollLeft, top: previousViewport.scrollTop };
     emptyEl(shell);
 
     const data = buildGraphProjection(this.deps.index, this.selectedPath);
 
-    // GI-02: after a disclosure redraw, restore focus to the toggle
-    // that caused it (matched by data-attribute property comparison).
-    const restoreFocus = this.focusRestoreNeighbor;
-    this.focusRestoreNeighbor = null;
-    if (restoreFocus !== null) {
-      window.setTimeout(() => {
-        for (const toggle of this.container?.querySelectorAll<HTMLButtonElement>(
-          ".rdg-hop-toggle",
-        ) ?? []) {
-          if (toggle.dataset.neighborPath === restoreFocus) {
-            toggle.focus();
-            return;
-          }
-        }
-      }, 0);
-    }
-
     const head = createChild(shell, "div", { cls: "rdg-head" });
-    createChild(head, "div", { cls: "rdg-title", text: "Graph Intelligence" });
+    createChild(head, "div", { cls: "rdg-eyebrow", text: "RATIONAL ARCHIVE / RELATIONS" });
+    createChild(head, "h2", { cls: "rdg-title", text: "Graph Intelligence" });
+    createChild(head, "p", { cls: "rdg-intro", text:
+      "Explore declared connections. Selection is a reading focus — not importance, confidence or approval." });
 
     if (data.indexState === "INDEXING") {
-      createChild(shell, "div", { cls: "rdg-state", text: "Indexing archive…" });
+      createChild(shell, "div", { cls: "rdg-state", text: "Indexing archive… Graph loading." });
       return;
     }
     if (data.indexState === "ERROR") {
-      createChild(shell, "div", { cls: "rdg-state rdg-error", text: "Index unavailable." });
+      createChild(shell, "div", { cls: "rdg-state rdg-error", text: "Index unavailable. Graph unavailable." });
       return;
     }
 
     if (data.phase !== "READY" || data.selectedObject === null) {
+      createChild(shell, "div", { cls: "rdg-state", text: data.phase === "NO_SUCH_OBJECT" ? "Selected object unavailable in the current index." : "No object selected. Choose a declared object to explore." });
       const section = this.section(shell, "RD Objects");
       if (data.selectableObjects.length === 0) {
         createChild(shell, "div", { cls: "rdg-state", text: "No RD object selected." });
@@ -185,11 +199,39 @@ export class RDGraphIntelligenceView extends ItemView {
     }
 
     this.renderIdentity(shell, data.selectedObject);
+    renderGraphSurface(shell, data, (path) => this.deps.index.objectAt(path), (path) => {
+      this.selectObject(path);
+      // Explicit node selection retains keyboard focus after the redraw.
+      for (const button of shell.querySelectorAll<HTMLButtonElement>(".rdg-map-node")) {
+        if (button.dataset.objectPath === path) { button.focus({ preventScroll: true }); break; }
+      }
+    }, this.markerId);
+    const viewport = shell.querySelector<HTMLElement>(".rdg-map-viewport");
+    const selectedNode = shell.querySelector<HTMLElement>('.rdg-map-node[aria-pressed="true"]');
+    if (viewport !== null && selectedNode !== null) {
+      // A narrow Obsidian leaf starts at the reading focus, not an empty
+      // side of the field. Index refreshes preserve the user's exploration.
+      if (previousRoot === data.selectedObject.path && previousScroll !== null) {
+        viewport.scrollLeft = previousScroll.left;
+        viewport.scrollTop = previousScroll.top;
+      } else {
+        viewport.scrollLeft = Math.max(0, selectedNode.offsetLeft + selectedNode.offsetWidth / 2 - viewport.clientWidth / 2);
+        viewport.scrollTop = Math.max(0, selectedNode.offsetTop + selectedNode.offsetHeight / 2 - viewport.clientHeight / 2);
+      }
+    }
     this.renderFirstHop(shell, data);
     if (this.expandedNeighbors.size > 0) {
       this.renderSecondHop(shell, data.selectedObject.path);
     }
     this.renderNativeGraph(shell, data.selectedObject.path);
+    // Restore only the disclosure control explicitly activated by the user.
+    const restoreFocus = this.focusRestoreNeighbor;
+    this.focusRestoreNeighbor = null;
+    if (restoreFocus !== null) {
+      for (const toggle of shell.querySelectorAll<HTMLButtonElement>(".rdg-hop-toggle")) {
+        if (toggle.dataset.neighborPath === restoreFocus) { toggle.focus({ preventScroll: true }); break; }
+      }
+    }
   }
 
   /** §6: canonical identity fields only. */
@@ -337,14 +379,14 @@ export class RDGraphIntelligenceView extends ItemView {
       const generation = this.nativeGraphGeneration;
       const rootAtClick = this.selectedPath;
       if (opener === undefined) {
-        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
+        if (!this.active || generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) return;
         this.nativeGraphState = "UNAVAILABLE";
         this.nativeGraphRoot = rootAtClick;
         this.render();
         return;
       }
       void opener.call(this.deps.navigation, path).then((result) => {
-        if (generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
+        if (!this.active || generation !== this.nativeGraphGeneration || rootAtClick !== this.selectedPath) {
           return; // stale: root changed while the request was in flight
         }
         this.nativeGraphState = result;

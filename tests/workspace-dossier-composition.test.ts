@@ -10,15 +10,29 @@ import { describe, expect, it, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { WorkspaceLeaf } from "obsidian";
+import type { App, WorkspaceLeaf } from "obsidian";
 import { GRAPH_SCHEMA_TAG, parseGraphSnapshot } from "../src/semantic-graph/graph-loader";
 import { buildKnowledgePanelModel, renderKnowledgePanel } from "../src/semantic-graph/knowledge-panel";
 import type { KoDetailResult, KoSourceReader } from "../src/semantic-graph/ko-detail-reader";
 import { RDWorkspaceShellView } from "../src/views/rd-workspace-view";
+import { RDInspectorView } from "../src/views/inspector-view";
 import { RDWorkspaceStore } from "../src/architecture/workspace-state";
+import { RDShellController } from "../src/architecture/rd-shell-controller";
+import { CollaborationBrowser } from "../src/collaboration/collaboration-surface";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const css = readFileSync(join(root, "styles", "styles.css"), "utf-8");
+
+/** Minimal shell-side app fake: the controller only needs the leaf
+ * bookkeeping surface. */
+const fakeApp = {
+  workspace: {
+    getLeavesOfType: () => [],
+    ensureSideLeaf: async () => ({}),
+    detachLeavesOfType: () => {},
+    revealLeaf: async () => {},
+  },
+} as unknown as App;
 
 const GRAPH_JSON = JSON.stringify({
   schema: GRAPH_SCHEMA_TAG,
@@ -157,44 +171,57 @@ describe("phase2.2 composed dossier content", () => {
   });
 });
 
-describe("phase2.2 left-nav height ownership (CSS contract)", () => {
+describe("phase2.2 row height ownership (CSS contract)", () => {
   it("RD row buttons set height:auto / min-height:0 against the fixed host button height", () => {
     const p22 = css.slice(css.indexOf("RD Product Surface Refactor Phase 2.2"));
-    expect(p22).toMatch(/\.rdws-object-row,[\s\S]*?\.rdws-surface-row,[\s\S]*?height: auto;/);
+    // V2: the same contract, now on the dock-leaf row classes
+    expect(p22).toMatch(/\.rdan-object-row,[\s\S]*?\.rdan-surface-row,[\s\S]*?height: auto;/);
+    expect(p22).toMatch(/\.rdin-link-row,[\s\S]*?height: auto;/);
     expect(p22).toMatch(/\.rd-knowledge-panel \.rdkp-relation-row,[\s\S]*?min-height: 0;/);
   });
 
-  it("phase2.1 gains stay locked: zones, 1720 composition, narrow reading-first", () => {
+  it("phase2.1 gains stay locked: zones, 1720 composition, narrow dossier typography", () => {
     expect(css).toContain('[data-zone="workspace"]');
     expect(css).toMatch(/max-width: 1720px;/);
-    expect(css).toMatch(/rdws-narrow \.rdws-plane-center \{ order: -1; \}/);
-    expect(css).toMatch(/rdws-narrow \.rdws-plane-left \{[\s\S]*?max-height: 26vh;/);
+    // narrow is dossier typography now — the internal plane stacking
+    // order rules are gone with the V1 architecture
+    expect(css).toMatch(/rdws-narrow \.rdws-ko-title[\s\S]*?font-size: 26px;/);
+    expect(css).not.toContain("rdws-plane-left");
+    expect(css).not.toContain("rdws-plane-center");
   });
 });
 
 describe("phase2.2 workspace integration", () => {
-  const views: RDWorkspaceShellView[] = [];
+  const views: Array<{ onClose(): Promise<void> }> = [];
   afterEach(async () => {
     for (const view of views.splice(0)) await view.onClose();
     document.body.replaceChildren();
   });
 
-  it("inspector zones preserved under the composed dossier", async () => {
+  it("inspector zones preserved under the composed dossier (right dock)", async () => {
     const store = new RDWorkspaceStore();
     store.setSelectedObject("ko-20260921-0001");
+    const source = { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) };
+    const browser = new CollaborationBrowser();
+    const shellController = new RDShellController(fakeApp, store);
     const view = new RDWorkspaceShellView({} as WorkspaceLeaf, {
       store,
-      source: { read: async () => ({ state: "available" as const, text: GRAPH_JSON }) },
+      source,
       sourceReader: reader,
       collaborationSource: { readDir: async () => ({ state: "missing" as const }) },
       openView: async () => {},
+      browser,
     });
-    views.push(view);
+    const inspector = new RDInspectorView({} as WorkspaceLeaf, {
+      store, source, browser, shellController,
+    });
+    views.push(view, inspector);
     await view.onOpen();
+    await inspector.onOpen();
     await vi.waitFor(() => {
       expect(view.contentEl.textContent).toContain("Declared observation text.");
     }, { timeout: 3000 });
-    const zones = [...view.contentEl.querySelectorAll(".rdws-insp-zone")];
+    const zones = [...inspector.contentEl.querySelectorAll(".rdin-zone")];
     expect(zones.map((z) => z.getAttribute("data-zone"))).toEqual(["object", "workspace"]);
     // composed: no duplicated panel head inside the dossier
     expect(view.contentEl.querySelector(".rdws-reading .rdkp-head")).toBeNull();

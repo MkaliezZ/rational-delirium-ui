@@ -72,7 +72,15 @@ describe("read-only and dependency boundary", () => {
     const files = allFiles(join(root, "src"));
     for (const file of files) {
       if (!file.endsWith(".ts")) continue;
-      const text = readFileSync(file, "utf8");
+      let text = readFileSync(file, "utf8");
+      // SVG's namespace identifier is not a network endpoint. Exempt only
+      // this exact constant declaration; all other URL/API guards stay active.
+      if (file === join(root, "src/views/graph-presentation.ts")) {
+        const namespace = 'const NS = "http://www.w3.org/2000/svg";';
+        expect(text.split(namespace)).toHaveLength(2);
+        expect(text).not.toMatch(/\b(fetch|XMLHttpRequest|WebSocket|requestUrl)\b/);
+        text = text.replace(namespace, "");
+      }
       for (const [re, label] of forbidden) {
         // main.ts legitimately wires Obsidian events; it must still
         // avoid all of the above except none of them appear there.
