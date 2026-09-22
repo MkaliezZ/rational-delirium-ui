@@ -16391,8 +16391,9 @@ function renderKoSurface(host, input) {
   createChild(host, "h2", { cls: "rdko-title", text: fm.title ?? "Title not declared" });
   const identity = createChild(host, "dl", { cls: "rdko-identity" });
   const field = (parent, key, value) => {
-    createChild(parent, "dt", { text: key });
-    createChild(parent, "dd", { text: value ?? "not declared" });
+    const row = createChild(parent, "div", { cls: "rdko-field" });
+    createChild(row, "dt", { text: key });
+    createChild(row, "dd", { text: value ?? "not declared" });
   };
   field(identity, "object_id", fm.object_id);
   field(identity, "kind", fm.kind);
@@ -16409,8 +16410,11 @@ function renderKoSurface(host, input) {
     const details = createChild(sections, "details", { cls: "rdko-section" });
     details.dataset.section = key;
     details.open = expanded.has(key);
-    const summary = createChild(details, "summary", { text: title });
+    const summary = createChild(details, "summary");
     summary.dataset.focusKey = key;
+    const [label, caption] = title.split(" \xB7 ");
+    createChild(summary, "span", { cls: "rdko-section-label", text: label });
+    createChild(summary, "span", { cls: "rdko-section-caption", text: ` \xB7 ${caption}` });
     return createChild(details, "div", { cls: "rdko-section-body" });
   };
   const provenance = section3("provenance", "Provenance \xB7 source declarations");
