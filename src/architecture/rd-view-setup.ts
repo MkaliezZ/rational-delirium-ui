@@ -226,7 +226,14 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
   plugin.register(() => collaborationBrowser.dispose());
   // V2-05: the KO leaf presentation marker owner — one controller,
   // plugin-scoped listeners, markers stripped on unload.
-  const koLeafTheme = new RDKoLeafThemeController(plugin);
+  const koLeafTheme = new RDKoLeafThemeController(plugin, {
+    store: workspaceStore,
+    inspect: (objectId) => {
+      workspaceStore.setSelectedObject(objectId);
+      const inspector = registry.get(RD_INSPECTOR_VIEW_TYPE);
+      if (inspector !== undefined) void activateRDView(plugin, inspector);
+    },
+  });
   plugin.register(() => koLeafTheme.dispose());
   koLeafTheme.start();
   const openView = async (viewType: string): Promise<void> => {

@@ -1,4 +1,4 @@
-/** V2-05 — RD Knowledge Object leaf presentation marker.
+/** V2-05 — RD Knowledge Object leaf presentation marker and native companion.
  *
  * The Rational Archive shell restyles the app frame, but a REAL RD
  * Knowledge Object opened in an ordinary markdown leaf must also
@@ -24,7 +24,9 @@
  * layout-change, vault modify) so plugin unload removes them; the
  * dispose path (plugin.register) strips every marker. Event-driven
  * only — no timers, no polling, no layout resets, no leaf
- * recreation. Async cachedRead completions are guarded by a
+ * recreation. The companion reuses the same cachedRead and parsed fields;
+ * snapshot changes only rerender the presentation, without another read.
+ * Async cachedRead completions are guarded by a
  * per-leaf generation token (the V2-02 dock guard pattern) so a
  * late read can never mis-mark a leaf whose file changed
  * meanwhile.
@@ -34,7 +36,11 @@ import type { MarkdownView, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 import {
   extractFrontmatterBlock,
   parseKoFrontmatter,
+  type KoFrontmatter,
 } from "../semantic-graph/ko-detail-reader";
+
+import type { RDWorkspaceStore } from "./workspace-state";
+import { renderKoSurface } from "../views/ko-surface";
 
 /** Presentation marker applied to a KO markdown leaf's view
  * container (`leaf.view.containerEl`). Styling gates on
@@ -60,11 +66,32 @@ export class RDKoLeafThemeController {
   private readonly generations = new Map<WorkspaceLeaf, number>();
   private readonly marked = new Set<WorkspaceLeaf>();
 
-  constructor(private readonly plugin: Plugin) {}
+  private nextGeneration = 0;
+  private disposed = false;
+  private started = false;
+  private unsubscribe: (() => void) | null = null;
+  private readonly surfaces = new Map<WorkspaceLeaf, {
+    path: string; text: string; frontmatter: KoFrontmatter; element: HTMLElement;
+  }>();
+
+  constructor(private readonly plugin: Plugin, private readonly presentation?: {
+    readonly store: RDWorkspaceStore;
+    readonly inspect: (objectId: string) => void;
+  }) {}
 
   /** Register the event listeners (plugin-scoped, removed on
    * unload) and run the initial sweep over already-open leaves. */
   start(): void {
+    if (this.started || this.disposed) return;
+    this.started = true;
+    if (this.presentation !== undefined) {
+      let previous = this.presentation.store.getState().graphSnapshot;
+      this.unsubscribe = this.presentation.store.subscribe(state => {
+        if (previous === state.graphSnapshot) return;
+        previous = state.graphSnapshot;
+        for (const record of this.surfaces.values()) this.renderSurface(record);
+      });
+    }
     const { workspace, vault } = this.plugin.app;
     this.plugin.registerEvent(workspace.on("file-open", () => { void this.refresh(); }));
     this.plugin.registerEvent(workspace.on("active-leaf-change", () => { void this.refresh(); }));
@@ -78,6 +105,9 @@ export class RDKoLeafThemeController {
   /** Plugin unload path: strip every marker and drop all pending
    * generations. Listener removal is handled by registerEvent. */
   dispose(): void {
+    this.disposed = true;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     for (const leaf of [...this.marked]) this.unmark(leaf);
     this.generations.clear();
   }
@@ -87,10 +117,14 @@ export class RDKoLeafThemeController {
    * leaf closed ⇒ marker stripped from the (gone) element and the
    * tracking sets. */
   async refresh(): Promise<void> {
+    if (this.disposed) return;
     const open = new Set<WorkspaceLeaf>(
       this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE));
     for (const leaf of [...this.marked]) {
       if (!open.has(leaf)) this.unmark(leaf);
+    }
+    for (const leaf of [...this.generations.keys()]) {
+      if (!open.has(leaf)) this.generations.delete(leaf);
     }
     await Promise.all([...open].map((leaf) => this.evaluate(leaf)));
   }
@@ -103,19 +137,46 @@ export class RDKoLeafThemeController {
       this.unmark(leaf);
       return;
     }
-    const text = await this.plugin.app.vault.cachedRead(file);
+    if (this.surfaces.get(leaf)?.path !== file.path) this.unmark(leaf);
+    let text: string;
+    try { text = await this.plugin.app.vault.cachedRead(file); }
+    catch {
+      if (this.generations.get(leaf) === generation) this.unmark(leaf);
+      return;
+    }
     // Dead-evaluation guards: a newer evaluation started meanwhile
     // (file-open/modify/layout sweep bumped the generation), or the
     // leaf now shows a different file than the one read.
-    if (this.generations.get(leaf) !== generation) return;
+    if (this.disposed || this.generations.get(leaf) !== generation) return;
+    if (!this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE).includes(leaf)) return;
     const current = (leaf.view as MarkdownView).file as TFile | null;
     if (current === null || current.path !== file.path) return;
-    if (isKoMarkdownText(text)) this.mark(leaf);
-    else this.unmark(leaf);
+    const block = extractFrontmatterBlock(text);
+    const frontmatter = block === null ? null : parseKoFrontmatter(block);
+    if (frontmatter === null) { this.unmark(leaf); return; }
+    this.mark(leaf);
+    const previous = this.surfaces.get(leaf);
+    if (previous?.text === text && previous.element.parentElement === view.containerEl) return;
+    const element = previous?.element ?? document.createElement("section");
+    element.className = "rd-ko-surface";
+    // Sibling of native content, never injected into CodeMirror, Properties or
+    // Markdown rendering DOM. Obsidian retains its editor and save lifecycle.
+    view.containerEl.insertBefore(element, view.contentEl ?? null);
+    const record = { path: file.path, text, frontmatter, element };
+    this.surfaces.set(leaf, record);
+    this.renderSurface(record);
+  }
+
+  private renderSurface(record: { path: string; frontmatter: KoFrontmatter; element: HTMLElement }): void {
+    renderKoSurface(record.element, {
+      path: record.path, frontmatter: record.frontmatter,
+      snapshot: this.presentation?.store.getState().graphSnapshot ?? null,
+      inspect: this.presentation?.inspect,
+    });
   }
 
   private bumpGeneration(leaf: WorkspaceLeaf): number {
-    const generation = (this.generations.get(leaf) ?? 0) + 1;
+    const generation = ++this.nextGeneration;
     this.generations.set(leaf, generation);
     return generation;
   }
@@ -127,6 +188,8 @@ export class RDKoLeafThemeController {
 
   private unmark(leaf: WorkspaceLeaf): void {
     this.marked.delete(leaf);
+    this.surfaces.get(leaf)?.element.remove();
+    this.surfaces.delete(leaf);
     leaf.view.containerEl.classList.remove(RD_KO_LEAF_CLASS);
   }
 }

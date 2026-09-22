@@ -182,6 +182,7 @@ describe("v0.4.2 CSS scope isolation (§30)", () => {
           s.startsWith(".rd-context") || s.startsWith(".rd-investigation")
             || s.startsWith(".rd-loop") || s.startsWith(".rd-graph")
             || s.startsWith(".rd-knowledge-panel")
+            || /^\.rd-ko-surface(?:\s|$)/.test(s)
             || s.startsWith(".rd-workspace")
             // V2 Phase A: the two dock leaves and the shell body scope
             || s.startsWith(".rd-archive-nav")

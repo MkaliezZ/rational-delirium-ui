@@ -22,6 +22,8 @@ import {
   isKoMarkdownText,
 } from "../src/architecture/rd-ko-leaf-theme";
 
+import { RDWorkspaceStore } from "../src/architecture/workspace-state";
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /* ---------- fixtures ---------- */
@@ -329,7 +331,8 @@ describe("controller wiring", () => {
   it("registerRDViews creates the controller and registers its dispose", () => {
     const src = readFileSync(join(root, "src", "architecture", "rd-view-setup.ts"), "utf-8");
     expect(src).toContain('from "./rd-ko-leaf-theme"');
-    expect(src).toMatch(/new RDKoLeafThemeController\(plugin\)/);
+    expect(src).toMatch(/new RDKoLeafThemeController\(plugin, \{/);
+    expect(src).toContain("store: workspaceStore");
     expect(src).toMatch(/plugin\.register\(\(\) => koLeafTheme\.dispose\(\)\)/);
     expect(src).toContain("koLeafTheme.start()");
   });
@@ -477,5 +480,59 @@ describe("J — V2-03 negative isolation rules still present", () => {
     expect(src).toContain("non-RD editor / properties / file-explorer / third-party classes are never targeted");
     expect(css).not.toContain("--nav-item-background-hover");
     expect(css).not.toContain("--nav-item-background-selected");
+  });
+});
+
+describe("KO surface native ownership and lifecycle", () => {
+  it("adds one sibling surface without replacing editor/Properties nodes or handlers", async () => {
+    const { workspace, vault, controller } = makeHost();
+    const leaf = new FakeLeaf("ko.md");
+    const content = document.createElement("div"); content.className="view-content";
+    const editor = document.createElement("textarea"), properties = document.createElement("input");
+    content.append(properties, editor); leaf.view.containerEl.append(content);
+    Object.assign(leaf.view, {contentEl:content});
+    const change=vi.fn(); properties.addEventListener('input',change);
+    vault.files.set("ko.md",KO_TEXT);workspace.leaves.push(leaf);
+    await controller.refresh();await controller.refresh();
+    expect(leaf.view.containerEl.querySelectorAll('.rd-ko-surface')).toHaveLength(1);
+    expect(content.parentElement).toBe(leaf.view.containerEl);expect(content.contains(editor)).toBe(true);
+    properties.value="native";properties.dispatchEvent(new Event('input'));expect(change).toHaveBeenCalledOnce();
+    leaf.view.file={path:"ordinary.md"};vault.files.set("ordinary.md",ORDINARY_TEXT);await controller.refresh();
+    expect(leaf.view.containerEl.querySelector('.rd-ko-surface')).toBeNull();expect(content.contains(properties)).toBe(true);
+    controller.dispose();
+  });
+  it("clears stale context immediately on file switching, even while next read is pending", async()=>{
+    const {workspace,vault,controller}=makeHost();const leaf=new FakeLeaf('a.md');workspace.leaves.push(leaf);vault.files.set('a.md',KO_TEXT);await controller.refresh();
+    leaf.view.file={path:'b.md'};const finish=vault.deferNextRead();const pending=controller.refresh();
+    expect(leaf.view.containerEl.querySelector('.rd-ko-surface')).toBeNull();finish(KO_TEXT_B);await pending;
+    expect(leaf.view.containerEl.textContent).toContain('ko-20260921-0002');expect(leaf.view.containerEl.textContent).not.toContain('ko-20260921-0001');controller.dispose();
+  });
+  it("a read resolving after unload cannot restore surface or marker",async()=>{
+    const {workspace,vault,controller}=makeHost();const leaf=new FakeLeaf('a.md');workspace.leaves.push(leaf);
+    const finish=vault.deferNextRead();const pending=controller.refresh();controller.dispose();finish(KO_TEXT);await pending;await controller.refresh();
+    expect(leaf.marked).toBe(false);expect(leaf.view.containerEl.querySelector('.rd-ko-surface')).toBeNull();
+  });
+  it("read failure removes old declarations and closes without an unhandled rejection",async()=>{
+    const {workspace,vault,controller}=makeHost();const leaf=new FakeLeaf('a.md');workspace.leaves.push(leaf);vault.files.set('a.md',KO_TEXT);await controller.refresh();
+    vi.spyOn(vault,'cachedRead').mockRejectedValueOnce(new Error('unavailable'));await controller.refresh();expect(leaf.marked).toBe(false);expect(leaf.view.containerEl.querySelector('.rd-ko-surface')).toBeNull();controller.dispose();
+  });
+});
+
+
+describe("KO surface shared snapshot subscription", () => {
+  it("snapshot publication rerenders the surface without a second source read; unload unsubscribes", async () => {
+    const plugin = new FakePlugin(), store = new RDWorkspaceStore();
+    const controller = new RDKoLeafThemeController(plugin as never, { store, inspect: vi.fn() });
+    controller.start(); controller.start();
+    const leaf = new FakeLeaf("ko.md"); plugin.app.workspace.leaves.push(leaf);
+    plugin.app.vault.files.set("ko.md", KO_TEXT);
+    const read = vi.spyOn(plugin.app.vault, "cachedRead");
+    await controller.refresh(); expect(read).toHaveBeenCalledTimes(1);
+    expect(leaf.view.containerEl.textContent).toContain("Snapshot not loaded");
+    store.setGraphSnapshot({ state: "missing" });
+    expect(leaf.view.containerEl.textContent).toContain("Snapshot missing");
+    expect(read).toHaveBeenCalledTimes(1);
+    controller.dispose(); store.setGraphSnapshot(null);
+    expect(leaf.view.containerEl.querySelector(".rd-ko-surface")).toBeNull();
   });
 });

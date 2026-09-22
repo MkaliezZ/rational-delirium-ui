@@ -409,7 +409,7 @@ describe("registry and stylesheet guards", () => {
       for (const part of selector.split(",")) {
         const s = part.trim();
         if (s === "") continue;
-        expect(prefixes.some((p) => s.startsWith(p)), `unscoped selector: ${s}`).toBe(true);
+        expect(prefixes.some((p) => s.startsWith(p)) || /^\.rd-ko-surface(?:\s|$)/.test(s), `unscoped selector: ${s}`).toBe(true);
       }
     }
   });

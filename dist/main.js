@@ -16378,26 +16378,140 @@ function koDetailFromNote(path, text3) {
   return { state: "available", path, frontmatter: fm };
 }
 
+// src/views/ko-surface.ts
+function renderKoSurface(host, input) {
+  const expanded = new Set([...host.querySelectorAll("details[open]")].map((el) => el.dataset.section));
+  const focusKey = host.contains(document.activeElement) ? document.activeElement.dataset.focusKey : void 0;
+  const scroll = host.scrollTop;
+  emptyEl(host);
+  const fm = input.frontmatter;
+  host.setAttribute("aria-label", "Knowledge Object declared context");
+  host.dataset.objectId = fm.object_id;
+  createChild(host, "div", { cls: "rdko-eyebrow", text: "KNOWLEDGE OBJECT \xB7 SAVED SOURCE" });
+  createChild(host, "h2", { cls: "rdko-title", text: fm.title ?? "Title not declared" });
+  const identity = createChild(host, "dl", { cls: "rdko-identity" });
+  const field = (parent, key, value) => {
+    createChild(parent, "dt", { text: key });
+    createChild(parent, "dd", { text: value ?? "not declared" });
+  };
+  field(identity, "object_id", fm.object_id);
+  field(identity, "kind", fm.kind);
+  field(identity, "status \xB7 declared lifecycle", fm.status);
+  const actions = createChild(host, "div", { cls: "rdko-actions" });
+  if (input.inspect !== void 0) {
+    const inspect = createChild(actions, "button", { text: "Inspect object" });
+    inspect.dataset.focusKey = "inspect";
+    inspect.addEventListener("click", () => input.inspect?.(fm.object_id));
+  }
+  createChild(actions, "span", { cls: "rdko-note", text: "Native Properties and note content remain below. Declarations are not validation." });
+  const sections = createChild(host, "div", { cls: "rdko-sections" });
+  const section3 = (key, title) => {
+    const details = createChild(sections, "details", { cls: "rdko-section" });
+    details.dataset.section = key;
+    details.open = expanded.has(key);
+    const summary = createChild(details, "summary", { text: title });
+    summary.dataset.focusKey = key;
+    return createChild(details, "div", { cls: "rdko-section-body" });
+  };
+  const provenance = section3("provenance", "Provenance \xB7 source declarations");
+  const origin = createChild(provenance, "dl", { cls: "rdko-origin" });
+  field(origin, "source", input.path);
+  field(origin, "creator_role", fm.creator_role);
+  field(origin, "workspace_context", fm.workspace_context);
+  field(origin, "created_from", fm.created_from?.join(" \xB7 "));
+  for (const layer of ["observation", "evidence", "inference", "conclusion"]) {
+    const block = createChild(provenance, "section", { cls: "rdko-layer" });
+    block.dataset.layer = layer;
+    createChild(block, "h3", { text: layer });
+    createChild(block, "p", { text: fm.provenance?.[layer] ?? "Not declared in the available source fields." });
+  }
+  const relations = section3("relations", "Relations \xB7 loaded snapshot");
+  const lineage = section3("lineage", "Lineage \xB7 loaded snapshot");
+  const load = input.snapshot;
+  if (load === null || load.state !== "available") {
+    const state = load?.state ?? "not loaded";
+    for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: `Snapshot ${state}. Relations and lineage unavailable here; this does not mean the note has no declarations.` });
+  } else {
+    const resolved = resolveObject(load.graph, fm.workspace_context ?? "default", fm.object_id);
+    if (resolved.state !== "available") {
+      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: `Object ${resolved.state} in the loaded snapshot. No title or path substitution.` });
+    } else {
+      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: "Derived snapshot \xB7 freshness unverified \xB7 source declarations may differ." });
+      if (resolved.node.kind !== fm.kind || resolved.node.status !== fm.status) {
+        createChild(relations, "p", { cls: "rdko-note", text: `Snapshot/source differ: snapshot kind ${resolved.node.kind}, status ${resolved.node.status}. Not reconciled.` });
+      }
+      const target = (parent, objectId, prefix, unresolved = false) => {
+        const exact = resolveObject(load.graph, fm.workspace_context ?? "default", objectId);
+        const available = !unresolved && exact.state === "available";
+        const row = createChild(parent, "div", { cls: "rdko-link-row" });
+        createChild(row, "span", { text: prefix });
+        if (available && input.inspect !== void 0) {
+          const button = createChild(row, "button", { text: objectId });
+          button.dataset.focusKey = `${prefix}:${objectId}`;
+          button.setAttribute("aria-label", `Inspect ${objectId}`);
+          button.addEventListener("click", () => input.inspect?.(objectId));
+        } else {
+          createChild(row, "span", { text: `${objectId}${available ? "" : ` \xB7 ${unresolved ? "unresolved" : exact.state}`}` });
+        }
+      };
+      const rel = relationSummary(load.graph, fm.object_id);
+      for (const row of rel.rows) target(
+        relations,
+        row.otherId,
+        row.direction === "outgoing" ? `${fm.object_id} \u2014 ${row.edge.relation} \u2192` : `${fm.object_id} \u2190 ${row.edge.relation} \u2014`
+      );
+      for (const edge of rel.unresolvedFrom) target(relations, edge.target, `${fm.object_id} \u2014 ${edge.relation} \u2192`, true);
+      for (const edge of rel.unresolvedTo) target(relations, edge.source, `${fm.object_id} \u2190 ${edge.relation} \u2014`, true);
+      if (rel.rows.length + rel.unresolvedFrom.length + rel.unresolvedTo.length === 0) {
+        createChild(relations, "p", { text: "No declared relations in this snapshot." });
+      }
+      const history = buildLineage(load.graph, fm.object_id);
+      for (const entry2 of history.previous) target(lineage, entry2.objectId, `Previous \xB7 ${entry2.via} \xB7`, !entry2.inSnapshot);
+      for (const entry2 of history.following) target(lineage, entry2.objectId, `Following \xB7 ${entry2.via} \xB7`, !entry2.inSnapshot);
+      for (const note of history.notes) createChild(lineage, "p", { text: note });
+      if (history.previous.length + history.following.length === 0) createChild(lineage, "p", { text: "No lineage declared in this snapshot. History is not inferred from file dates." });
+    }
+  }
+  host.scrollTop = scroll;
+  if (focusKey !== void 0) for (const el of host.querySelectorAll("[data-focus-key]")) {
+    if (el.dataset.focusKey === focusKey) {
+      el.focus({ preventScroll: true });
+      break;
+    }
+  }
+}
+
 // src/architecture/rd-ko-leaf-theme.ts
 var RD_KO_LEAF_CLASS = "rd-ko-leaf";
 var MARKDOWN_VIEW_TYPE = "markdown";
-function isKoMarkdownText(text3) {
-  const block = extractFrontmatterBlock(text3);
-  if (block === null) return false;
-  return parseKoFrontmatter(block) !== null;
-}
 var RDKoLeafThemeController = class {
-  constructor(plugin) {
+  constructor(plugin, presentation) {
     this.plugin = plugin;
+    this.presentation = presentation;
     /** Per-leaf generation counter: every (re)evaluation of a leaf
      * bumps it; an awaited read whose generation is no longer current
      * belongs to a dead evaluation and is dropped silently. */
     this.generations = /* @__PURE__ */ new Map();
     this.marked = /* @__PURE__ */ new Set();
+    this.nextGeneration = 0;
+    this.disposed = false;
+    this.started = false;
+    this.unsubscribe = null;
+    this.surfaces = /* @__PURE__ */ new Map();
   }
   /** Register the event listeners (plugin-scoped, removed on
    * unload) and run the initial sweep over already-open leaves. */
   start() {
+    if (this.started || this.disposed) return;
+    this.started = true;
+    if (this.presentation !== void 0) {
+      let previous2 = this.presentation.store.getState().graphSnapshot;
+      this.unsubscribe = this.presentation.store.subscribe((state) => {
+        if (previous2 === state.graphSnapshot) return;
+        previous2 = state.graphSnapshot;
+        for (const record of this.surfaces.values()) this.renderSurface(record);
+      });
+    }
     const { workspace, vault } = this.plugin.app;
     this.plugin.registerEvent(workspace.on("file-open", () => {
       void this.refresh();
@@ -16418,6 +16532,9 @@ var RDKoLeafThemeController = class {
   /** Plugin unload path: strip every marker and drop all pending
    * generations. Listener removal is handled by registerEvent. */
   dispose() {
+    this.disposed = true;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     for (const leaf of [...this.marked]) this.unmark(leaf);
     this.generations.clear();
   }
@@ -16426,11 +16543,15 @@ var RDKoLeafThemeController = class {
    * leaf closed ⇒ marker stripped from the (gone) element and the
    * tracking sets. */
   async refresh() {
+    if (this.disposed) return;
     const open = new Set(
       this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE)
     );
     for (const leaf of [...this.marked]) {
       if (!open.has(leaf)) this.unmark(leaf);
+    }
+    for (const leaf of [...this.generations.keys()]) {
+      if (!open.has(leaf)) this.generations.delete(leaf);
     }
     await Promise.all([...open].map((leaf) => this.evaluate(leaf)));
   }
@@ -16442,15 +16563,44 @@ var RDKoLeafThemeController = class {
       this.unmark(leaf);
       return;
     }
-    const text3 = await this.plugin.app.vault.cachedRead(file);
-    if (this.generations.get(leaf) !== generation) return;
+    if (this.surfaces.get(leaf)?.path !== file.path) this.unmark(leaf);
+    let text3;
+    try {
+      text3 = await this.plugin.app.vault.cachedRead(file);
+    } catch {
+      if (this.generations.get(leaf) === generation) this.unmark(leaf);
+      return;
+    }
+    if (this.disposed || this.generations.get(leaf) !== generation) return;
+    if (!this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE).includes(leaf)) return;
     const current = leaf.view.file;
     if (current === null || current.path !== file.path) return;
-    if (isKoMarkdownText(text3)) this.mark(leaf);
-    else this.unmark(leaf);
+    const block = extractFrontmatterBlock(text3);
+    const frontmatter = block === null ? null : parseKoFrontmatter(block);
+    if (frontmatter === null) {
+      this.unmark(leaf);
+      return;
+    }
+    this.mark(leaf);
+    const previous2 = this.surfaces.get(leaf);
+    if (previous2?.text === text3 && previous2.element.parentElement === view.containerEl) return;
+    const element2 = previous2?.element ?? document.createElement("section");
+    element2.className = "rd-ko-surface";
+    view.containerEl.insertBefore(element2, view.contentEl ?? null);
+    const record = { path: file.path, text: text3, frontmatter, element: element2 };
+    this.surfaces.set(leaf, record);
+    this.renderSurface(record);
+  }
+  renderSurface(record) {
+    renderKoSurface(record.element, {
+      path: record.path,
+      frontmatter: record.frontmatter,
+      snapshot: this.presentation?.store.getState().graphSnapshot ?? null,
+      inspect: this.presentation?.inspect
+    });
   }
   bumpGeneration(leaf) {
-    const generation = (this.generations.get(leaf) ?? 0) + 1;
+    const generation = ++this.nextGeneration;
     this.generations.set(leaf, generation);
     return generation;
   }
@@ -16460,6 +16610,8 @@ var RDKoLeafThemeController = class {
   }
   unmark(leaf) {
     this.marked.delete(leaf);
+    this.surfaces.get(leaf)?.element.remove();
+    this.surfaces.delete(leaf);
     leaf.view.containerEl.classList.remove(RD_KO_LEAF_CLASS);
   }
 };
@@ -16931,7 +17083,14 @@ function registerRDViews(plugin, services) {
   const shellController = new RDShellController(plugin.app, workspaceStore);
   plugin.register(() => shellController.dispose());
   plugin.register(() => collaborationBrowser.dispose());
-  const koLeafTheme = new RDKoLeafThemeController(plugin);
+  const koLeafTheme = new RDKoLeafThemeController(plugin, {
+    store: workspaceStore,
+    inspect: (objectId) => {
+      workspaceStore.setSelectedObject(objectId);
+      const inspector = registry.get(RD_INSPECTOR_VIEW_TYPE);
+      if (inspector !== void 0) void activateRDView(plugin, inspector);
+    }
+  });
   plugin.register(() => koLeafTheme.dispose());
   koLeafTheme.start();
   const openView = async (viewType) => {
