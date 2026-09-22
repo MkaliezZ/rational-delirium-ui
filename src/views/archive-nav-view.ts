@@ -112,6 +112,13 @@ export class RDArchiveNavView extends ItemView {
       text: `investigation archive · ${state.workspaceLabel}`,
     });
 
+    const home = createChild(rail, "button", { cls: "rdan-surface-row", text: "Archive Home" });
+    home.setAttribute("aria-pressed", String(selected === null && state.workspaceMode === "investigation"));
+    home.addEventListener("click", () => {
+      this.deps.store.setSelectedObject(null);
+      this.deps.store.setWorkspaceMode("investigation");
+    });
+
     const current = createChild(rail, "div", { cls: "rdan-group" });
     createChild(current, "div", { cls: "rdan-label", text: "Investigation" });
     if (selected !== null) {

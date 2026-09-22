@@ -13152,6 +13152,86 @@ var GraphSnapshotCoordinator = class {
   }
 };
 
+// src/views/dom-helpers.ts
+function emptyEl(el) {
+  while (el.firstChild !== null) el.removeChild(el.firstChild);
+}
+function createChild(parent, tag, opts) {
+  const el = document.createElement(tag);
+  if (opts?.cls !== void 0 && opts.cls !== "") el.className = opts.cls;
+  if (opts?.text !== void 0) el.textContent = opts.text;
+  parent.appendChild(el);
+  return el;
+}
+
+// src/views/archive-home.ts
+function renderArchiveHome(host, snapshot, collaboration, inspect, openCollaboration) {
+  const home = createChild(host, "section", { cls: "rd-archive-home" });
+  home.setAttribute("aria-label", "Archive Home");
+  createChild(home, "div", { cls: "rdah-eyebrow", text: "RATIONAL DELIRIUM / ARCHIVE" });
+  createChild(home, "h2", { text: "Archive Home" });
+  createChild(home, "p", { text: "Knowledge as declared. Contributions as recorded." });
+  const columns = createChild(home, "div", { cls: "rdah-columns" });
+  const section3 = (title) => {
+    const el = createChild(columns, "section", { cls: "rdah-section" });
+    createChild(el, "h3", { text: title });
+    return el;
+  };
+  const landscape = section3("Knowledge Landscape");
+  if (snapshot?.state === "available") {
+    createChild(landscape, "p", { cls: "rdah-note", text: "Objects in the loaded semantic snapshot \xB7 freshness unverified. Browse all in Archive Navigation." });
+    const nodes = [...snapshot.graph.nodes].sort((a, b) => a.object_id < b.object_id ? -1 : a.object_id > b.object_id ? 1 : 0);
+    if (!nodes.length) createChild(landscape, "p", { text: "No objects in this snapshot. This is not a Vault inventory." });
+    for (const node2 of nodes.slice(0, 8)) {
+      const row = createChild(landscape, "button", { cls: "rdah-object" });
+      createChild(row, "span", { cls: "rdah-meta", text: `${node2.object_id} \xB7 ${node2.kind} \xB7 ${node2.status}` });
+      createChild(row, "span", { text: node2.title });
+      row.addEventListener("click", () => inspect(node2.object_id));
+    }
+    if (nodes.length > 8) createChild(landscape, "p", { cls: "rdah-note", text: "Showing 8 objects in identity order; not ranked." });
+  } else {
+    createChild(landscape, "p", { text: `Semantic snapshot: ${snapshot?.state ?? "not_loaded"}. Object landscape is unavailable; this does not mean the Vault has no knowledge.` });
+  }
+  const records = section3("Collaboration");
+  createChild(records, "p", { cls: "rdah-note", text: "Recorded work, not verification of execution or knowledge." });
+  for (const [kind, title, rows] of [
+    ["proposal", "Proposal records", collaboration?.proposals],
+    ["contribution", "Contribution records", collaboration?.contributions]
+  ]) {
+    createChild(records, "h4", { text: title });
+    const state = collaboration?.dirs[kind];
+    if (state !== "available") {
+      createChild(records, "p", { text: `${title}: ${state ?? "not_loaded"}` });
+      continue;
+    }
+    if (!rows?.length) createChild(records, "p", { text: `No ${kind} records found.` });
+    for (const row of [...rows ?? []].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).slice(0, 4)) {
+      createChild(records, "p", { cls: "rdah-record", text: `${row.id ?? row.path} \xB7 ${row.status ?? "status not declared"}${row.malformed ? " \xB7 malformed record" : ""}
+${row.summary}` });
+    }
+  }
+  createChild(records, "button", { text: "Open Collaboration" }).addEventListener("click", openCollaboration);
+  const relations = section3("Declared Relations");
+  const diagnostics = section3("Snapshot Diagnostics");
+  if (snapshot?.state !== "available") {
+    for (const el of [relations, diagnostics]) createChild(el, "p", { text: "Unavailable until a semantic snapshot is loaded." });
+    return;
+  }
+  const graph = snapshot.graph;
+  for (const [label, edges] of [["Declared relations", graph.edges], ["Unresolved declarations", graph.unresolved]]) {
+    createChild(relations, "h4", { text: label });
+    if (!edges.length) createChild(relations, "p", { text: `No ${label.toLowerCase()} in this snapshot.` });
+    for (const edge of edges.slice(0, 6)) createChild(relations, "p", { cls: "rdah-record", text: `${edge.source} \u2192 ${edge.target}
+${edge.relation}` });
+    if (edges.length > 6) createChild(relations, "p", { cls: "rdah-note", text: `Showing 6 of ${edges.length} declarations in snapshot order.` });
+  }
+  createChild(relations, "p", { cls: "rdah-note", text: "Unresolved means target resolution, not a research task or a judgment." });
+  if (!graph.diagnostics.length) createChild(diagnostics, "p", { text: "No diagnostics reported in this snapshot. This does not validate knowledge." });
+  for (const item of graph.diagnostics.slice(0, 6)) createChild(diagnostics, "p", { cls: "rdah-record", text: `${item.type} \xB7 ${item.object_id}
+${item.paths.join("\n")}` });
+  if (graph.diagnostics.length > 6) createChild(diagnostics, "p", { text: `Showing 6 of ${graph.diagnostics.length} diagnostics.` });
+}
+
 // src/views/rd-workspace-view.ts
 var import_obsidian2 = require("obsidian");
 
@@ -13246,18 +13326,6 @@ function buildLineage(graph, objectId) {
     );
   }
   return { previous: previous2, following, notes };
-}
-
-// src/views/dom-helpers.ts
-function emptyEl(el) {
-  while (el.firstChild !== null) el.removeChild(el.firstChild);
-}
-function createChild(parent, tag, opts) {
-  const el = document.createElement(tag);
-  if (opts?.cls !== void 0 && opts.cls !== "") el.className = opts.cls;
-  if (opts?.text !== void 0) el.textContent = opts.text;
-  parent.appendChild(el);
-  return el;
 }
 
 // src/semantic-graph/knowledge-panel.ts
@@ -14566,6 +14634,12 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     if (snapshot !== null && snapshot.state === "available" && state.selectedObjectId !== null) {
       this.renderReading(center, state.selectedObjectId, snapshot);
       this.ensureSourceDetail(state.selectedObjectId);
+    } else if (state.selectedObjectId !== null) {
+      renderKnowledgePanel(center, buildKnowledgePanelModel({
+        load: snapshot ?? { state: "unavailable", reason: "not loaded" },
+        workspace: state.workspaceLabel,
+        objectId: state.selectedObjectId
+      }));
     } else {
       this.renderDeskHome(center, snapshot);
     }
@@ -14645,6 +14719,13 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
   /** CENTER — the desk home when nothing is selected. */
   renderDeskHome(center, snapshot) {
     const desk = createChild(center, "div", { cls: "rdws-desk" });
+    renderArchiveHome(
+      desk,
+      snapshot,
+      this.browser.getState().model,
+      (id) => this.deps.store.setSelectedObject(id),
+      () => this.deps.store.setWorkspaceMode("collaboration")
+    );
     createChild(desk, "h2", {
       cls: "rdws-desk-title",
       text: "An investigation desk for your knowledge archive"
@@ -15891,6 +15972,12 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
     createChild(brand, "div", {
       cls: "rdan-brand-scope",
       text: `investigation archive \xB7 ${state.workspaceLabel}`
+    });
+    const home = createChild(rail, "button", { cls: "rdan-surface-row", text: "Archive Home" });
+    home.setAttribute("aria-pressed", String(selected === null && state.workspaceMode === "investigation"));
+    home.addEventListener("click", () => {
+      this.deps.store.setSelectedObject(null);
+      this.deps.store.setWorkspaceMode("investigation");
     });
     const current = createChild(rail, "div", { cls: "rdan-group" });
     createChild(current, "div", { cls: "rdan-label", text: "Investigation" });

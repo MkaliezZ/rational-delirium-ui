@@ -19,6 +19,7 @@
  * "the vault has no knowledge".
  */
 
+import { renderArchiveHome } from "./archive-home";
 import { ItemView, type WorkspaceLeaf } from "obsidian";
 import type { GraphSource } from "../semantic-graph/graph-loader";
 import type { GraphLoadResult } from "../semantic-graph/graph-loader";
@@ -390,6 +391,13 @@ export class RDWorkspaceShellView extends ItemView {
         && state.selectedObjectId !== null) {
       this.renderReading(center, state.selectedObjectId, snapshot);
       this.ensureSourceDetail(state.selectedObjectId);
+    } else if (state.selectedObjectId !== null) {
+      // Preserve the inspection context even when its snapshot is unavailable.
+      renderKnowledgePanel(center, buildKnowledgePanelModel({
+        load: snapshot ?? { state: "unavailable", reason: "not loaded" },
+        workspace: state.workspaceLabel,
+        objectId: state.selectedObjectId,
+      }));
     } else {
       this.renderDeskHome(center, snapshot);
     }
@@ -498,6 +506,9 @@ export class RDWorkspaceShellView extends ItemView {
   /** CENTER — the desk home when nothing is selected. */
   private renderDeskHome(center: HTMLElement, snapshot: GraphLoadResult | null): void {
     const desk = createChild(center, "div", { cls: "rdws-desk" });
+    renderArchiveHome(desk, snapshot, this.browser.getState().model,
+      (id) => this.deps.store.setSelectedObject(id),
+      () => this.deps.store.setWorkspaceMode("collaboration"));
     createChild(desk, "h2", {
       cls: "rdws-desk-title",
       text: "An investigation desk for your knowledge archive",
