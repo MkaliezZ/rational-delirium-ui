@@ -1,59 +1,107 @@
 # 理性失序 · Rational Delirium
 
-**1.10.0：四板块知识工作区。** 案例、证据、假设和重复模式相互支持；从材料整理带出处的知识单元，保留两套对象格式和原身份。新增多角色、关系编辑、内容包导入导出，以及遵循减少动态效果设置的动效。
+[English](README.md) · [简体中文](README_zh-CN.md)
 
-[三层设计 v1.0](docs/architecture/three-layer-design-v1.0.md) · [四板块使用说明](docs/four-role-workspace.md) · [本轮验收](docs/validation/v1.10.0/readiness.md)
+**本地优先的人与 Agent 知识工作区。Obsidian 是可选入口。**
 
-**供人和 Agent 使用的本地个人知识库，Obsidian 为可选入口。**
+用 Markdown 保留材料，通过 **CASE / EVIDENCE / HYPOTHESIS / LOOP（案例、证据、假设、重复模式）** 连接经历、核对支持与反驳、比较解释，并随新材料修订认识。
 
-当前版本 **1.10.0**。这次升级基于任务 eval，保留稳定身份、来源和声明关系，改进检索排序，加入独立浏览器界面、CLI/MCP、受控修订与失败恢复。
+**v1.10.0 为工程预览版**，面向本地文本知识，以及已有 Markdown 或 Agent 使用习惯的用户。
 
-## 启动
+[下载工程预览](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.10.0) · [当前验收记录](docs/validation/v1.10.0/release.md) · [使用与恢复](docs/standalone-knowledge.md)
 
-需要 Node 24+。从源码运行：
+## 可以做什么
 
-```powershell
+- 收集 Markdown / TXT，保留原文，按段落核对角色建议。
+- 用案例、证据、假设和重复模式组织知识；一份知识可以承担多个角色，并保留同一身份。
+- 通过案例索引和有向关系视图查看摘录、支持、反驳、补充和所缺依据。
+- 检索已保存正文、别名、声明关系与来源引用；相关性是词法排名，不是正确性评分。
+- 编辑笔记、审阅 Agent 的具体变更、查看历史，并在版本核对后恢复中断写入。
+- 导出 Markdown 知识包，以及 JSON、CSV、Markdown 或 Mermaid 关系文件。
+- 通过 CLI、Node SDK 或 MCP 连接已有 Agent，在交付前检查引用、正式关系、候选状态及当前/历史版本覆盖。
+
+四个角色表示知识的用途，不自动证明内容为真。相似性不会自动变成支持、反驳或已确认的重复模式；不确定的关联保留为候选。
+
+## 下载后启动
+
+安装 **Node.js 24+**，解压发布页中的独立运行包。运行依赖已经打包，无需运行时 npm 安装、Python、数据库或 Obsidian。Node 本身不包含在下载包内。
+
+Windows 用户双击 `Start-RD.cmd`，默认在包旁创建 `knowledge` 目录。使用时保持服务窗口开启。
+
+从解压目录体验明确标为合成示例的知识库：
+
+```sh
+node dist-agent/rd.mjs demo --root ./example-knowledge
+node dist-agent/rd.mjs serve --root ./example-knowledge
+```
+
+打开终端打印的本地地址，默认 `http://127.0.0.1:4399`。端口占用时增加 `--port 4400`。`demo` 只接受空目录。
+
+使用自己的 Markdown 目录：
+
+```sh
+node dist-agent/rd.mjs init --root ./my-knowledge
+node dist-agent/rd.mjs serve --root ./my-knowledge
+```
+
+初始化保留现有笔记，添加工作区元数据及外置审阅密钥。重要资料先做完整备份。纯查看可使用 `serve --read-only`。
+
+## 从源码构建
+
+```sh
 npm ci
 npm run build
 node dist-agent/rd.mjs demo --root ./example-knowledge
 node dist-agent/rd.mjs serve --root ./example-knowledge
 ```
 
-打开打印的本地地址，默认 `http://127.0.0.1:4399`。示例只接受空目录，内容均为合成资料。自己的 Markdown 目录先用 `init --root 目录` 初始化，再用 `serve --root 目录` 启动。初始化只添加工作区元数据和外置审阅密钥，不迁移笔记。
+同一次构建也会在 `dist/` 生成可选 Obsidian 插件。独立工作区不需要安装该插件。
 
-构建后的独立包只需 `rd.mjs`、`web/` 与 Node，不需要 Obsidian、Python、模型账号或数据库。发布包提供 Windows 启动脚本。
+## 连接 Agent
 
-## 日常使用
+在兼容客户端中启动本地 MCP stdio 进程：
 
-- **知识库**：搜索标题、中文关键词、作者别名与精确 ID，阅读和编辑普通笔记及知识对象。
-- **推演**：用带摘要的分组论证图比较支持、反驳和依赖；点击卡片核对原始文件与声明位置，也可切换列表。
-- **Agent 提案**：看修改前后、引用依据和影响范围；批准与应用分开，源文件或证据改变后拒绝使用旧决定。
-- **修订历史**：保留决定与实际写入的连接，支持提出恢复提案和核对中断写入。
-
-旧 `type/id` 和新 `object_id/kind` 共用索引；未声明对象的 Markdown 不会被强行转换。重复身份不任意选择，缺失来源不隐藏。界面采用深色档案与橙红强调，来源保持可读。
-
-## Agent 接入
-
-```powershell
-node dist-agent/rd.mjs mcp --root 你的知识目录
-node dist-agent/rd.mjs mcp --root 你的知识目录 --write
-node dist-agent/rd.mjs search --root 你的知识目录 --query "记忆 修订"
+```sh
+node dist-agent/rd.mjs mcp --root /absolute/path/knowledge
 ```
 
-MCP 默认只读；`--write` 增加提出和执行已批准提案的能力，始终不提供批准工具。使用 [Agent workflow](skills/rational-delirium-agent-skill.md)。检索相关性不等于可信度，声明关系不等于事实推导。本版不内置模型。
+MCP 默认只读。`--write` 可提出变更并应用已批准的提案，始终不开放批准和直接保存工具。Agent 拥有完整主机文件权限时，仍需由宿主另行提供隔离。
 
-[完整使用、命令与恢复指南](docs/standalone-knowledge.md) · [eval 与验收记录](docs/validation/standalone/readiness.md) · [UI 设计规划](docs/design/standalone-ui-plan.md)
+需要宿主强制核对答案时，使用 SDK 的 `runAgentTask`，或可选的本机 DSH 适配器：
 
-## 验证
-
-```powershell
-python -m pip install -r semantic-graph/requirements.txt
-npm run validate
-node scripts/scale-agent.mjs
+```sh
+node dist-agent/agent-run.mjs --root /absolute/path/knowledge --questions /path/questions.json --output /path/new-run --dsh-entry /path/installed/dsh/lib/bin.js
 ```
 
-固定合成语料的前后对照、服务测试与浏览器走查分别记录。自动化通过不等于真实长期使用、真实资料质量或模型回答忠实性已被验证。
+宿主先提供来源覆盖清单，再检查完整草稿，将具体错误反馈给 Agent 修正；依据不足则保留明确未知。使用宿主返回的 `delivery` 作为交付结果。直接调用 `prepare_answer` 的客户端必须携带原始 `questions`。
 
-可选 Obsidian 插件仍可用 `npm run build:plugin` 构建，安装见 [插件工作流](docs/personal-knowledge-workflow.md)。旧 Markdown 提案界面不授权新执行器；旧 Python 导出器和 append-only gate 仅保留兼容用途。
+本产品不包含模型或 API 凭据。外部 Agent / 模型可能处理提供给它的材料，具体数据流向取决于所用客户端的配置。
 
-首版独立运行范围是文本知识、来源核对与受控修订；PDF/OCR、附件预览、内置模型对话和多设备同步尚未提供。MIT 许可。
+[Agent 工作流](skills/rational-delirium-agent-skill.md) · [交付约定](docs/agent-delivery.md) · [来源读取](docs/agent-source-reading.md)
+
+## 验证与范围
+
+- **704 项 Vitest + 62 项 Python 检查**；完整 CI 在 Windows 和 Ubuntu 通过。
+- 本机 DSH 对 **14 道既有个人材料问题**完成实际复测：77 条引文、23 条正式关系与保存的来源及声明对齐；2 题保留来源覆盖未知。
+- 独立运行包、MCP、HTTP、知识包和恢复场景已有工程检查；这些结果不等于长期可靠性或真实世界效果已验证。
+
+本次预览聚焦本地文本知识。PDF/OCR、附件预览、云同步及内置模型聊天进入后续开发。分类建议使用段落规则，语义分析依赖人工审阅或外部 Agent。14 道既有问题不属于新的盲测集，也不是通用准确率保证。
+
+知识 ZIP 用于迁移已索引 Markdown 和声明关系，不包含附件、批准密钥和完整执行历史。完整恢复需要另外保存工作区及外置密钥。
+
+[当前发布验收](docs/validation/v1.10.0/release.md) · [来源与版本评估](docs/validation/v1.10.0/source-coverage.md) · [四板块格式](docs/four-role-workspace.md) · [三层设计](docs/architecture/three-layer-design-v1.0.md)
+
+## 制作发布包
+
+在干净的源码工作区中，安装 Node 24+ 和构建依赖后执行：
+
+```sh
+npm run validate > validation.log
+npm run package:agent -- --output ../release-output --validation-log ./validation.log
+```
+
+使用新的输出目录。脚本保留已有交付物，记录源提交及文件哈希，生成独立运行包、插件包与 `SHA256SUMS.txt`。打包使用 Node，无需 Python；运行 Python 测试仍需安装 Python 与声明的测试依赖。
+
+## 许可
+
+[MIT](LICENSE)。打包依赖保留各自许可，见运行包中的 `THIRD_PARTY_NOTICES.txt`；图标资源同时附带其许可证。

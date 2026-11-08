@@ -1,20 +1,52 @@
-# 理性失序 · Rational Delirium
+# Rational Delirium · 理性失序
 
-**A local personal knowledge library for humans and Agents. Obsidian is optional.**
+[English](README.md) · [简体中文](README_zh-CN.md)
 
-Version **1.10.0** adds four complementary knowledge roles — **CASE / EVIDENCE /
-HYPOTHESIS / LOOP** — with source-backed material organization, directed relation
-editing, portable knowledge packages and restrained, accessible UI motion.
-[中文](README_zh-CN.md) · [Usage and recovery](docs/standalone-knowledge.md) ·
-[Evaluation and validation](docs/validation/standalone/readiness.md)
+**A local-first knowledge workspace for humans and agents. Obsidian is optional.**
 
-[Confirmed three-layer design](docs/architecture/three-layer-design-v1.0.md) ·
-[Four-role workflow and formats](docs/four-role-workspace.md) ·
-[1.10.0 validation](docs/validation/v1.10.0/readiness.md)
+Keep your material in Markdown. Use **CASE / EVIDENCE / HYPOTHESIS / LOOP** to connect experiences, inspect supporting and opposing evidence, compare explanations, and revisit recurring patterns.
 
-## Start locally
+**v1.10.0 is an engineering preview.** It is intended for local text knowledge and users comfortable with Markdown or existing agent clients.
 
-Node 24+ is required. Build from source:
+[Download the preview](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.10.0) · [Current validation](docs/validation/v1.10.0/release.md) · [Usage and recovery](docs/standalone-knowledge.md)
+
+## What you can do
+
+- Collect Markdown or plain text, preserve the original, and review paragraph-level role suggestions.
+- Organize cases, evidence, hypotheses, and recurring patterns without duplicating a note's identity.
+- Browse a case index and directed relation views with excerpts, support, contradiction, supplements, and missing evidence.
+- Search saved content, aliases, declared relationships, and source references. Search relevance is lexical ranking, not a truth score.
+- Edit notes, review an agent's concrete change proposal, inspect history, and recover interrupted writes with version checks.
+- Export Markdown knowledge packages and JSON, CSV, Markdown, or Mermaid relationship files.
+- Connect an existing agent through CLI, the Node SDK, or MCP. Check citations, formal relationships, candidate status, and current/historical version coverage before delivery.
+
+Roles describe how knowledge is used; they do not certify its truth. Similarity does not automatically become support, contradiction, or a confirmed recurring pattern. Uncertain relationships stay candidates.
+
+## Start with the download
+
+Install **Node.js 24+**, then unpack the standalone ZIP from the release page. The runtime includes its dependencies; it needs no runtime npm installation, Python, database, or Obsidian.
+
+On Windows, double-click `Start-RD.cmd`. It creates a `knowledge` folder beside the package by default. Keep the service window open. Node itself is not bundled.
+
+For an explicit synthetic example, run from the unpacked directory:
+
+```sh
+node dist-agent/rd.mjs demo --root ./example-knowledge
+node dist-agent/rd.mjs serve --root ./example-knowledge
+```
+
+Open the printed local URL, normally `http://127.0.0.1:4399`. If the port is occupied, add `--port 4400`. `demo` accepts only an empty directory.
+
+To use your own Markdown directory:
+
+```sh
+node dist-agent/rd.mjs init --root ./my-knowledge
+node dist-agent/rd.mjs serve --root ./my-knowledge
+```
+
+Initialization adds workspace metadata and an external approval key while preserving existing notes. Keep a full backup of important material. Read-only viewing uses `serve --read-only`.
+
+## Build from source
 
 ```sh
 npm ci
@@ -23,80 +55,53 @@ node dist-agent/rd.mjs demo --root ./example-knowledge
 node dist-agent/rd.mjs serve --root ./example-knowledge
 ```
 
-Open the printed local URL (default `http://127.0.0.1:4399`). The demo requires an
-empty folder and uses explicitly synthetic sources. For your existing Markdown
-folder, run `init --root <folder>`, then `serve --root <folder>`. Initialization
-adds workspace metadata and an external signing key; it does not migrate notes.
-A built distribution needs only `rd.mjs`, `web/` and Node; no runtime npm install,
-Python process, model account, database or Obsidian desktop is required.
+The optional Obsidian plugin is built separately into `dist/` by the same build. The standalone workspace does not require the plugin.
 
-## Knowledge, evidence and change
+## Connect an agent
 
-- Read and search ordinary Markdown, legacy `type/id` notes and KO
-  `object_id/kind` objects through one parser and saved-note index.
-- Follow precise identity, source path/revision/lines, support, contradiction and
-  lineage. Duplicate identities remain ambiguous; broken references remain visible.
-- Investigate a focused **argument map** with excerpts and explicit relationship
-  direction; switch to a relation list when dense. No dot-cloud navigation required.
-- Edit locally or review an Agent's concrete before/after proposal. Approval and
-  execution are distinct. Stale sources, stale evidence and forged decisions fail.
-- Inspect revision history, propose a reviewed inverse, and recover interrupted
-  multi-file writes without overwriting an unrelated external edit.
-
-Markdown is the knowledge source. Graphs are derived projections. Relevance is
-lexical retrieval ranking, not truth or confidence. The system does not supply a
-model or turn note text into agent instructions.
-
-## Agent access
-
-For checked answers with automatic repair and explicit-unknown fallback, use the
-[Agent delivery runner](docs/agent-delivery.md). It checks every draft at the host
-boundary; candidates stay separate from formal graph relations.
-
+Start a local MCP stdio server from a compatible client:
 
 ```sh
 node dist-agent/rd.mjs mcp --root /absolute/path/knowledge
-node dist-agent/rd.mjs mcp --root /absolute/path/knowledge --write
-node dist-agent/rd.mjs search --root /absolute/path/knowledge --query 记忆
-node dist-agent/rd.mjs help
 ```
 
-MCP stdio defaults to read-only. `--write` exposes propose/revise/restore/apply,
-never approve/direct-save/recover. See the current [Agent workflow](skills/rational-delirium-agent-skill.md).
-Approval signatures bind the proposal and workspace; host filesystem isolation
-remains separate. The local browser UI is an operator surface, bound to loopback
-with same-origin/token checks. It is not a public hosted service.
+MCP defaults to read-only. `--write` exposes proposals and application of approved changes; it never exposes approval or direct-save tools. Full host filesystem access remains outside this cooperative boundary.
 
-## Validation
+For host-enforced answer checks, use SDK `runAgentTask` or the optional installed-DSH adapter:
 
 ```sh
-python -m pip install -r semantic-graph/requirements.txt
-npm run validate
-node scripts/scale-agent.mjs
+node dist-agent/agent-run.mjs --root /absolute/path/knowledge --questions /path/questions.json --output /path/new-run --dsh-entry /path/installed/dsh/lib/bin.js
 ```
 
-The fixed synthetic retrieval evaluation preserves its baseline algorithm and
-relevance labels. Tests cover engineering behavior and browser task walkthroughs;
-they do not establish real-world knowledge quality or model answer faithfulness.
-See [measured evidence, changes and limits](docs/validation/standalone/readiness.md).
+The host preflights source coverage, checks the complete draft, returns concrete errors for repair, and retains explicit uncertainty when evidence is insufficient. Consume the returned `delivery`, rather than unchecked model output. Direct `prepare_answer` clients must supply the original `questions`.
 
-## Optional Obsidian plugin
+Rational Delirium does not bundle a model or API credentials. An external agent/model may process the supplied context according to that client's configuration.
 
-`npm run build:plugin` emits the four-file plugin. Install with
-`node scripts/deploy.mjs /path/to/vault` and enable it in Obsidian 1.13.7+.
-Existing plugin views remain compatible with the unified source index. Its earlier
-Markdown proposal/decision workflow is legacy display compatibility; it does not
-authorize the independent executor. See [plugin workflow](docs/personal-knowledge-workflow.md).
+[Agent workflow](skills/rational-delirium-agent-skill.md) · [Delivery contract](docs/agent-delivery.md) · [Source reading](docs/agent-source-reading.md)
 
-`semantic-graph/projector.py` and `mutation-gate/` remain explicitly legacy
-KO-only export / append-only gate tools. The independent runtime uses the shared
-Node index and the new revision engine. No graph.json is needed for daily use.
+## Validation and scope
 
-The first independent release focuses on text knowledge. PDF/OCR, attachment
-preview, built-in model chat and multi-device sync are outside this release.
+- **704 Vitest + 62 Python checks**; the full validation workflow passes on Windows and Ubuntu.
+- One real local DSH re-evaluation covers **14 existing personal-material questions**: 77 exact citations and 23 formal relationships align with saved sources and declarations. Two questions retain source-coverage uncertainty.
+- Independent-runtime, MCP, HTTP, knowledge-package, and recovery scenarios have engineering checks. These do not establish long-term reliability or real-world outcomes.
+
+The current preview focuses on local text knowledge. PDF/OCR, attachment previews, cloud synchronization, and built-in model chat are future work. Classification suggestions use paragraph rules; semantic analysis depends on human review or an external agent. Fourteen existing questions are not a new blind benchmark or a general accuracy guarantee.
+
+Knowledge ZIPs migrate indexed Markdown and declared relationships. They exclude attachments, approval keys, and complete execution history; keep the workspace and external keys separately for full recovery.
+
+[Release validation](docs/validation/v1.10.0/release.md) · [Source/version evaluation](docs/validation/v1.10.0/source-coverage.md) · [Four-role formats](docs/four-role-workspace.md) · [Three-layer design](docs/architecture/three-layer-design-v1.0.md)
+
+## Package a release
+
+From a clean source checkout with Node 24+ and build dependencies installed:
+
+```sh
+npm run validate > validation.log
+npm run package:agent -- --output ../release-output --validation-log ./validation.log
+```
+
+Use a new output directory. Packaging preserves earlier deliveries, records the source commit and file hashes, and creates standalone/plugin ZIPs plus `SHA256SUMS.txt`. The packaging step uses Node and does not require Python; running the Python test suites requires Python and the declared test dependencies.
 
 ## License
 
-MIT. Distributed builds include third-party license notices.
-
-当前状态回答现已接入来源与版本覆盖检查：对照库内当前声明和历史记录，避免漏读后续发布版本；抓取时间、课件版本与软件发布分开处理。详见 [Agent 来源与版本覆盖](docs/agent-delivery.md)。调用 `prepare_answer` 需携带原始 `questions`；覆盖不足保留未知。
+[MIT](LICENSE). Bundled dependencies retain their licenses in `THIRD_PARTY_NOTICES.txt`; the icon assets include their own license.

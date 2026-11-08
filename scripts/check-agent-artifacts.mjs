@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import {AGENT_RUNTIME_FILES} from './runtime-files.mjs';
 import * as path from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
@@ -28,6 +29,7 @@ try{
   const delivered=JSON.parse(fs.readFileSync(path.join(output,'delivery.json'),'utf8')),record=JSON.parse(fs.readFileSync(path.join(output,'run.json'),'utf8'));
   if(record.outcome!=='uncertain'||record.fallbackIds[0]!=='Q1'||delivered.answers[0].conclusion!=='unknown'||JSON.stringify(delivered).includes('Unchecked confident body'))throw Error('Portable Agent fallback leaked unchecked draft');
   const items=[];const walk=(dir,prefix='')=>{for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name),relative=prefix+e.name;if(e.isDirectory())walk(p,relative+'/');else items.push({path:relative,bytes:fs.statSync(p).size,sha256:createHash('sha256').update(fs.readFileSync(p)).digest('hex')});}};walk(dist);
+  if(JSON.stringify(items.map(f=>f.path).sort())!==JSON.stringify([...AGENT_RUNTIME_FILES].sort()))throw Error('Standalone runtime inventory mismatch');
   fs.writeFileSync(path.join(root,`docs/validation/v${version}/artifacts.json`),JSON.stringify({version,portableSmoke:'passed: isolated copy with no runtime node_modules',files:items},null,2)+'\n');
   console.log('AGENT_ARTIFACT_CHECK=PASS; isolated CLI, read-only Agent tools and mandatory delivery rejection/fallback (provider stub), '+items.length+' runtime assets');
 }finally{const expected=path.resolve(tmpdir())+path.sep+'rd-portable-';if(!path.resolve(dir).startsWith(expected))throw Error('Unsafe portable-test cleanup');fs.rmSync(dir,{recursive:true,force:true});}

@@ -1,4 +1,5 @@
 import {build} from 'esbuild';
+import {AGENT_ICONS} from './runtime-files.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..'),out=path.join(root,'dist-agent');
@@ -9,7 +10,7 @@ await build({...common,stdin:{contents:'export {KnowledgeService} from "./standa
 await build({entryPoints:[path.join(root,'web/app.ts')],outfile:path.join(out,'web/app.js'),bundle:true,platform:'browser',format:'esm',target:'es2022',logLevel:'info'});
 for(const entry of ['agent-read','agent-run'])await build({...common,entryPoints:[path.join(root,'standalone',entry+'.ts')],outfile:path.join(out,entry+'.mjs')});
 for(const file of ['index.html','app.css'])fs.copyFileSync(path.join(root,'web',file),path.join(out,'web',file));
-const icons=['magnifying-glass','books','tree-structure','git-pull-request','clock-counter-clockwise','file-text','arrow-square-out','caret-right','caret-left','arrow-right','arrow-left','x','plus','pencil-simple','check','warning-circle','arrow-clockwise','sidebar','list','copy','folder-open','git-diff'];
+const icons=AGENT_ICONS;
 for(const icon of icons)fs.copyFileSync(path.join(root,'node_modules/@phosphor-icons/core/assets/regular',icon+'.svg'),path.join(out,'web/icons',icon+'.svg'));
 fs.copyFileSync(path.join(root,'node_modules/@phosphor-icons/core/LICENSE'),path.join(out,'web/icons/LICENSE.txt'));
 fs.copyFileSync(path.join(root,'scripts/Start-RD.cmd'),path.join(out,'Start-RD.cmd'));

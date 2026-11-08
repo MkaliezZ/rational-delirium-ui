@@ -15,7 +15,7 @@
 > node scripts/build.mjs
 
 
-  dist\main.js  581.0kb
+  dist\main.js  581.1kb
 
 Done in 38ms
 build complete: dist/main.js, dist/manifest.json, dist/styles.css, dist/tokens-rational-archive.css
@@ -24,17 +24,25 @@ build complete: dist/main.js, dist/manifest.json, dist/styles.css, dist/tokens-r
 > node scripts/build-agent.mjs
 
 
-  dist-agent\rd.mjs  608.4kb
+  dist-agent\rd.mjs  652.2kb
 
-Done in 36ms
+Done in 35ms
 
-  dist-agent\index.mjs  580.8kb
+  dist-agent\index.mjs  623.5kb
 
-Done in 26ms
+Done in 28ms
 
-  dist-agent\web\app.js  205.1kb
+  dist-agent\web\app.js  222.5kb
 
-Done in 19ms
+Done in 17ms
+
+  dist-agent\agent-read.mjs  625.5kb
+
+Done in 28ms
+
+  dist-agent\agent-run.mjs  630.4kb
+
+Done in 29ms
 Independent runtime built: dist-agent/rd.mjs + web/ (Node 24+, no Obsidian/Python/runtime npm install).
 
 > rational-delirium-ui@1.10.0 test
@@ -43,82 +51,98 @@ Independent runtime built: dist-agent/rd.mjs + web/ (Node 24+, no Obsidian/Pytho
 
  RUN  v3.2.7 <repository>
 
- ✓ tests/collaboration-surface.test.ts (17 tests) 259ms
- ✓ tests/architecture-guard.test.ts (20 tests) 383ms
-   ✓ architecture regression guard (§40) > RuntimeWiring module exists and is importable  361ms
- ✓ tests/rd-ko-leaf-theme.test.ts (29 tests) 250ms
- ✓ tests/collaboration-runtime.test.ts (3 tests) 421ms
-   ✓ Collaboration real-host regressions > renders after async loading on first open and after closing/reopening the view  398ms
- ✓ tests/investigation-view.test.ts (15 tests) 249ms
- ✓ tests/graph-view.test.ts (14 tests) 258ms
- ✓ tests/production-acceptance.test.ts (25 tests) 272ms
- ✓ tests/production-integration.test.ts (12 tests) 333ms
- ✓ tests/workspace-source-lifecycle.test.ts (8 tests) 693ms
- ✓ tests/unified-knowledge-index.test.ts (10 tests) 472ms
- ✓ tests/shell-architecture.test.ts (13 tests) 261ms
- ✓ tests/graph-presentation.test.ts (14 tests) 224ms
- ✓ tests/source-nav-repair.test.ts (7 tests) 198ms
- ✓ tests/knowledge-panel-lifecycle.test.ts (6 tests) 199ms
+ ✓ tests/retrieval-cache.test.ts (2 tests) 18ms
+ ✓ tests/standalone-workspace-ui.test.ts (4 tests) 467ms
+   ✓ keeps reading, relations, provenance and overview navigation distinct in the actual app  428ms
+ ✓ tests/agent-delivery.test.ts (8 tests) 999ms
+ ✓ tests/workspace-source-lifecycle.test.ts (8 tests) 689ms
+ ✓ tests/relation-evidence.test.ts (4 tests) 1031ms
+   ✓ keeps supplements directional, candidates outside the graph, and exposes exact evidence availability  333ms
+   ✓ rejects fabricated quotes for the cited revision, while retaining explicitly historical or missing source versions  381ms
+ ✓ tests/source-use-eval.test.ts (8 tests) 1081ms
+ ✓ tests/collaboration-runtime.test.ts (3 tests) 417ms
+   ✓ Collaboration real-host regressions > renders after async loading on first open and after closing/reopening the view  389ms
+ ✓ tests/unified-knowledge-index.test.ts (10 tests) 427ms
+ ✓ tests/source-coverage.test.ts (12 tests) 1989ms
+ ✓ tests/production-integration.test.ts (12 tests) 320ms
+ ✓ tests/collaboration-surface.test.ts (17 tests) 233ms
+ ✓ tests/workspace-reading-surface.test.ts (15 tests) 279ms
+ ✓ tests/graph-view.test.ts (14 tests) 277ms
+ ✓ tests/rd-ko-leaf-theme.test.ts (29 tests) 263ms
+ ✓ tests/production-acceptance.test.ts (25 tests) 297ms
+ ✓ tests/investigation-view.test.ts (15 tests) 261ms
+ ✓ tests/architecture-guard.test.ts (20 tests) 244ms
+ ✓ tests/shell-architecture.test.ts (13 tests) 256ms
+ ✓ tests/knowledge-panel-lifecycle.test.ts (6 tests) 266ms
+ ✓ tests/graph-presentation.test.ts (14 tests) 225ms
+ ✓ tests/graph-live.test.ts (5 tests) 226ms
+ ✓ tests/graph-repair.test.ts (15 tests) 213ms
+ ✓ tests/source-nav-repair.test.ts (7 tests) 196ms
  ✓ tests/loop-view.test.ts (12 tests) 202ms
- ✓ tests/workspace-reading-surface.test.ts (15 tests) 275ms
- ✓ tests/graph-live.test.ts (5 tests) 241ms
- ✓ tests/graph-snapshot-coordinator.test.ts (8 tests) 146ms
- ✓ tests/graph-repair.test.ts (15 tests) 208ms
- ✓ tests/loop-live.test.ts (4 tests) 177ms
- ✓ tests/knowledge-workspace.test.ts (10 tests) 184ms
- ✓ tests/animation-polish.test.ts (8 tests) 172ms
- ✓ tests/shell-css-isolation.test.ts (9 tests) 140ms
- ✓ tests/index-lifecycle.test.ts (10 tests) 161ms
- ✓ tests/workspace-dossier-composition.test.ts (11 tests) 104ms
- ✓ tests/runtime-admission.test.ts (8 tests) 142ms
- ✓ tests/investigation-live.test.ts (4 tests) 167ms
- ✓ tests/loop-projection.test.ts (14 tests) 107ms
- ✓ tests/graph-projection.test.ts (12 tests) 106ms
- ✓ tests/investigation-projection.test.ts (11 tests) 115ms
- ✓ tests/ko-surface.test.ts (8 tests) 66ms
- ✓ tests/targeted-closure.test.ts (31 tests) 96ms
- ✓ tests/semantic-graph-phase2.test.ts (14 tests) 64ms
- ✓ tests/correctness-regressions.test.ts (39 tests) 85ms
- ✓ tests/read-only-boundary.test.ts (4 tests) 66ms
- ✓ tests/archive-home.test.ts (9 tests) 78ms
- ✓ tests/delivery-contract.test.ts (4 tests) 5345ms
-   ✓ installation and portable graph export > deploys exactly the four matching runtime files without changing vault settings  3610ms
-   ✓ installation and portable graph export > exports both schemas with exactly the live index semantics and deterministic output  1437ms
- ✓ tests/object-parser.test.ts (14 tests) 57ms
- ✓ tests/context-state.test.ts (9 tests) 59ms
- ✓ tests/async-race.test.ts (5 tests) 38ms
- ✓ tests/refresh-reliability.test.ts (6 tests) 35ms
- ✓ tests/human-approved-workflow.test.ts (10 tests) 28ms
- ✓ tests/relation-parser.test.ts (16 tests) 29ms
- ✓ tests/theme-system.test.ts (10 tests) 25ms
- ✓ tests/scope.test.ts (5 tests) 32ms
+ ✓ tests/four-role-workbench.test.ts (22 tests) 4469ms
+   ✓ four cognitive roles over the existing schemas > adopts multiple roles into one unit and preserves exact source and revision  317ms
+   ✓ portable knowledge assets > can revise an adopted unit while retaining the original extraction identity and citations  476ms
+   ✓ portable knowledge assets > round-trips Markdown, IDs, roles, citations and relations without migrating approval authority  713ms
+ ✓ tests/loop-live.test.ts (4 tests) 158ms
+ ✓ tests/investigation-live.test.ts (4 tests) 165ms
+ ✓ tests/delivery-contract.test.ts (4 tests) 4889ms
+   ✓ installation and portable graph export > deploys exactly the four matching runtime files without changing vault settings  3101ms
+   ✓ installation and portable graph export > exports both schemas with exactly the live index semantics and deterministic output  1484ms
+ ✓ tests/animation-polish.test.ts (8 tests) 146ms
+ ✓ tests/shell-css-isolation.test.ts (9 tests) 144ms
+ ✓ tests/graph-snapshot-coordinator.test.ts (8 tests) 141ms
+ ✓ tests/standalone-knowledge.test.ts (28 tests) 5397ms
+   ✓ controlled revision and failure recovery > history lists summaries and pagination, while exact proposal reads retain full prior snapshots  303ms
+   ✓ controlled revision and failure recovery > rejects an oversized escaped recovery journal before changing any source  462ms
+   ✓ controlled revision and failure recovery > requires approval, binds the displayed digest, applies once and proposes an audited inverse  351ms
+   ✓ controlled revision and failure recovery > recovers interrupted multi-file writes without overwriting a third-party change  335ms
+   ✓ local access and agent transport > a separate MCP agent proposes and applies only after an operator signs the exact version  753ms
+   ✓ local access and agent transport > stdio client completes negotiation and a real query with stdout containing only JSON-RPC  454ms
+ ✓ tests/knowledge-workspace.test.ts (10 tests) 167ms
+ ✓ tests/index-lifecycle.test.ts (10 tests) 169ms
+ ✓ tests/runtime-admission.test.ts (8 tests) 138ms
+ ✓ tests/graph-projection.test.ts (12 tests) 113ms
+ ✓ tests/workspace-dossier-composition.test.ts (11 tests) 116ms
+ ✓ tests/investigation-projection.test.ts (11 tests) 104ms
+ ✓ tests/loop-projection.test.ts (14 tests) 91ms
+ ✓ tests/relation-atlas.test.ts (9 tests) 73ms
+ ✓ tests/read-only-boundary.test.ts (4 tests) 65ms
+ ✓ tests/targeted-closure.test.ts (31 tests) 97ms
+ ✓ tests/ko-surface.test.ts (8 tests) 68ms
+ ✓ tests/correctness-regressions.test.ts (39 tests) 82ms
+ ✓ tests/archive-home.test.ts (9 tests) 69ms
+ ✓ tests/semantic-graph-phase2.test.ts (14 tests) 65ms
+ ✓ tests/object-parser.test.ts (14 tests) 56ms
+ ✓ tests/async-race.test.ts (5 tests) 45ms
+ ✓ tests/context-state.test.ts (9 tests) 60ms
+ ✓ tests/theme-system.test.ts (10 tests) 24ms
+ ✓ tests/refresh-reliability.test.ts (6 tests) 37ms
+ ✓ tests/scope.test.ts (5 tests) 29ms
+ ✓ tests/human-approved-workflow.test.ts (10 tests) 33ms
  ✓ tests/semantic-graph.test.ts (9 tests) 23ms
- ✓ tests/view-accessibility.test.ts (7 tests) 21ms
- ✓ tests/workflow-validation.test.ts (11 tests) 18ms
- ✓ tests/workspace-visual-system.test.ts (9 tests) 18ms
- ✓ tests/plugin-architecture.test.ts (14 tests) 16ms
  ✓ tests/knowledge-capture-draft.test.ts (1 test) 20ms
- ✓ tests/home-lifecycle-restore.test.ts (5 tests) 16ms
- ✓ tests/relation-normalizer.test.ts (8 tests) 6ms
+ ✓ tests/relation-parser.test.ts (16 tests) 29ms
+ ✓ tests/workflow-validation.test.ts (11 tests) 20ms
+ ✓ tests/workspace-visual-system.test.ts (9 tests) 20ms
+ ✓ tests/view-accessibility.test.ts (7 tests) 20ms
+ ✓ tests/home-lifecycle-restore.test.ts (5 tests) 15ms
  ✓ tests/navigation.test.ts (5 tests) 4ms
- ✓ tests/knowledge-motion.test.ts (2 tests) 5ms
- ✓ tests/graph-schema-compatibility.test.ts (2 tests) 3ms
- ✓ tests/four-role-workbench.test.ts (21 tests) 2688ms
-   ✓ portable knowledge assets > round-trips Markdown, IDs, roles, citations and relations without migrating approval authority  419ms
- ✓ tests/standalone-knowledge.test.ts (28 tests) 3321ms
-   ✓ local access and agent transport > a separate MCP agent proposes and applies only after an operator signs the exact version  418ms
+ ✓ tests/relation-normalizer.test.ts (8 tests) 4ms
+ ✓ tests/knowledge-motion.test.ts (2 tests) 4ms
+ ✓ tests/graph-schema-compatibility.test.ts (3 tests) 4ms
+ ✓ tests/plugin-architecture.test.ts (14 tests) 13ms
 
- Test Files  58 passed (58)
-      Tests  655 passed (655)
-   Start at  09:08:40
-   Duration  12.13s (transform 2.83s, setup 0ms, collect 14.37s, tests 19.38s, environment 34.47s, prepare 8.26s)
+ Test Files  65 passed (65)
+      Tests  704 passed (704)
+   Start at  11:31:03
+   Duration  10.19s (transform 2.30s, setup 0ms, collect 15.12s, tests 28.27s, environment 32.83s, prepare 8.71s)
 
 
 > rational-delirium-ui@1.10.0 check-artifacts
 > node scripts/check-artifacts.mjs
 
 ARTIFACT_CHECK=PASS
-SHA256 main.js = bce8adfc4bab4817e4db329e449584c9c7631c7496e89b47a63316d8d69a8e2b
+SHA256 main.js = 7c168f9fdf46f7540607425f07667982062ff82345122db93c71e688346815af
 SHA256 manifest.json = 5a9b5a8e6ce910476e6aed5a436e938e15e18e752ed32d84b325bb0e57745e70
 SHA256 styles.css = 017ff89df2f7dd150f8cbdcaba008a365166928da23c12ddd7b96047dd3ddd17
 SHA256 tokens-rational-archive.css = 03521943706b4a88793051e433e1a1a240f4e281f5ceca7484738d4bdeaa59e3
@@ -126,19 +150,19 @@ SHA256 tokens-rational-archive.css = 03521943706b4a88793051e433e1a1a240f4e281f5c
 > rational-delirium-ui@1.10.0 check-agent-artifacts
 > node scripts/check-agent-artifacts.mjs
 
-AGENT_ARTIFACT_CHECK=PASS; isolated CLI demo/status/search, 30 runtime assets
+AGENT_ARTIFACT_CHECK=PASS; isolated CLI, read-only Agent tools and mandatory delivery rejection/fallback (provider stub), 34 runtime assets
 
 > rational-delirium-ui@1.10.0 test:python
 > python -B -m unittest discover -s semantic-graph/tests && python -B -m unittest discover -s mutation-gate/tests
 
 ....................
 ----------------------------------------------------------------------
-Ran 20 tests in 0.138s
+Ran 20 tests in 0.139s
 
 OK
 ..........................................
 ----------------------------------------------------------------------
-Ran 42 tests in 0.584s
+Ran 42 tests in 0.525s
 
 OK
 
@@ -172,7 +196,7 @@ OK
 {
   "run": "current",
   "recallAt5": 1,
-  "mrrAt5": 1,
+  "mrrAt5": 0.98,
   "checks": {
     "seedIncluded": true,
     "supportIncluded": true,
@@ -181,7 +205,9 @@ OK
     "encodedBudget": true,
     "legacyIdentity": true
   },
-  "misses": []
+  "misses": [
+    "新的观察修订任务记忆"
+  ]
 }
 {
   "schema": "rd-role-eval-result/1",

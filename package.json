@@ -17,6 +17,7 @@
     "start": "node dist-agent/rd.mjs serve",
     "eval": "node scripts/eval-knowledge.mjs --replay-baseline && node scripts/eval-knowledge.mjs && node scripts/eval-roles.mjs",
     "check-agent-artifacts": "node scripts/check-agent-artifacts.mjs",
+    "package:agent": "node scripts/package-agent.mjs",
     "eval:record": "node scripts/eval-knowledge.mjs --replay-baseline --record && node scripts/eval-knowledge.mjs --record"
   },
   "dependencies": {

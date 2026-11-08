@@ -2,7 +2,7 @@
 
 1.10.0 提供本地浏览器界面、CLI、库 API 与 MCP stdio。Markdown 是知识源；运行时只需 Node 24+，不需要启动 Obsidian、Python、模型服务或数据库。源代码构建仍需 npm 安装依赖。Obsidian 插件保留为可选阅读入口。
 
-本版操作与格式：[四板块知识工作区](four-role-workspace.md)。产品约定：[三层设计 v1.0](architecture/three-layer-design-v1.0.md)。本轮验收：[1.10.0](validation/v1.10.0/readiness.md)。
+本版操作与格式：[四板块知识工作区](four-role-workspace.md)。产品约定：[三层设计 v1.0](architecture/three-layer-design-v1.0.md)。本轮验收：[1.10.0 当前发布](validation/v1.10.0/release.md)。
 
 ## 启动
 
@@ -74,7 +74,7 @@ contradicted_by: [ko-20261107-0092]
 }
 ```
 
-默认只读工具包括：status、list、search、get、read_source、check_citations、check_relations、prepare_answer、relations、context、validate、proposals、proposal，名称均以 `rd_` 开头。添加 `--write` 开放 propose、revise、restore 和 apply，始终不开放批准、直接保存和恢复执行工具。
+默认只读工具包括：status、list、search、get、read_source、check_citations、check_relations、source_coverage、prepare_answer、relations、context、validate、proposals、proposal，名称均以 `rd_` 开头。添加 `--write` 开放 propose、revise、restore 和 apply，始终不开放批准、直接保存和恢复执行工具。
 
 工具遵循 [MCP stdio](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)、[生命周期](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle)和[工具协议](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)。当前协议版本为 `2025-11-25`。stdout 仅输出 JSON-RPC；初始化后发送 `notifications/initialized` 才能调用工具。返回结构化内容及兼容的文本内容。
 
