@@ -1,0 +1,60 @@
+{
+  "multilineProvenance": {
+    "object_id": "ko-20261107-0001",
+    "kind": "concept",
+    "status": "active",
+    "title": "Example",
+    "provenance": {
+      "evidence": "First source line.\nSecond source line.\n"
+    }
+  },
+  "koInLegacyIndex": {
+    "object": {
+      "path": "CASES/new-ko.md",
+      "schema": "ko",
+      "id": "ko-20261107-0001",
+      "type": "concept",
+      "status": "active",
+      "title": "Example",
+      "tags": [],
+      "created": null,
+      "lastVerified": null,
+      "mtime": 1,
+      "demo": false,
+      "proof": false,
+      "revision": 1,
+      "diagnostics": []
+    },
+    "detail": {
+      "object_id": "ko-20261107-0001",
+      "kind": "concept",
+      "status": "active",
+      "title": "Example",
+      "provenance": {
+        "evidence": "First source line.\nSecond source line.\n"
+      }
+    },
+    "declaredId": "ko-20261107-0001",
+    "diagnostics": [],
+    "assertions": [],
+    "ordinaryLinks": []
+  },
+  "knowledgePanelRepeatedReads": {
+    "adapterReads": 2,
+    "cap": 8,
+    "oneInspectClick": true,
+    "capExplanation": "The ninth read is deliberately left pending to bound the reproduction."
+  },
+  "shellSourceAfterExplicitRefresh": {
+    "graphReads": 2,
+    "detailReads": 2,
+    "invalidations": 4,
+    "showsOldEvidence": false,
+    "showsNewEvidence": true,
+    "snapshotTitle": "After"
+  },
+  "shellReopen": {
+    "graphReads": 3,
+    "snapshotTitle": "After closing and editing"
+  }
+}

@@ -73,7 +73,7 @@ export function renderKoSurface(host: HTMLElement, input: KoSurfaceInput): void 
       for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text:
         `Object ${resolved.state} in the loaded snapshot. No title or path substitution.` });
     } else {
-      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: "Derived snapshot · freshness unverified · source declarations may differ." });
+      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: load.origin === "live-index" ? "Derived from the saved-note index · declarations are not validation." : "Derived snapshot · freshness unverified · source declarations may differ." });
       if (resolved.node.kind !== fm.kind || resolved.node.status !== fm.status) {
         createChild(relations, "p", { cls: "rdko-note", text: `Snapshot/source differ: snapshot kind ${resolved.node.kind}, status ${resolved.node.status}. Not reconciled.` });
       }

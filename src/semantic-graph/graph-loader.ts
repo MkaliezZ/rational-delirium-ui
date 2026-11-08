@@ -1,5 +1,5 @@
 /** v1.3.1 §1 — read-only loader for the v1.2.1 semantic graph
- * artifact (frozen contract: schema/nodes/edges/unresolved/
+ * artifact (v1 and backward-compatible v2 shapes: schema/nodes/edges/unresolved/
  * diagnostics).
  *
  * Boundaries (v1.3.0 §7):
@@ -16,7 +16,8 @@
  *   lifecycle values.
  */
 
-export const GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
+export const LEGACY_GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
+export const GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/2";
 
 /** Vault-relative location of the derived artifact for the Phase 1
  * prototype. The projector writes it; the plugin only reads. */
@@ -31,13 +32,17 @@ export type AvailabilityState =
   | "invalid"
   | "not_loaded";
 
-export const GRAPH_RELATIONS: readonly string[] = [
+export const LEGACY_GRAPH_RELATIONS: readonly string[] = [
   "supports",
   "contradicts",
   "derived_from",
   "depends_on",
   "revises",
   "supersedes",
+ ];
+
+export const GRAPH_RELATIONS: readonly string[] = [
+  ...LEGACY_GRAPH_RELATIONS, "related", "complements", "repeats_in", "observed_in",
 ];
 
 export interface GraphNode {
@@ -70,7 +75,7 @@ export interface SemanticGraphSnapshot {
 }
 
 export type GraphLoadResult =
-  | { readonly state: "available"; readonly graph: SemanticGraphSnapshot }
+  | { readonly state: "available"; readonly graph: SemanticGraphSnapshot; readonly origin?: "live-index" }
   | { readonly state: "missing" }
   | { readonly state: "invalid"; readonly reason: "malformed-json" | "unsupported-schema" | "invalid-shape" }
   | { readonly state: "unavailable"; readonly reason: string };
@@ -79,8 +84,9 @@ export type GraphLoadResult =
  * Obsidian implementation (main.ts) reads a vault file; tests use
  * fakes. Read-only by construction: no write verb exists here. */
 export interface GraphSource {
+  subscribe?(listener: () => void): () => void;
   read(): Promise<
-    | { readonly state: "available"; readonly text: string }
+    | { readonly state: "available"; readonly text: string; readonly origin?: "live-index" }
     | { readonly state: "missing" }
     | { readonly state: "unavailable"; readonly reason: string }
   >;
@@ -120,11 +126,11 @@ function parseNode(raw: unknown): GraphNode | null {
   };
 }
 
-function parseEdge(raw: unknown): GraphEdge | null {
+function parseEdge(raw: unknown, allowedRelations: readonly string[]): GraphEdge | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   if (!isString(r.source) || !isString(r.target) || !isString(r.relation)) return null;
-  if (!GRAPH_RELATIONS.includes(r.relation)) return null;
+  if (!allowedRelations.includes(r.relation)) return null;
   return { source: r.source, target: r.target, relation: r.relation };
 }
 
@@ -150,7 +156,7 @@ export function parseGraphSnapshot(raw: string): GraphLoadResult {
     return { state: "invalid", reason: "invalid-shape" };
   }
   const r = parsed as Record<string, unknown>;
-  if (r.schema !== GRAPH_SCHEMA_TAG) {
+  if (r.schema !== GRAPH_SCHEMA_TAG && r.schema !== LEGACY_GRAPH_SCHEMA_TAG) {
     return { state: "invalid", reason: "unsupported-schema" };
   }
   if (!Array.isArray(r.nodes) || !Array.isArray(r.edges) ||
@@ -158,8 +164,9 @@ export function parseGraphSnapshot(raw: string): GraphLoadResult {
     return { state: "invalid", reason: "invalid-shape" };
   }
   const nodes = r.nodes.map(parseNode);
-  const edges = r.edges.map(parseEdge);
-  const unresolved = r.unresolved.map(parseEdge);
+  const allowedRelations = r.schema === LEGACY_GRAPH_SCHEMA_TAG ? LEGACY_GRAPH_RELATIONS : GRAPH_RELATIONS;
+  const edges = r.edges.map((raw) => parseEdge(raw, allowedRelations));
+  const unresolved = r.unresolved.map((raw) => parseEdge(raw, allowedRelations));
   const diagnostics = r.diagnostics.map(parseDiagnostic);
   if (nodes.includes(null) || edges.includes(null) ||
       unresolved.includes(null) || diagnostics.includes(null)) {
@@ -172,7 +179,7 @@ export function parseGraphSnapshot(raw: string): GraphLoadResult {
   return {
     state: "available",
     graph: deepFreeze({
-      schema: GRAPH_SCHEMA_TAG,
+      schema: r.schema,
       nodes: nodes as GraphNode[],
       edges: edges as GraphEdge[],
       unresolved: unresolved as GraphEdge[],
@@ -187,5 +194,7 @@ export async function loadGraphFromSource(source: GraphSource): Promise<GraphLoa
   const read = await source.read();
   if (read.state === "missing") return { state: "missing" };
   if (read.state === "unavailable") return { state: "unavailable", reason: read.reason };
-  return parseGraphSnapshot(read.text);
+  const load = parseGraphSnapshot(read.text);
+  return load.state === "available" && read.origin === "live-index"
+    ? { ...load, origin: read.origin } : load;
 }

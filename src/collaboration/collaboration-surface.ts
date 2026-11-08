@@ -53,6 +53,8 @@ export class CollaborationBrowser {
     trail: [],
   });
   private readonly listeners = new Set<Listener>();
+  private generation = 0;
+  private disposed = false;
 
   getState(): CollaborationBrowserState {
     return this.state;
@@ -64,9 +66,11 @@ export class CollaborationBrowser {
   }
 
   /** Explicit re-read of available artifacts (user action only). */
-  async refresh(source: CollaborationArtifactSource): Promise<void> {
+  async refresh(source: CollaborationArtifactSource, preserveSelection = false): Promise<void> {
+    const generation = ++this.generation;
     const model = await buildCollaborationModel(source);
-    this.update({ model, selectedArtifact: null, trail: [] });
+    if (this.disposed || generation !== this.generation) return;
+    this.update(preserveSelection ? {model} : { model, selectedArtifact: null, trail: [] });
   }
 
   /** List → detail navigation (explicit kind + exact path). */
@@ -88,10 +92,13 @@ export class CollaborationBrowser {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.generation++;
     this.listeners.clear();
   }
 
   private update(patch: Partial<CollaborationBrowserState>): void {
+    if (this.disposed) return;
     this.state = deepFreeze({ ...this.state, ...patch });
     for (const listener of [...this.listeners]) listener(this.state);
   }

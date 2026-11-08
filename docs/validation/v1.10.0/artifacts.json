@@ -1,0 +1,176 @@
+{
+  "version": "1.10.0",
+  "portableSmoke": "passed: isolated copy with no runtime node_modules",
+  "files": [
+    {
+      "path": ".node-version",
+      "bytes": 9,
+      "sha256": "04d43a993a37e6543c8b1cc37d498fa4a10250034ab922207b1a6a1e41e216da"
+    },
+    {
+      "path": "agent-read.mjs",
+      "bytes": 640469,
+      "sha256": "212db7c601ce83719b63792aaf93aa274ef466a054447d83b6a114b2f08ea19b"
+    },
+    {
+      "path": "agent-run.mjs",
+      "bytes": 645546,
+      "sha256": "c154c790a26a7e4a14a27c184af5d26e577527c7d7fb2d4caad6aa72da856584"
+    },
+    {
+      "path": "index.mjs",
+      "bytes": 638438,
+      "sha256": "cf99657cc3c7b13563aca8d216d12a82d04a7a4c44ca8a3f85752eadac3698ae"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1086,
+      "sha256": "cfdbe76267a2891369e0f41f0ada2c00bd1489d4eb5a051a08e2848152c2f522"
+    },
+    {
+      "path": "rd.mjs",
+      "bytes": 667858,
+      "sha256": "a37dd2ffa0c9d1efe3c46227f0367195e94672074f06b905162cbde3076bb59f"
+    },
+    {
+      "path": "Start-RD.cmd",
+      "bytes": 790,
+      "sha256": "5095aa47fc7021bf1fa429ae5da0ac37d555641da5f8e7a12d27eb1634496add"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.txt",
+      "bytes": 42436,
+      "sha256": "fee93e892b73ffae454303a73cbcc91c407335bea47857528e28b4d54a7b35a5"
+    },
+    {
+      "path": "web/app.css",
+      "bytes": 39469,
+      "sha256": "15518dcf24a2baed1ed02b50388749f665941b4bf3b2511e618eba9b622e8ab3"
+    },
+    {
+      "path": "web/app.js",
+      "bytes": 227846,
+      "sha256": "d9859fa692db4beda2e0c27e6ef2902fa9fc840636c433c80798b121ee2450bc"
+    },
+    {
+      "path": "web/icons/arrow-clockwise.svg",
+      "bytes": 296,
+      "sha256": "4a78a777b692cb74826e3071ae7049cc0d3927e68a7b8272e7251b1760cd771f"
+    },
+    {
+      "path": "web/icons/arrow-left.svg",
+      "bytes": 248,
+      "sha256": "3c2001cf957d182fc54927e4b286cc8cf66dd97830f441ca2650d42a63a9006a"
+    },
+    {
+      "path": "web/icons/arrow-right.svg",
+      "bytes": 245,
+      "sha256": "e45bc4a12592b8723110db42c6deffdf177e4fe7704cf50324963fa0a59b2d74"
+    },
+    {
+      "path": "web/icons/arrow-square-out.svg",
+      "bytes": 347,
+      "sha256": "8610e8f5c7d4952ae1ada34ef56fa7cbab1780bc85f25a5c9482b74144790fc8"
+    },
+    {
+      "path": "web/icons/books.svg",
+      "bytes": 676,
+      "sha256": "38560cd9dec996bc3f79c10675ced1d2b3bd2e5ef497f3966733e5d787af5e11"
+    },
+    {
+      "path": "web/icons/caret-left.svg",
+      "bytes": 200,
+      "sha256": "623bf248fe21a8170344e168aaac2e174119cea5d7c5d0fb0dc84f581009475f"
+    },
+    {
+      "path": "web/icons/caret-right.svg",
+      "bytes": 219,
+      "sha256": "e6dec01e074807965b7f3146b976a9b5e82c31d9c2c88aeb52e77cc2ab16c1d7"
+    },
+    {
+      "path": "web/icons/check.svg",
+      "bytes": 215,
+      "sha256": "cbb89a8c42f283d4f846eb935e05d88c1be04462f16480e068c0f82b9ce40b12"
+    },
+    {
+      "path": "web/icons/clock-counter-clockwise.svg",
+      "bytes": 409,
+      "sha256": "06aa1cb0d2664789232f4addb1c5932c8ce14e48465c8e8fb09a651b619b44e3"
+    },
+    {
+      "path": "web/icons/copy.svg",
+      "bytes": 279,
+      "sha256": "5a892fc6a72866e60c67db2088a87653cf44b57b1a5d183b36e950cdc5dd66b3"
+    },
+    {
+      "path": "web/icons/file-text.svg",
+      "bytes": 416,
+      "sha256": "9a580a038cce9f6dd223597864abe1b5c5c03bf8176d2f7171574598468b16f7"
+    },
+    {
+      "path": "web/icons/folder-open.svg",
+      "bytes": 423,
+      "sha256": "9157518d00547242d3986c4fdaaf44a62ef056caf3ecee0c88137529947170ea"
+    },
+    {
+      "path": "web/icons/git-diff.svg",
+      "bytes": 524,
+      "sha256": "13d5a29175f0a07b7172a344b29a0c5596888af122238779eef283a7b1a6035d"
+    },
+    {
+      "path": "web/icons/git-pull-request.svg",
+      "bytes": 468,
+      "sha256": "7c8f27c4041840230aef03d7cfcae58c33dcebae5a7623b09220ccc0f8420815"
+    },
+    {
+      "path": "web/icons/LICENSE.txt",
+      "bytes": 1092,
+      "sha256": "ddbe6082ec3cf979db47e5af549d2849c5d6182b3e005ef91ce1dbb9eb122f11"
+    },
+    {
+      "path": "web/icons/list.svg",
+      "bytes": 253,
+      "sha256": "fb1851842c74b40a3f42ce3d6ae0e67ede556b624218e79c0f4ead7d9ceec51f"
+    },
+    {
+      "path": "web/icons/magnifying-glass.svg",
+      "bytes": 243,
+      "sha256": "f9fa2561978a9a3291e8ae0ebfcb651104f5069fade8f84871627bca68889cde"
+    },
+    {
+      "path": "web/icons/pencil-simple.svg",
+      "bytes": 348,
+      "sha256": "999530da442f44d8cf0054364373d16150f3e082c2ac294a4988a9c3a4295c28"
+    },
+    {
+      "path": "web/icons/plus.svg",
+      "bytes": 212,
+      "sha256": "d688feb9dd2e41c1721d6906a05a2a42e18cd774762fe706d72b2bdfd91cddc4"
+    },
+    {
+      "path": "web/icons/sidebar.svg",
+      "bytes": 308,
+      "sha256": "d919f2b3fcfeae9a4ef61fba45f54e7d343ada48628585e38c5675782c6247ff"
+    },
+    {
+      "path": "web/icons/tree-structure.svg",
+      "bytes": 524,
+      "sha256": "b44cc8e3cfb16309ee80aa43bb581427d57796a702ddace498ba41ff0709c461"
+    },
+    {
+      "path": "web/icons/warning-circle.svg",
+      "bytes": 294,
+      "sha256": "e48a90760a68659fd3f06dd9187e471aead4877c72e915339071b2c7f7bd714c"
+    },
+    {
+      "path": "web/icons/x.svg",
+      "bytes": 284,
+      "sha256": "7397b15e1fa66eaf6ff9b59fe91d483cb5c3bcf75b2fe052097ab6f0593b513a"
+    },
+    {
+      "path": "web/index.html",
+      "bytes": 4844,
+      "sha256": "d4f30051b9e38de83801cc81a5dfa6fd80b371a5c1e2538482bc2c3892d5f645"
+    }
+  ]
+}

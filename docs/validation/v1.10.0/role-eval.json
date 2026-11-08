@@ -1,0 +1,110 @@
+{
+  "schema": "rd-role-eval-result/1",
+  "corpus": "eval/roles-corpus.json",
+  "method": "paragraph-rules/1",
+  "sampleCount": 10,
+  "exactMatch": 1,
+  "rolePrecision": 1,
+  "roleRecall": 1,
+  "unknownAbstention": 1,
+  "sourceSpanAccuracy": 1,
+  "examples": [
+    {
+      "id": "dated-event",
+      "expected": [
+        "case"
+      ],
+      "predicted": [
+        "case"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "measured-record",
+      "expected": [
+        "evidence"
+      ],
+      "predicted": [
+        "evidence"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "tentative-explanation",
+      "expected": [
+        "hypothesis"
+      ],
+      "predicted": [
+        "hypothesis"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "author-pattern-claim",
+      "expected": [
+        "loop"
+      ],
+      "predicted": [
+        "loop"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "case-and-evidence",
+      "expected": [
+        "case",
+        "evidence"
+      ],
+      "predicted": [
+        "case",
+        "evidence"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "explicit-role-heading",
+      "expected": [
+        "evidence"
+      ],
+      "predicted": [
+        "evidence"
+      ],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "plain-workflow",
+      "expected": [],
+      "predicted": [],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "poem",
+      "expected": [],
+      "predicted": [],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "negated-pattern",
+      "expected": [],
+      "predicted": [],
+      "exact": true,
+      "sourceExact": true
+    },
+    {
+      "id": "definition",
+      "expected": [],
+      "predicted": [],
+      "exact": true,
+      "sourceExact": true
+    }
+  ],
+  "limitations": "Synthetic developer-authored examples. Measures paragraph role suggestions and abstention, not truth, real-world usefulness or model reasoning."
+}

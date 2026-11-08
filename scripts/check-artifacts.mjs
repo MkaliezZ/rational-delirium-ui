@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { RUNTIME_FILES } from "./runtime-files.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
@@ -9,7 +10,7 @@ const dist = join(root, "dist");
 const problems = [];
 
 const files = readdirSync(dist).sort();
-const expected = ["main.js", "manifest.json", "styles.css"];
+const expected = [...RUNTIME_FILES].sort();
 if (JSON.stringify(files) !== JSON.stringify(expected)) {
   problems.push(`dist contains ${JSON.stringify(files)}, expected exactly ${JSON.stringify(expected)}`);
 }
@@ -25,6 +26,8 @@ for (const name of expected) {
 if (!problems.includes("missing manifest.json")) {
   try {
     const manifest = JSON.parse(readFileSync(join(dist, "manifest.json"), "utf8"));
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    if (manifest.version !== pkg.version) problems.push("runtime manifest and package versions disagree");
     for (const key of ["id", "name", "version", "minAppVersion", "isDesktopOnly"]) {
       if (!(key in manifest)) problems.push(`manifest missing ${key}`);
     }
@@ -64,6 +67,4 @@ const sha = (name) =>
   createHash("sha256").update(readFileSync(join(dist, name))).digest("hex");
 
 console.log("ARTIFACT_CHECK=PASS");
-console.log(`SHA256 main.js      = ${sha("main.js")}`);
-console.log(`SHA256 manifest.json= ${sha("manifest.json")}`);
-console.log(`SHA256 styles.css   = ${sha("styles.css")}`);
+for (const name of expected) console.log(`SHA256 ${name} = ${sha(name)}`);

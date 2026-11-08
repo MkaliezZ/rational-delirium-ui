@@ -53,6 +53,7 @@ export interface RDWorkspaceShellDeps {
   readonly source: GraphSource;
   /** v1.6.3: exact-id source reader for the inspection panel. */
   readonly sourceReader?: KoSourceReader;
+  readonly refreshIndex?: () => Promise<void>;
   /** Explicit activation of another RD view (registry path). */
   readonly openView: (viewType: string) => Promise<void>;
   /** v1.6.2: explicit, session-only theme selection. */
@@ -109,6 +110,10 @@ export class RDWorkspaceShellView extends ItemView {
    * completed detail instead of rereading). */
   private sourceDetail: KoDetailResult | undefined = undefined;
   private sourceDetailObjectId: string | null = null;
+  private lastSnapshot: GraphLoadResult | null | undefined;
+  private unsubscribeBrowser: (() => void) | null = null;
+  private collabDetailToken = 0;
+  private openedBefore = false;
   /** Per-object in-flight ownership: at most one read per object id,
    * so re-selecting an object whose read is still pending never
    * starts a duplicate (review fix G/H). */
@@ -159,7 +164,18 @@ export class RDWorkspaceShellView extends ItemView {
     if (this.deps.themeController !== undefined) {
       applyRDTheme(shell, this.deps.themeController.getCurrent());
     }
+    this.lastSnapshot = undefined;
+    this.clearSourceDetail();
+    this.unsubscribeBrowser = this.browser.subscribe(() => {
+      if (!this.active) return;
+      if (this.browser.getState().selectedArtifact !== null) void this.refreshCollabDetail();
+      else { this.collabDetailToken++; this.collabDetail = null; this.renderBody(); }
+    });
     this.unsubscribe = this.deps.store.subscribe((state) => {
+      if (state.graphSnapshot !== this.lastSnapshot) {
+        this.lastSnapshot = state.graphSnapshot;
+        this.clearSourceDetail();
+      }
       // Entering collaboration mode drives exactly one explicit
       // artifact re-read for that entry (unchanged v1.7.4-A
       // behavior); all other state changes simply re-render.
@@ -180,7 +196,10 @@ export class RDWorkspaceShellView extends ItemView {
       shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
     });
     this.observer.observe(shell);
-    await this.coordinator.ensureLoaded();
+    if (this.openedBefore) await this.coordinator.refresh();
+    else await this.coordinator.ensureLoaded();
+    this.openedBefore = true;
+    this.lastSnapshot = this.deps.store.getState().graphSnapshot;
     if (!this.active || generation !== this.openGeneration) return;
     // Read-only collaboration summaries for the inspector dock.
     if (this.deps.collaborationSource !== undefined) {
@@ -200,7 +219,11 @@ export class RDWorkspaceShellView extends ItemView {
     this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
-    if (this.ownsBrowser) this.browser.dispose();
+    this.unsubscribeBrowser?.();
+    this.unsubscribeBrowser = null;
+    this.collabDetailToken++;
+    this.clearSourceDetail();
+
     emptyEl(this.contentEl);
   }
 
@@ -244,6 +267,17 @@ export class RDWorkspaceShellView extends ItemView {
     });
     createChild(right, "button", { cls: "rdws-button", text: "Inspect" })
       .addEventListener("click", go);
+    const refresh = createChild(right, "button", {cls: "rdws-button", text: "Refresh saved notes"}) as HTMLButtonElement;
+    const feedback = createChild(right, "span", {cls: "rdws-refresh-status"});
+    feedback.setAttribute("role", "status");
+    refresh.addEventListener("click", () => {
+      refresh.disabled = true;
+      feedback.textContent = "Refreshing…";
+      void this.refreshAvailability().then(() => { feedback.textContent = "Updated"; })
+        .catch((err) => { feedback.textContent = `Refresh failed: ${String(err)}`; })
+        .finally(() => { refresh.disabled = false; });
+    });
+
   }
 
   /** v1.8: explicit Human decision recording — the only write.
@@ -268,8 +302,10 @@ export class RDWorkspaceShellView extends ItemView {
    * (exact path), then re-render. Read-only. */
   private async refreshCollabDetail(): Promise<void> {
     if (this.deps.collaborationSource === undefined) return;
-    this.collabDetail = await resolveDetail(
-      this.deps.collaborationSource, this.browser.getState());
+    const token = ++this.collabDetailToken;
+    const detail = await resolveDetail(this.deps.collaborationSource, this.browser.getState());
+    if (!this.active || token !== this.collabDetailToken) return;
+    this.collabDetail = detail;
     this.renderBody();
   }
 
@@ -278,7 +314,21 @@ export class RDWorkspaceShellView extends ItemView {
    * every shell surface switches to the new published snapshot
    * together. Stale older generations can never overwrite it. */
   async refreshAvailability(): Promise<void> {
+    await this.deps.refreshIndex?.();
+    this.clearSourceDetail();
     await this.coordinator.refresh();
+    if (this.deps.collaborationSource !== undefined) {
+      await this.browser.refresh(this.deps.collaborationSource, true);
+    }
+  }
+
+  private clearSourceDetail(): void {
+    this.deps.sourceReader?.invalidate?.();
+    this.sourceDetail = undefined;
+    this.sourceDetailObjectId = null;
+    this.sourceReadToken++;
+    this.sourceReadInFlight.clear();
+    this.sourceReadTokenByObject.clear();
   }
 
   /** Source detail usable ONLY for the object it was read for. A
@@ -306,12 +356,12 @@ export class RDWorkspaceShellView extends ItemView {
     this.sourceReadInFlight.add(objectId);
     const token = ++this.sourceReadToken;
     this.sourceReadTokenByObject.set(objectId, token);
-    void reader.resolve(objectId).then((detail) => {
-      this.sourceReadInFlight.delete(objectId);
+    void reader.resolve(objectId).catch((err): KoDetailResult => ({state: "unavailable", reason: String(err)})).then((detail) => {
       if ((this.sourceReadTokenByObject.get(objectId) ?? 0) !== token) {
         return; // superseded by a newer read for the same object
       }
-      if (this.deps.store.getState().selectedObjectId !== objectId) {
+      this.sourceReadInFlight.delete(objectId);
+      if (!this.active || this.deps.store.getState().selectedObjectId !== objectId) {
         return; // object no longer selected — never displace the cache
       }
       this.sourceDetail = detail;
@@ -460,7 +510,7 @@ export class RDWorkspaceShellView extends ItemView {
     if (node !== undefined) {
       stripItem("kind", node.kind);
       stripItem("lifecycle", node.status);
-      stripItem("snapshot", "derived projection · freshness unverified");
+      stripItem("snapshot", load.origin === "live-index" ? "derived projection · live saved notes" : "derived projection · freshness unverified");
       const relationCount = graph.edges
         .filter((e) => e.source === selected || e.target === selected).length;
       const unresolvedCount = graph.unresolved
@@ -468,7 +518,7 @@ export class RDWorkspaceShellView extends ItemView {
       stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` · ${unresolvedCount} unresolved` : ""}`);
       const source = this.sourceDetailFor(selected);
       if (source !== undefined && source.state === "available") {
-        stripItem("source", "resolved · current-source read", "available");
+        stripItem("source", load.origin === "live-index" ? "resolved · indexed saved source" : "resolved · current-source read", "available");
         const p = source.frontmatter.provenance;
         const withText = p === undefined ? 0
           : [p.observation, p.evidence, p.inference, p.conclusion]

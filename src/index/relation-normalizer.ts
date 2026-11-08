@@ -26,6 +26,7 @@ export interface NormalizedAssertion {
 
 const REVERSE: Record<string, { predicate: LogicalPredicate; swap: boolean }> = {
   related: { predicate: "related", swap: false },
+  complements: { predicate: "complements", swap: false },
   supports: { predicate: "supports", swap: false },
   supported_by: { predicate: "supports", swap: true },
   contradicts: { predicate: "contradicts", swap: false },
@@ -33,6 +34,9 @@ const REVERSE: Record<string, { predicate: LogicalPredicate; swap: boolean }> = 
   derived_from: { predicate: "derived_from", swap: false },
   repeats_in: { predicate: "repeats_in", swap: false },
   observed_in: { predicate: "observed_in", swap: false },
+  depends_on: { predicate: "depends_on", swap: false },
+  revises: { predicate: "revises", swap: false },
+  supersedes: { predicate: "supersedes", swap: false },
 };
 
 interface ResolvedEndpoint {
@@ -46,6 +50,12 @@ function resolveEndpoint(
   candidatePaths: readonly string[],
   idByPath: ReadonlyMap<string, string>,
 ): ResolvedEndpoint {
+  if (link.referenceKind === "id") {
+    const paths = [...idByPath].filter(([, id]) => id === link.targetName).map(([path]) => path);
+    return paths.length === 1
+      ? { path: paths[0], objectId: link.targetName, resolution: "RESOLVED" }
+      : { path: "", objectId: null, resolution: paths.length > 1 ? "AMBIGUOUS" : "BROKEN" };
+  }
   const resolution = resolveLink(link, candidatePaths);
   if (resolution.state === "RESOLVED" && resolution.paths.length > 0) {
     const path = resolution.paths[0];

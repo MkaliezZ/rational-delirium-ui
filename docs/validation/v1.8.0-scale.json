@@ -1,0 +1,11 @@
+{
+  "synthetic_note_count": 1000,
+  "schema": "rd-semantic-graph-projection/2",
+  "nodes": 1000,
+  "edges": 1000,
+  "unresolved": 0,
+  "diagnostics": 0,
+  "export_seconds_including_bundling_and_io": 0.756,
+  "source_hashes_unchanged": true,
+  "runtime": "Node 24.21.0 on Windows; CLI export, not GUI/long-term acceptance"
+}

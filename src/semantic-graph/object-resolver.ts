@@ -16,7 +16,7 @@ import type { GraphDiagnostic, GraphEdge, GraphNode, SemanticGraphSnapshot } fro
 export type ResolveResult =
   | { readonly state: "available"; readonly node: GraphNode }
   | { readonly state: "missing" }
-  | { readonly state: "ambiguous"; readonly matches: readonly GraphNode[] };
+  | { readonly state: "ambiguous"; readonly matches: readonly GraphNode[]; readonly paths?: readonly string[] };
 
 /** `workspace` is the explicitly selected logical workspace label.
  * It is carried for scope discipline and display; the resolver
@@ -27,6 +27,8 @@ export function resolveObject(
   objectId: string,
 ): ResolveResult {
   const matches = graph.nodes.filter((n) => n.object_id === objectId);
+  const duplicate = graph.diagnostics.find(d => d.type === "duplicate_identity" && d.object_id === objectId);
+  if (matches.length === 0 && duplicate !== undefined) return {state: "ambiguous", matches, paths: duplicate.paths};
   if (matches.length === 1) return { state: "available", node: matches[0] };
   if (matches.length === 0) return { state: "missing" };
   return { state: "ambiguous", matches };

@@ -4,7 +4,9 @@ import type {
   RDRelation,
   RDRelationAssertion,
 } from "../model";
-import { isCandidatePath, isForbiddenDataSource } from "../scope";
+import { isIndexablePath } from "../scope";
+import { GRAPH_SCHEMA_TAG, type SemanticGraphSnapshot, type GraphDiagnostic, type GraphEdge } from "../semantic-graph/graph-loader";
+import type { KoDetailResult, KoFrontmatter } from "../semantic-graph/ko-detail-reader";
 import { parseObject } from "../parsers/object-parser";
 import {
   normalizeAssertion,
@@ -16,6 +18,9 @@ import { parseWikilink, resolveLink } from "../parsers/link-reference";
 
 interface FileEntry {
   object: RDObject | null;
+  detail: KoFrontmatter | null;
+  declaredId: string | null;
+  diagnostics: import("../model").RDDiagnostic[];
   assertions: RDRelationAssertion[];
   ordinaryLinks: string[];
   /** Independent per-path read request generation (RD-03). */
@@ -30,6 +35,7 @@ interface FileEntry {
 export class RDIndex {
   private readonly adapter: ReadAdapter;
   private readonly files = new Map<string, FileEntry>();
+  private readonly readFailures = new Map<string, string>();
   private readonly depMap = new DependencyMap();
   /** RD-03: per-path latest read token. */
   private readonly readTokens = new Map<string, number>();
@@ -83,9 +89,17 @@ export class RDIndex {
   async build(): Promise<void> {
     this.stateValue = "INDEXING";
     const lifecycleAtStart = this.lifecycle;
-    const paths = this.adapter
-      .list()
-      .filter((p) => isCandidatePath(p) && !isForbiddenDataSource(p));
+    let paths: string[];
+    try { paths = this.adapter.list().filter(isIndexablePath).sort(); }
+    catch (err) { this.stateValue = "ERROR"; this.notifyCommit(); throw err; }
+    const present = new Set(paths);
+    for (const path of [...this.files.keys(), ...this.readFailures.keys()]) {
+      if (!present.has(path)) {
+        this.files.delete(path); this.readFailures.delete(path);
+        this.tombstones.add(path); this.bumpToken(path); this.depMap.remove(path);
+      }
+    }
+    for (const path of paths) this.tombstones.delete(path);
     for (const path of paths) {
       await this.loadFile(path, lifecycleAtStart);
     }
@@ -104,7 +118,7 @@ export class RDIndex {
   async applyChange(path: string, event: "create" | "modify"): Promise<void> {
     const lifecycleAtStart = this.lifecycle;
     this.tombstones.delete(path); // (re)creation clears any old tombstone
-    if (isCandidatePath(path)) {
+    if (isIndexablePath(path)) {
       await this.loadFile(path, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -114,14 +128,31 @@ export class RDIndex {
 
   /** Delete: tombstone the old path identity immediately; any
    * in-flight read for it is discarded on return. */
+  async applyBatch(changes: readonly {path: string; deleted: boolean}[]): Promise<void> {
+    const lifecycle = this.lifecycle;
+    for (const {path, deleted} of changes) {
+      if (deleted) {
+        this.tombstones.add(path); this.bumpToken(path);
+        this.files.delete(path); this.readFailures.delete(path); this.depMap.remove(path);
+      } else if (isIndexablePath(path)) {
+        this.tombstones.delete(path);
+        await this.loadFile(path, lifecycle);
+      }
+      if (this.lifecycle !== lifecycle) return;
+    }
+    this.rebuildRelations();
+    this.notifyCommit();
+  }
+
   async applyDelete(path: string): Promise<void> {
     const lifecycleAtStart = this.lifecycle;
     this.tombstones.add(path);
     this.bumpToken(path);
     this.files.delete(path);
+    this.readFailures.delete(path);
     this.depMap.remove(path);
     for (const target of this.depMap.affectedBy(path)) {
-      if (target === path || !isCandidatePath(target)) continue;
+      if (target === path || !isIndexablePath(target)) continue;
       await this.loadFile(target, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -136,13 +167,14 @@ export class RDIndex {
     this.tombstones.add(oldPath);
     this.bumpToken(oldPath);
     this.files.delete(oldPath);
+    this.readFailures.delete(oldPath);
     this.depMap.remove(oldPath);
-    if (isCandidatePath(newPath)) {
+    if (isIndexablePath(newPath)) {
       this.tombstones.delete(newPath);
       await this.loadFile(newPath, lifecycleAtStart);
     }
     for (const target of this.depMap.affectedBy(oldPath)) {
-      if (target === oldPath || !isCandidatePath(target)) continue;
+      if (target === oldPath || !isIndexablePath(target)) continue;
       await this.loadFile(target, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -154,6 +186,7 @@ export class RDIndex {
   dispose(): void {
     this.lifecycle += 1;
     this.stateValue = "ERROR";
+    this.commitListeners.clear();
   }
 
   snapshot(): {
@@ -164,15 +197,57 @@ export class RDIndex {
     const objects: RDObject[] = [];
     const pathsById = new Map<string, string[]>();
     for (const [path, entry] of this.files) {
-      if (!entry.object) continue;
-      objects.push(entry.object);
-      if (entry.object.id !== null) {
-        const list = pathsById.get(entry.object.id) ?? [];
+      if (entry.object) objects.push(entry.object);
+      if (entry.declaredId !== null) {
+        const list = pathsById.get(entry.declaredId) ?? [];
         list.push(path);
-        pathsById.set(entry.object.id, list);
+        pathsById.set(entry.declaredId, list);
       }
     }
     return { objects, relations: this.relationsValue, pathsById };
+  }
+
+  /** A derived view of the SAME committed saved-note index; no second scan. */
+  semanticSnapshot(): SemanticGraphSnapshot {
+    const { objects, pathsById } = this.snapshot();
+    const duplicates = new Set([...pathsById].filter(([, paths]) => paths.length > 1).map(([id]) => id));
+    const nodes = objects.filter((o) => o.id !== null && !duplicates.has(o.id)).map((o) => {
+      const detail = this.files.get(o.path)?.detail;
+      return { object_id: o.id!, kind: o.type, status: o.status, title: o.title,
+        predecessor: detail?.predecessor ?? null, successor: detail?.successor ?? null };
+    }).sort((a, b) => a.object_id.localeCompare(b.object_id));
+    const ids = new Set(nodes.map((n) => n.object_id));
+    const edges: GraphEdge[] = [], unresolved: GraphEdge[] = [];
+    const seen = new Set<string>();
+    for (const relation of this.relationsValue) {
+      const edge = { source: relation.source.objectId ?? relation.source.raw,
+        target: relation.target.objectId ?? relation.target.raw, relation: relation.predicate };
+      const key = JSON.stringify(edge);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      (relation.source.resolution === "RESOLVED" && relation.target.resolution === "RESOLVED"
+        && ids.has(edge.source) && ids.has(edge.target) ? edges : unresolved).push(edge);
+    }
+    const diagnostics: GraphDiagnostic[] = [...duplicates].map((id) => ({
+      type: "duplicate_identity", object_id: id, paths: [...pathsById.get(id)!].sort(),
+    }));
+    for (const [path, entry] of this.files) {
+      for (const diagnostic of entry.diagnostics) diagnostics.push({
+        type: diagnostic.code, object_id: entry.object?.id ?? "", paths: [path],
+      });
+    }
+    for (const path of this.readFailures.keys()) diagnostics.push({type: "source_unreadable", object_id: "", paths: [path]});
+    const compare = (a: GraphEdge, b: GraphEdge) => JSON.stringify(a).localeCompare(JSON.stringify(b));
+    return { schema: GRAPH_SCHEMA_TAG, nodes, edges: edges.sort(compare), unresolved: unresolved.sort(compare),
+      diagnostics: diagnostics.sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) };
+  }
+
+  detailById(objectId: string): KoDetailResult {
+    if (this.state !== "READY") return {state: "unavailable", reason: "Saved-note index is not ready"};
+    const paths = [...this.files].filter(([, entry]) => entry.declaredId === objectId).map(([path]) => path).sort();
+    if (paths.length > 1) return {state: "ambiguous", paths};
+    const detail = paths.length === 1 ? this.files.get(paths[0])?.detail : null;
+    return detail ? {state: "available", path: paths[0], frontmatter: detail} : {state: "missing"};
   }
 
   objectAt(path: string): RDObject | null {
@@ -227,7 +302,7 @@ export class RDIndex {
   }
 
   private candidatePaths(): string[] {
-    return [...this.files.keys()];
+    return [...this.files].filter(([path, entry]) => entry.object !== null || /^(CASES|EVIDENCE|HYPOTHESES|LOOPS|ARCHIVE)\//.test(path)).map(([path]) => path);
   }
 
   private bumpToken(path: string): number {
@@ -242,18 +317,25 @@ export class RDIndex {
     let content: string;
     try {
       content = await this.adapter.read(path);
-    } catch {
-      return; // disappeared mid-flight; tombstone/delete handles it
+    } catch (err) {
+      if (this.lifecycle === lifecycleAtStart && this.readTokens.get(path) === token && !this.tombstones.has(path)) {
+        this.files.delete(path);
+        this.depMap.remove(path);
+        this.readFailures.set(path, String(err));
+      }
+      return;
     }
     // RD-03 discard conditions: stale token, lifecycle changed, or
     // the path identity was tombstoned for a newer mutation
     if (this.lifecycle !== lifecycleAtStart) return;
     if (this.readTokens.get(path) !== token) return;
     if (this.tombstones.has(path)) return;
+    this.readFailures.delete(path);
     const revision = ++this.revisionCounter;
     const parsed = parseObject(path, content, this.adapter.mtime(path), revision);
     this.files.set(path, {
       object: parsed.object,
+      detail: parsed.detail, declaredId: parsed.declaredId, diagnostics: parsed.diagnostics,
       assertions: parsed.assertions,
       ordinaryLinks: parsed.ordinaryLinks,
       generation: revision,
@@ -266,9 +348,7 @@ export class RDIndex {
     const candidates = this.candidatePaths();
     const idByPath = new Map<string, string>();
     for (const [path, entry] of this.files) {
-      if (entry.object?.id !== null && entry.object !== null) {
-        idByPath.set(path, entry.object.id);
-      }
+      if (entry.declaredId !== null) idByPath.set(path, entry.declaredId);
     }
     const normalized = [];
     for (const [path, entry] of this.files) {

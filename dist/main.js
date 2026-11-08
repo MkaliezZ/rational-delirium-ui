@@ -23,6 +23,28 @@ __export(main_exports, {
   default: () => RationalDeliriumPlugin
 });
 module.exports = __toCommonJS(main_exports);
+
+// src/semantic-graph/index-graph-source.ts
+var IndexedGraphSource = class {
+  constructor(index2) {
+    this.index = index2;
+  }
+  subscribe(listener) {
+    return this.index.subscribe(listener);
+  }
+  async read() {
+    if (this.index.state !== "READY") {
+      return { state: "unavailable", reason: "Saved-note index is not ready" };
+    }
+    return {
+      state: "available",
+      origin: "live-index",
+      text: JSON.stringify(this.index.semanticSnapshot())
+    };
+  }
+};
+
+// src/main.ts
 var import_obsidian10 = require("obsidian");
 
 // src/scope.ts
@@ -53,8 +75,14 @@ function isCandidatePath(path) {
 function isForbiddenDataSource(path) {
   const norm = normalizeVaultPath(path);
   return FORBIDDEN_DATA_PREFIXES.some(
-    (prefix) => norm === prefix.slice(0, -1) || norm.startsWith(prefix)
+    (prefix) => norm.toLowerCase() === prefix.slice(0, -1).toLowerCase() || norm.toLowerCase().startsWith(prefix.toLowerCase())
   );
+}
+function isIndexablePath(path) {
+  const norm = normalizeVaultPath(path);
+  return !norm.startsWith("/") && !/^[A-Za-z]:/.test(norm) && norm.toLowerCase().endsWith(".md") && !norm.split("/").some(
+    (part) => part === ".." || part === "." || part.startsWith(".")
+  ) && !isForbiddenDataSource(norm);
 }
 
 // src/platform/obsidian-navigation.ts
@@ -64,18 +92,19 @@ var import_obsidian = require("obsidian");
 var NATIVE_LOCAL_GRAPH_COMMAND_ID = "graph:open-local";
 
 // src/model.ts
-var RD_OBJECT_TYPES = [
-  "case",
-  "evidence",
-  "hypothesis",
-  "loop"
-];
+var LEGACY_OBJECT_TYPES = ["case", "evidence", "hypothesis", "loop"];
+var KO_KINDS = ["observation", "fact", "concept", "hypothesis", "decision", "reference", "process"];
 var FRONTMATTER_RELATION_FIELDS = [
   "related",
+  "complements",
   "supports",
   "supported_by",
   "contradicts",
-  "contradicted_by"
+  "contradicted_by",
+  "derived_from",
+  "depends_on",
+  "revises",
+  "supersedes"
 ];
 var BODY_RELATION_PREDICATES = [
   "derived_from",
@@ -928,14 +957,14 @@ var lineComment = (str, indent, comment) => str.endsWith("\n") ? indentComment(c
 var FOLD_FLOW = "flow";
 var FOLD_BLOCK = "block";
 var FOLD_QUOTED = "quoted";
-function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+function foldFlowLines(text4, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
   if (!lineWidth || lineWidth < 0)
-    return text3;
+    return text4;
   if (lineWidth < minContentWidth)
     minContentWidth = 0;
   const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-  if (text3.length <= endStep)
-    return text3;
+  if (text4.length <= endStep)
+    return text4;
   const folds = [];
   const escapedFolds = {};
   let end = lineWidth - indent.length;
@@ -952,14 +981,14 @@ function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth 
   let escStart = -1;
   let escEnd = -1;
   if (mode === FOLD_BLOCK) {
-    i = consumeMoreIndentedLines(text3, i, indent.length);
+    i = consumeMoreIndentedLines(text4, i, indent.length);
     if (i !== -1)
       end = i + endStep;
   }
-  for (let ch; ch = text3[i += 1]; ) {
+  for (let ch; ch = text4[i += 1]; ) {
     if (mode === FOLD_QUOTED && ch === "\\") {
       escStart = i;
-      switch (text3[i + 1]) {
+      switch (text4[i + 1]) {
         case "x":
           i += 3;
           break;
@@ -976,12 +1005,12 @@ function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth 
     }
     if (ch === "\n") {
       if (mode === FOLD_BLOCK)
-        i = consumeMoreIndentedLines(text3, i, indent.length);
+        i = consumeMoreIndentedLines(text4, i, indent.length);
       end = i + indent.length + endStep;
       split = void 0;
     } else {
       if (ch === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-        const next = text3[i + 1];
+        const next = text4[i + 1];
         if (next && next !== " " && next !== "\n" && next !== "	")
           split = i;
       }
@@ -993,12 +1022,12 @@ function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth 
         } else if (mode === FOLD_QUOTED) {
           while (prev === " " || prev === "	") {
             prev = ch;
-            ch = text3[i += 1];
+            ch = text4[i += 1];
             overflow = true;
           }
           const j = i > escEnd + 1 ? i - 2 : escStart - 1;
           if (escapedFolds[j])
-            return text3;
+            return text4;
           folds.push(j);
           escapedFolds[j] = true;
           end = j + endStep;
@@ -1013,39 +1042,39 @@ function foldFlowLines(text3, indent, mode = "flow", { indentAtStart, lineWidth 
   if (overflow && onOverflow)
     onOverflow();
   if (folds.length === 0)
-    return text3;
+    return text4;
   if (onFold)
     onFold();
-  let res = text3.slice(0, folds[0]);
+  let res = text4.slice(0, folds[0]);
   for (let i2 = 0; i2 < folds.length; ++i2) {
     const fold = folds[i2];
-    const end2 = folds[i2 + 1] || text3.length;
+    const end2 = folds[i2 + 1] || text4.length;
     if (fold === 0)
       res = `
-${indent}${text3.slice(0, end2)}`;
+${indent}${text4.slice(0, end2)}`;
     else {
       if (mode === FOLD_QUOTED && escapedFolds[fold])
-        res += `${text3[fold]}\\`;
+        res += `${text4[fold]}\\`;
       res += `
-${indent}${text3.slice(fold + 1, end2)}`;
+${indent}${text4.slice(fold + 1, end2)}`;
     }
   }
   return res;
 }
-function consumeMoreIndentedLines(text3, i, indent) {
+function consumeMoreIndentedLines(text4, i, indent) {
   let end = i;
   let start = i + 1;
-  let ch = text3[start];
+  let ch = text4[start];
   while (ch === " " || ch === "	") {
     if (i < start + indent) {
-      ch = text3[++i];
+      ch = text4[++i];
     } else {
       do {
-        ch = text3[++i];
+        ch = text4[++i];
       } while (ch && ch !== "\n");
       end = i;
       start = i + 1;
-      ch = text3[start];
+      ch = text4[start];
     }
   }
   return end;
@@ -3915,13 +3944,13 @@ function composeCollection(CN2, ctx, token, props, onError) {
 }
 
 // node_modules/yaml/browser/dist/compose/resolve-block-scalar.js
-function resolveBlockScalar(ctx, scalar2, onError) {
-  const start = scalar2.offset;
-  const header = parseBlockScalarHeader(scalar2, ctx.options.strict, onError);
+function resolveBlockScalar(ctx, scalar, onError) {
+  const start = scalar.offset;
+  const header = parseBlockScalarHeader(scalar, ctx.options.strict, onError);
   if (!header)
     return { value: "", type: null, comment: "", range: [start, start, start] };
   const type = header.mode === ">" ? Scalar.BLOCK_FOLDED : Scalar.BLOCK_LITERAL;
-  const lines = scalar2.source ? splitLines(scalar2.source) : [];
+  const lines = scalar.source ? splitLines(scalar.source) : [];
   let chompStart = lines.length;
   for (let i = lines.length - 1; i >= 0; --i) {
     const content3 = lines[i][1];
@@ -3933,12 +3962,12 @@ function resolveBlockScalar(ctx, scalar2, onError) {
   if (chompStart === 0) {
     const value2 = header.chomp === "+" && lines.length > 0 ? "\n".repeat(Math.max(1, lines.length - 1)) : "";
     let end2 = start + header.length;
-    if (scalar2.source)
-      end2 += scalar2.source.length;
+    if (scalar.source)
+      end2 += scalar.source.length;
     return { value: value2, type, comment: header.comment, range: [start, end2, end2] };
   }
-  let trimIndent = scalar2.indent + header.indent;
-  let offset = scalar2.offset + header.length;
+  let trimIndent = scalar.indent + header.indent;
+  let offset = scalar.offset + header.length;
   let contentStart = 0;
   for (let i = 0; i < chompStart; ++i) {
     const [indent, content3] = lines[i];
@@ -4016,7 +4045,7 @@ function resolveBlockScalar(ctx, scalar2, onError) {
     default:
       value += "\n";
   }
-  const end = start + header.length + scalar2.source.length;
+  const end = start + header.length + scalar.source.length;
   return { value, type, comment: header.comment, range: [start, end, end] };
 }
 function parseBlockScalarHeader({ offset, props }, strict, onError) {
@@ -4091,8 +4120,8 @@ function splitLines(source) {
 }
 
 // node_modules/yaml/browser/dist/compose/resolve-flow-scalar.js
-function resolveFlowScalar(scalar2, strict, onError) {
-  const { offset, type, source, end } = scalar2;
+function resolveFlowScalar(scalar, strict, onError) {
+  const { offset, type, source, end } = scalar;
   let _type;
   let value;
   const _onError = (rel, code, msg) => onError(offset + rel, code, msg);
@@ -4111,7 +4140,7 @@ function resolveFlowScalar(scalar2, strict, onError) {
       break;
     /* istanbul ignore next should not happen */
     default:
-      onError(scalar2, "UNEXPECTED_TOKEN", `Expected a flow scalar value, but found: ${type}`);
+      onError(scalar, "UNEXPECTED_TOKEN", `Expected a flow scalar value, but found: ${type}`);
       return {
         value: "",
         type: null,
@@ -4316,26 +4345,26 @@ function composeScalar(ctx, token, tagToken, onError) {
     tag = findScalarTagByTest(ctx, value, token, onError);
   else
     tag = ctx.schema[SCALAR];
-  let scalar2;
+  let scalar;
   try {
     const res = tag.resolve(value, (msg) => onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg), ctx.options);
-    scalar2 = isScalar(res) ? res : new Scalar(res);
+    scalar = isScalar(res) ? res : new Scalar(res);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     onError(tagToken ?? token, "TAG_RESOLVE_FAILED", msg);
-    scalar2 = new Scalar(value);
+    scalar = new Scalar(value);
   }
-  scalar2.range = range;
-  scalar2.source = value;
+  scalar.range = range;
+  scalar.source = value;
   if (type)
-    scalar2.type = type;
+    scalar.type = type;
   if (tagName)
-    scalar2.tag = tagName;
+    scalar.tag = tagName;
   if (tag.format)
-    scalar2.format = tag.format;
+    scalar.format = tag.format;
   if (comment)
-    scalar2.comment = comment;
-  return scalar2;
+    scalar.comment = comment;
+  return scalar;
 }
 function findScalarTagByName(schema4, value, tagName, tagToken, onError) {
   if (tagName === "!")
@@ -5806,37 +5835,37 @@ var Parser = class {
       };
     }
   }
-  *scalar(scalar2) {
+  *scalar(scalar) {
     if (this.type === "map-value-ind") {
       const prev = getPrevProps(this.peek(2));
       const start = getFirstKeyStartProps(prev);
       let sep;
-      if (scalar2.end) {
-        sep = scalar2.end;
+      if (scalar.end) {
+        sep = scalar.end;
         sep.push(this.sourceToken);
-        delete scalar2.end;
+        delete scalar.end;
       } else
         sep = [this.sourceToken];
       const map2 = {
         type: "block-map",
-        offset: scalar2.offset,
-        indent: scalar2.indent,
-        items: [{ start, key: scalar2, sep }]
+        offset: scalar.offset,
+        indent: scalar.indent,
+        items: [{ start, key: scalar, sep }]
       };
       this.onKeyLine = true;
       this.stack[this.stack.length - 1] = map2;
     } else
-      yield* this.lineEnd(scalar2);
+      yield* this.lineEnd(scalar);
   }
-  *blockScalar(scalar2) {
+  *blockScalar(scalar) {
     switch (this.type) {
       case "space":
       case "comment":
       case "newline":
-        scalar2.props.push(this.sourceToken);
+        scalar.props.push(this.sourceToken);
         return;
       case "scalar":
-        scalar2.source = this.source;
+        scalar.source = this.source;
         this.atNewLine = true;
         this.indent = 0;
         if (this.onNewLine) {
@@ -6428,8 +6457,8 @@ function splitFrontmatter(content3) {
   for (let i = 0; i < lines.length; i++) {
     if (DELIMITER.test(lines[i])) {
       const end = offset + consumed + lines[i].length + 1;
-      const text3 = body.slice(0, consumed + lines[i].length + 1);
-      return { text: (offset > 0 ? content3[0] : "") + text3, start: 0, end };
+      const text4 = body.slice(0, consumed + lines[i].length + 1);
+      return { text: (offset > 0 ? content3[0] : "") + text4, start: 0, end };
     }
     consumed += lines[i].length + 1;
   }
@@ -6482,16 +6511,11 @@ function refuseConstructs(doc, diagnostics, path) {
   };
   visit3(doc.contents, false);
 }
-function parseFrontmatter(content3, path) {
+function parseYamlFields(text4, path) {
   const diagnostics = [];
-  const relations = [];
-  const block = splitFrontmatter(content3);
-  if (block === null) {
-    return { fields: {}, relations, fileSuppressed: false, diagnostics };
-  }
   let doc;
   try {
-    doc = parseDocument(block.text, {
+    doc = parseDocument(text4, {
       strict: true,
       merge: false,
       schema: "core",
@@ -6503,7 +6527,7 @@ function parseFrontmatter(content3, path) {
       message: `invalid YAML: ${err.message.split("\n")[0]}`,
       path
     });
-    return { fields: {}, relations, fileSuppressed: true, diagnostics };
+    return { fields: {}, diagnostics };
   }
   if (doc.errors.length > 0 || doc.warnings.length > 0) {
     const first = doc.errors[0]?.message ?? doc.warnings[0]?.message ?? "unknown";
@@ -6512,23 +6536,21 @@ function parseFrontmatter(content3, path) {
       message: first.split("\n")[0],
       path
     });
-    return { fields: {}, relations, fileSuppressed: true, diagnostics };
+    return { fields: {}, diagnostics };
   }
   refuseConstructs(doc, diagnostics, path);
   if (diagnostics.length > 0) {
-    const fields2 = {};
-    const root2 = doc.contents;
-    if (isMap(root2)) {
-      for (const pair of root2.items) {
-        const keyNode = pair.key;
-        const key = keyNode === null ? "" : String(keyNode);
-        const value = pair.value ? pair.value.toJSON() : null;
-        fields2[key] = value;
+    const fields2 = /* @__PURE__ */ Object.create(null);
+    if (isMap(doc.contents)) {
+      for (const pair of doc.contents.items) {
+        if (isScalar(pair.key) && typeof pair.key.value === "string" && isScalar(pair.value)) {
+          fields2[pair.key.value] = pair.value.value;
+        }
       }
     }
-    return { fields: fields2, relations: [], fileSuppressed: true, diagnostics };
+    return { fields: fields2, diagnostics };
   }
-  const fields = {};
+  const fields = /* @__PURE__ */ Object.create(null);
   const root = doc.contents;
   if (isMap(root)) {
     for (const pair of root.items) {
@@ -6553,10 +6575,23 @@ function parseFrontmatter(content3, path) {
     });
   }
   if (diagnostics.length > 0) {
-    return { fields, relations: [], fileSuppressed: true, diagnostics };
+    return { fields, diagnostics };
   }
+  return { fields, diagnostics };
+}
+function parseFrontmatter(content3, path) {
+  const block = splitFrontmatter(content3);
+  if (block === null) {
+    const unclosed = /^\ufeff?---\r?\n/.test(content3);
+    return { fields: {}, relations: [], fileSuppressed: unclosed, diagnostics: unclosed ? [{ code: "frontmatter-unclosed", message: "Opening YAML delimiter has no closing delimiter", path }] : [] };
+  }
+  const { fields, diagnostics } = parseYamlFields(block.text, path);
+  const relations = [];
+  if (diagnostics.length > 0) return { fields, diagnostics, relations, fileSuppressed: true };
   let anyRelationFieldError = false;
+  const isKo = typeof fields.object_id === "string";
   for (const predicate of FRONTMATTER_RELATION_FIELDS) {
+    if (!isKo && ["derived_from", "depends_on", "revises", "supersedes"].includes(predicate)) continue;
     if (!(predicate in fields)) continue;
     const value = fields[predicate];
     const items = Array.isArray(value) ? value : [value];
@@ -6572,7 +6607,8 @@ function parseFrontmatter(content3, path) {
         });
         continue;
       }
-      const link = parseFrontmatterWikilink(item);
+      const value2 = item.trim();
+      const link = parseFrontmatterWikilink(value2) ?? (isKo && value2 !== "" && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value2) ? { raw: value2, targetName: value2, referenceKind: "id" } : null);
       if (link === null) {
         anyRelationFieldError = true;
         diagnostics.push({
@@ -6592,6 +6628,59 @@ function parseFrontmatter(content3, path) {
     fileSuppressed: anyRelationFieldError,
     diagnostics
   };
+}
+
+// src/semantic-graph/ko-detail-reader.ts
+function extractFrontmatterBlock(text4) {
+  const normalized = text4.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!normalized.startsWith("---\n")) return null;
+  const lines = normalized.split("\n");
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") return lines.slice(1, i).join("\n");
+  }
+  return null;
+}
+function text(value) {
+  return typeof value === "string" ? value : void 0;
+}
+function koFrontmatterFromFields(fields) {
+  const modern = Object.prototype.hasOwnProperty.call(fields, "object_id");
+  const legacy = typeof fields.type === "string" && LEGACY_OBJECT_TYPES.includes(fields.type);
+  const objectId = text(modern ? fields.object_id : legacy ? fields.id : void 0)?.trim();
+  if (!objectId) return null;
+  if (modern && fields.id !== void 0 && fields.id !== objectId) return null;
+  const raw = fields.provenance;
+  const provenance = {};
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const layer of ["observation", "evidence", "inference", "conclusion"]) {
+      const value = raw[layer];
+      if (typeof value === "string") provenance[layer] = value;
+    }
+  }
+  return {
+    object_id: objectId,
+    kind: text(modern ? fields.kind : fields.type),
+    status: text(fields.status),
+    title: text(fields.title),
+    predecessor: text(fields.predecessor),
+    successor: text(fields.successor),
+    workspace_context: text(fields.workspace_context),
+    creator_role: text(fields.creator_role),
+    created_from: Array.isArray(fields.created_from) ? fields.created_from.filter((v) => typeof v === "string") : void 0,
+    provenance: Object.keys(provenance).length > 0 ? provenance : void 0
+  };
+}
+function parseKoFrontmatter(block) {
+  const parsed = parseYamlFields(block, "");
+  if (parsed.diagnostics.length > 0) return null;
+  return koFrontmatterFromFields(parsed.fields);
+}
+function koDetailFromNote(path, text4) {
+  const block = extractFrontmatterBlock(text4);
+  if (block === null) return { state: "missing" };
+  const fm = parseKoFrontmatter(block);
+  if (fm === null) return { state: "missing" };
+  return { state: "available", path, frontmatter: fm };
 }
 
 // node_modules/mdast-util-to-string/lib/index.js
@@ -7060,7 +7149,7 @@ function resolveAllAttention(events, context) {
   let index2 = -1;
   let open;
   let group;
-  let text3;
+  let text4;
   let openingSequence;
   let closingSequence;
   let use;
@@ -7098,7 +7187,7 @@ function resolveAllAttention(events, context) {
             },
             end
           };
-          text3 = {
+          text4 = {
             type: use > 1 ? "strongText" : "emphasisText",
             start: {
               ...events[open][1].end
@@ -7126,9 +7215,9 @@ function resolveAllAttention(events, context) {
           if (events[open][1].end.offset - events[open][1].start.offset) {
             nextEvents = push(nextEvents, [["enter", events[open][1], context], ["exit", events[open][1], context]]);
           }
-          nextEvents = push(nextEvents, [["enter", group, context], ["enter", openingSequence, context], ["exit", openingSequence, context], ["enter", text3, context]]);
+          nextEvents = push(nextEvents, [["enter", group, context], ["enter", openingSequence, context], ["exit", openingSequence, context], ["enter", text4, context]]);
           nextEvents = push(nextEvents, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + 1, index2), context));
-          nextEvents = push(nextEvents, [["exit", text3, context], ["enter", closingSequence, context], ["exit", closingSequence, context], ["exit", group, context]]);
+          nextEvents = push(nextEvents, [["exit", text4, context], ["enter", closingSequence, context], ["exit", closingSequence, context], ["exit", group, context]]);
           if (events[index2][1].end.offset - events[index2][1].start.offset) {
             offset = 2;
             nextEvents = push(nextEvents, [["enter", events[index2][1], context], ["exit", events[index2][1], context]]);
@@ -8576,7 +8665,7 @@ function resolveHeadingAtx(events, context) {
   let contentEnd = events.length - 2;
   let contentStart = 3;
   let content3;
-  let text3;
+  let text4;
   if (events[contentStart][1].type === "whitespace") {
     contentStart += 2;
   }
@@ -8592,13 +8681,13 @@ function resolveHeadingAtx(events, context) {
       start: events[contentStart][1].start,
       end: events[contentEnd][1].end
     };
-    text3 = {
+    text4 = {
       type: "chunkText",
       start: events[contentStart][1].start,
       end: events[contentEnd][1].end,
       contentType: "text"
     };
-    splice(events, contentStart, contentEnd - contentStart + 1, [["enter", content3, context], ["enter", text3, context], ["exit", text3, context], ["exit", content3, context]]);
+    splice(events, contentStart, contentEnd - contentStart + 1, [["enter", content3, context], ["enter", text4, context], ["exit", text4, context], ["exit", content3, context]]);
   }
   return events;
 }
@@ -9488,7 +9577,7 @@ function resolveToLabelEnd(events, context) {
       ...events[close][1].end
     }
   };
-  const text3 = {
+  const text4 = {
     type: "labelText",
     start: {
       ...events[open + offset + 2][1].end
@@ -9499,9 +9588,9 @@ function resolveToLabelEnd(events, context) {
   };
   media = [["enter", group, context], ["enter", label, context]];
   media = push(media, events.slice(open + 1, open + offset + 3));
-  media = push(media, [["enter", text3, context]]);
+  media = push(media, [["enter", text4, context]]);
   media = push(media, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + offset + 4, close - 3), context));
-  media = push(media, [["exit", text3, context], events[close - 2], events[close - 1], ["exit", label, context]]);
+  media = push(media, [["exit", text4, context], events[close - 2], events[close - 1], ["exit", label, context]]);
   media = push(media, events.slice(close + 1));
   media = push(media, [["exit", group, context]]);
   splice(events, open, events.length, media);
@@ -9881,7 +9970,7 @@ var setextUnderline = {
 function resolveToSetextUnderline(events, context) {
   let index2 = events.length;
   let content3;
-  let text3;
+  let text4;
   let definition2;
   while (index2--) {
     if (events[index2][0] === "enter") {
@@ -9890,7 +9979,7 @@ function resolveToSetextUnderline(events, context) {
         break;
       }
       if (events[index2][1].type === "paragraph") {
-        text3 = index2;
+        text4 = index2;
       }
     } else {
       if (events[index2][1].type === "content") {
@@ -9910,9 +9999,9 @@ function resolveToSetextUnderline(events, context) {
       ...events[events.length - 1][1].end
     }
   };
-  events[text3][1].type = "setextHeadingText";
+  events[text4][1].type = "setextHeadingText";
   if (definition2) {
-    events.splice(text3, 0, ["enter", heading, context]);
+    events.splice(text4, 0, ["enter", heading, context]);
     events.splice(definition2 + 1, 0, ["exit", events[content3][1], context]);
     events[content3][1].end = {
       ...events[definition2][1].end
@@ -10007,7 +10096,7 @@ var resolver = {
   resolveAll: createResolver()
 };
 var string2 = initializeFactory("string");
-var text = initializeFactory("text");
+var text2 = initializeFactory("text");
 function initializeFactory(field) {
   return {
     resolveAll: createResolver(field === "text" ? resolveAllLineSuffixes : void 0),
@@ -10016,10 +10105,10 @@ function initializeFactory(field) {
   function initializeText(effects) {
     const self = this;
     const constructs2 = this.parser.constructs[field];
-    const text3 = effects.attempt(constructs2, start, notText);
+    const text4 = effects.attempt(constructs2, start, notText);
     return start;
     function start(code) {
-      return atBreak(code) ? text3(code) : notText(code);
+      return atBreak(code) ? text4(code) : notText(code);
     }
     function notText(code) {
       if (code === null) {
@@ -10033,7 +10122,7 @@ function initializeFactory(field) {
     function data(code) {
       if (atBreak(code)) {
         effects.exit("data");
-        return text3(code);
+        return text4(code);
       }
       effects.consume(code);
       return data;
@@ -10152,7 +10241,7 @@ __export(constructs_exports, {
   flowInitial: () => flowInitial,
   insideSpan: () => insideSpan,
   string: () => string3,
-  text: () => text2
+  text: () => text3
 });
 var document3 = {
   [42]: list,
@@ -10192,7 +10281,7 @@ var string3 = {
   [38]: characterReference,
   [92]: characterEscape
 };
-var text2 = {
+var text3 = {
   [-5]: lineEnding,
   [-4]: lineEnding,
   [-3]: lineEnding,
@@ -10554,7 +10643,7 @@ function parse2(options) {
     flow: create(flow),
     lazy: {},
     string: create(string2),
-    text: create(text)
+    text: create(text2)
   };
   return parser;
   function create(initial) {
@@ -11081,7 +11170,7 @@ function compiler(options) {
     const siblings = node2.children;
     let tail = siblings[siblings.length - 1];
     if (!tail || tail.type !== "text") {
-      tail = text3();
+      tail = text4();
       tail.position = {
         start: point2(token.start),
         // @ts-expect-error: we’ll add `end` later.
@@ -11326,7 +11415,7 @@ function compiler(options) {
       children: []
     };
   }
-  function text3() {
+  function text4() {
     return {
       type: "text",
       value: ""
@@ -11405,10 +11494,10 @@ function defaultOnError(left, right) {
 }
 
 // src/parsers/source-location.ts
-function lineStarts(text3) {
+function lineStarts(text4) {
   const starts = [0];
-  for (let i = 0; i < text3.length; i++) {
-    if (text3.charCodeAt(i) === 10) starts.push(i + 1);
+  for (let i = 0; i < text4.length; i++) {
+    if (text4.charCodeAt(i) === 10) starts.push(i + 1);
   }
   return starts;
 }
@@ -11499,13 +11588,13 @@ function computeHtmlEvents(tree, astOffsetBase, content3) {
     if (n.type === "html" && n.position?.start?.offset !== void 0) {
       const start = n.position.start.offset + astOffsetBase;
       const end = (n.position.end?.offset ?? 0) + astOffsetBase;
-      const text3 = content3.slice(start, end);
-      const trimmed = text3.trim();
+      const text4 = content3.slice(start, end);
+      const trimmed = text4.trim();
       if (trimmed.startsWith("<!--") && trimmed.endsWith("-->")) {
       } else {
         TAG_RE.lastIndex = 0;
         let m;
-        while ((m = TAG_RE.exec(text3)) !== null) {
+        while ((m = TAG_RE.exec(text4)) !== null) {
           const isClose = m[1] === "/";
           const tag = m[2].toLowerCase();
           if (VOID_ELEMENTS.has(tag)) continue;
@@ -11608,7 +11697,10 @@ var KNOWN_STATUSES = /* @__PURE__ */ new Set([
   "refuted",
   "broken",
   "archived",
-  "invalid"
+  "invalid",
+  "candidate",
+  "reviewed",
+  "superseded"
 ]);
 function firstTitle(content3) {
   for (const line of content3.split("\n")) {
@@ -11627,12 +11719,31 @@ function parseObject(path, content3, mtime, revision) {
   const diagnostics = [];
   const fm = parseFrontmatter(content3, path);
   diagnostics.push(...fm.diagnostics);
-  const typeRaw = fm.fields["type"];
-  if (typeof typeRaw !== "string" || !RD_OBJECT_TYPES.includes(typeRaw)) {
-    return { object: null, assertions: [], ordinaryLinks: [] };
+  const modern = Object.prototype.hasOwnProperty.call(fm.fields, "object_id");
+  const typeRaw = fm.fields[modern ? "kind" : "type"];
+  const idRaw = fm.fields[modern ? "object_id" : "id"];
+  const declaredId = modern && typeof idRaw === "string" && /^ko-\d{8}-\d+$/.test(idRaw) ? idRaw : null;
+  const reject = (code, message) => {
+    if (code) diagnostics.push({ code, message: message ?? code, path });
+    return { object: null, detail: null, declaredId, diagnostics, assertions: [], ordinaryLinks: [] };
+  };
+  const allowed = modern ? KO_KINDS : LEGACY_OBJECT_TYPES;
+  if (typeof typeRaw !== "string" || !allowed.includes(typeRaw) || !modern && !isCandidatePath(path)) {
+    return reject(modern ? "invalid-ko-kind" : void 0, "KO requires a declared supported kind");
+  }
+  if (modern && (typeof idRaw !== "string" || !/^ko-\d{8}-\d+$/.test(idRaw))) {
+    return reject("invalid-ko-id", "object_id must match ko-YYYYMMDD-number");
+  }
+  if (modern && fm.fields.id !== void 0 && fm.fields.id !== idRaw) {
+    return reject("conflicting-identity", "id and object_id disagree; no identity was selected");
+  }
+  if (modern && (typeof fm.fields.title !== "string" || !fm.fields.title.trim())) {
+    return reject("missing-ko-title", "KO requires a non-empty title");
+  }
+  if (modern && !["candidate", "reviewed", "active", "superseded", "archived"].includes(String(fm.fields.status))) {
+    return reject("invalid-ko-status", "KO requires a declared lifecycle status");
   }
   const type = typeRaw;
-  const idRaw = fm.fields["id"];
   let id = null;
   if (typeof idRaw === "string" && idRaw.trim().length > 0) {
     id = idRaw.trim();
@@ -11654,12 +11765,13 @@ function parseObject(path, content3, mtime, revision) {
   const tags = Array.isArray(fm.fields["tags"]) ? fm.fields["tags"].filter((t) => typeof t === "string") : [];
   const object = {
     path,
+    schema: modern ? "ko" : "legacy",
     id,
     type,
     status,
-    title: firstTitle(content3) || (id ?? path),
+    title: modern ? fm.fields.title : firstTitle(content3) || (id ?? path),
     tags,
-    created: typeof fm.fields["created"] === "string" ? fm.fields["created"] : null,
+    created: typeof fm.fields[modern ? "created_at" : "created"] === "string" ? fm.fields[modern ? "created_at" : "created"] : null,
     lastVerified: typeof fm.fields["last_verified"] === "string" ? fm.fields["last_verified"] : null,
     mtime,
     demo: tags.includes("rd/demo") || fm.fields["demo"] === true,
@@ -11667,14 +11779,16 @@ function parseObject(path, content3, mtime, revision) {
     revision,
     diagnostics
   };
+  const declared = koFrontmatterFromFields(fm.fields);
+  const detail = declared === null ? null : { ...declared, title: object.title };
   const assertions = fm.relations.map((e) => toAssertion(e, path, revision));
   const body = extractBodyRelations(content3, path, revision);
   diagnostics.push(...body.diagnostics);
   if (fm.fileSuppressed || body.fileSuppressed) {
-    return { object, assertions: [], ordinaryLinks: body.ordinaryLinks };
+    return { object, detail, declaredId: id, diagnostics, assertions: [], ordinaryLinks: body.ordinaryLinks };
   }
   assertions.push(...body.assertions);
-  return { object, assertions, ordinaryLinks: body.ordinaryLinks };
+  return { object, detail, declaredId: id, diagnostics, assertions, ordinaryLinks: body.ordinaryLinks };
 }
 
 // src/platform/obsidian-navigation.ts
@@ -11771,18 +11885,129 @@ var ObsidianNavigationPort = class {
   }
 };
 
+// src/semantic-graph/graph-loader.ts
+var LEGACY_GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
+var GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/2";
+var LEGACY_GRAPH_RELATIONS = [
+  "supports",
+  "contradicts",
+  "derived_from",
+  "depends_on",
+  "revises",
+  "supersedes"
+];
+var GRAPH_RELATIONS = [
+  ...LEGACY_GRAPH_RELATIONS,
+  "related",
+  "complements",
+  "repeats_in",
+  "observed_in"
+];
+function deepFreeze(value) {
+  if (value !== null && typeof value === "object") {
+    for (const v of Object.values(value)) deepFreeze(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+function isString(v) {
+  return typeof v === "string";
+}
+function parseNode(raw) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  const pred = r.predecessor;
+  const succ = r.successor;
+  if (!isString(r.object_id) || !isString(r.kind) || !isString(r.status) || !isString(r.title) || pred !== null && !isString(pred) || succ !== null && !isString(succ)) {
+    return null;
+  }
+  return {
+    object_id: r.object_id,
+    kind: r.kind,
+    status: r.status,
+    title: r.title,
+    predecessor: pred,
+    successor: succ
+  };
+}
+function parseEdge(raw, allowedRelations) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  if (!isString(r.source) || !isString(r.target) || !isString(r.relation)) return null;
+  if (!allowedRelations.includes(r.relation)) return null;
+  return { source: r.source, target: r.target, relation: r.relation };
+}
+function parseDiagnostic(raw) {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw;
+  if (!isString(r.type) || !isString(r.object_id) || !Array.isArray(r.paths)) return null;
+  if (!r.paths.every(isString)) return null;
+  return { type: r.type, object_id: r.object_id, paths: r.paths };
+}
+function parseGraphSnapshot(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { state: "invalid", reason: "malformed-json" };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  const r = parsed;
+  if (r.schema !== GRAPH_SCHEMA_TAG && r.schema !== LEGACY_GRAPH_SCHEMA_TAG) {
+    return { state: "invalid", reason: "unsupported-schema" };
+  }
+  if (!Array.isArray(r.nodes) || !Array.isArray(r.edges) || !Array.isArray(r.unresolved) || !Array.isArray(r.diagnostics)) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  const nodes = r.nodes.map(parseNode);
+  const allowedRelations = r.schema === LEGACY_GRAPH_SCHEMA_TAG ? LEGACY_GRAPH_RELATIONS : GRAPH_RELATIONS;
+  const edges = r.edges.map((raw2) => parseEdge(raw2, allowedRelations));
+  const unresolved = r.unresolved.map((raw2) => parseEdge(raw2, allowedRelations));
+  const diagnostics = r.diagnostics.map(parseDiagnostic);
+  if (nodes.includes(null) || edges.includes(null) || unresolved.includes(null) || diagnostics.includes(null)) {
+    return { state: "invalid", reason: "invalid-shape" };
+  }
+  return {
+    state: "available",
+    graph: deepFreeze({
+      schema: r.schema,
+      nodes,
+      edges,
+      unresolved,
+      diagnostics
+    })
+  };
+}
+async function loadGraphFromSource(source) {
+  const read = await source.read();
+  if (read.state === "missing") return { state: "missing" };
+  if (read.state === "unavailable") return { state: "unavailable", reason: read.reason };
+  const load = parseGraphSnapshot(read.text);
+  return load.state === "available" && read.origin === "live-index" ? { ...load, origin: read.origin } : load;
+}
+
 // src/index/relation-normalizer.ts
 var REVERSE = {
   related: { predicate: "related", swap: false },
+  complements: { predicate: "complements", swap: false },
   supports: { predicate: "supports", swap: false },
   supported_by: { predicate: "supports", swap: true },
   contradicts: { predicate: "contradicts", swap: false },
   contradicted_by: { predicate: "contradicts", swap: true },
   derived_from: { predicate: "derived_from", swap: false },
   repeats_in: { predicate: "repeats_in", swap: false },
-  observed_in: { predicate: "observed_in", swap: false }
+  observed_in: { predicate: "observed_in", swap: false },
+  depends_on: { predicate: "depends_on", swap: false },
+  revises: { predicate: "revises", swap: false },
+  supersedes: { predicate: "supersedes", swap: false }
 };
 function resolveEndpoint(link, candidatePaths, idByPath) {
+  if (link.referenceKind === "id") {
+    const paths = [...idByPath].filter(([, id]) => id === link.targetName).map(([path]) => path);
+    return paths.length === 1 ? { path: paths[0], objectId: link.targetName, resolution: "RESOLVED" } : { path: "", objectId: null, resolution: paths.length > 1 ? "AMBIGUOUS" : "BROKEN" };
+  }
   const resolution = resolveLink(link, candidatePaths);
   if (resolution.state === "RESOLVED" && resolution.paths.length > 0) {
     const path = resolution.paths[0];
@@ -11933,6 +12158,7 @@ function removeFromSet(map2, key, value) {
 var RDIndex = class {
   constructor(adapter) {
     this.files = /* @__PURE__ */ new Map();
+    this.readFailures = /* @__PURE__ */ new Map();
     this.depMap = new DependencyMap();
     /** RD-03: per-path latest read token. */
     this.readTokens = /* @__PURE__ */ new Map();
@@ -11982,7 +12208,25 @@ var RDIndex = class {
   async build() {
     this.stateValue = "INDEXING";
     const lifecycleAtStart = this.lifecycle;
-    const paths = this.adapter.list().filter((p) => isCandidatePath(p) && !isForbiddenDataSource(p));
+    let paths;
+    try {
+      paths = this.adapter.list().filter(isIndexablePath).sort();
+    } catch (err) {
+      this.stateValue = "ERROR";
+      this.notifyCommit();
+      throw err;
+    }
+    const present = new Set(paths);
+    for (const path of [...this.files.keys(), ...this.readFailures.keys()]) {
+      if (!present.has(path)) {
+        this.files.delete(path);
+        this.readFailures.delete(path);
+        this.tombstones.add(path);
+        this.bumpToken(path);
+        this.depMap.remove(path);
+      }
+    }
+    for (const path of paths) this.tombstones.delete(path);
     for (const path of paths) {
       await this.loadFile(path, lifecycleAtStart);
     }
@@ -11999,7 +12243,7 @@ var RDIndex = class {
   async applyChange(path, event) {
     const lifecycleAtStart = this.lifecycle;
     this.tombstones.delete(path);
-    if (isCandidatePath(path)) {
+    if (isIndexablePath(path)) {
       await this.loadFile(path, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -12008,14 +12252,33 @@ var RDIndex = class {
   }
   /** Delete: tombstone the old path identity immediately; any
    * in-flight read for it is discarded on return. */
+  async applyBatch(changes) {
+    const lifecycle = this.lifecycle;
+    for (const { path, deleted } of changes) {
+      if (deleted) {
+        this.tombstones.add(path);
+        this.bumpToken(path);
+        this.files.delete(path);
+        this.readFailures.delete(path);
+        this.depMap.remove(path);
+      } else if (isIndexablePath(path)) {
+        this.tombstones.delete(path);
+        await this.loadFile(path, lifecycle);
+      }
+      if (this.lifecycle !== lifecycle) return;
+    }
+    this.rebuildRelations();
+    this.notifyCommit();
+  }
   async applyDelete(path) {
     const lifecycleAtStart = this.lifecycle;
     this.tombstones.add(path);
     this.bumpToken(path);
     this.files.delete(path);
+    this.readFailures.delete(path);
     this.depMap.remove(path);
     for (const target of this.depMap.affectedBy(path)) {
-      if (target === path || !isCandidatePath(target)) continue;
+      if (target === path || !isIndexablePath(target)) continue;
       await this.loadFile(target, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -12029,13 +12292,14 @@ var RDIndex = class {
     this.tombstones.add(oldPath);
     this.bumpToken(oldPath);
     this.files.delete(oldPath);
+    this.readFailures.delete(oldPath);
     this.depMap.remove(oldPath);
-    if (isCandidatePath(newPath)) {
+    if (isIndexablePath(newPath)) {
       this.tombstones.delete(newPath);
       await this.loadFile(newPath, lifecycleAtStart);
     }
     for (const target of this.depMap.affectedBy(oldPath)) {
-      if (target === oldPath || !isCandidatePath(target)) continue;
+      if (target === oldPath || !isIndexablePath(target)) continue;
       await this.loadFile(target, lifecycleAtStart);
     }
     if (this.lifecycle !== lifecycleAtStart) return;
@@ -12046,20 +12310,78 @@ var RDIndex = class {
   dispose() {
     this.lifecycle += 1;
     this.stateValue = "ERROR";
+    this.commitListeners.clear();
   }
   snapshot() {
     const objects = [];
     const pathsById = /* @__PURE__ */ new Map();
     for (const [path, entry2] of this.files) {
-      if (!entry2.object) continue;
-      objects.push(entry2.object);
-      if (entry2.object.id !== null) {
-        const list2 = pathsById.get(entry2.object.id) ?? [];
+      if (entry2.object) objects.push(entry2.object);
+      if (entry2.declaredId !== null) {
+        const list2 = pathsById.get(entry2.declaredId) ?? [];
         list2.push(path);
-        pathsById.set(entry2.object.id, list2);
+        pathsById.set(entry2.declaredId, list2);
       }
     }
     return { objects, relations: this.relationsValue, pathsById };
+  }
+  /** A derived view of the SAME committed saved-note index; no second scan. */
+  semanticSnapshot() {
+    const { objects, pathsById } = this.snapshot();
+    const duplicates = new Set([...pathsById].filter(([, paths]) => paths.length > 1).map(([id]) => id));
+    const nodes = objects.filter((o) => o.id !== null && !duplicates.has(o.id)).map((o) => {
+      const detail = this.files.get(o.path)?.detail;
+      return {
+        object_id: o.id,
+        kind: o.type,
+        status: o.status,
+        title: o.title,
+        predecessor: detail?.predecessor ?? null,
+        successor: detail?.successor ?? null
+      };
+    }).sort((a, b) => a.object_id.localeCompare(b.object_id));
+    const ids = new Set(nodes.map((n) => n.object_id));
+    const edges = [], unresolved = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const relation of this.relationsValue) {
+      const edge = {
+        source: relation.source.objectId ?? relation.source.raw,
+        target: relation.target.objectId ?? relation.target.raw,
+        relation: relation.predicate
+      };
+      const key = JSON.stringify(edge);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      (relation.source.resolution === "RESOLVED" && relation.target.resolution === "RESOLVED" && ids.has(edge.source) && ids.has(edge.target) ? edges : unresolved).push(edge);
+    }
+    const diagnostics = [...duplicates].map((id) => ({
+      type: "duplicate_identity",
+      object_id: id,
+      paths: [...pathsById.get(id)].sort()
+    }));
+    for (const [path, entry2] of this.files) {
+      for (const diagnostic of entry2.diagnostics) diagnostics.push({
+        type: diagnostic.code,
+        object_id: entry2.object?.id ?? "",
+        paths: [path]
+      });
+    }
+    for (const path of this.readFailures.keys()) diagnostics.push({ type: "source_unreadable", object_id: "", paths: [path] });
+    const compare = (a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b));
+    return {
+      schema: GRAPH_SCHEMA_TAG,
+      nodes,
+      edges: edges.sort(compare),
+      unresolved: unresolved.sort(compare),
+      diagnostics: diagnostics.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+    };
+  }
+  detailById(objectId) {
+    if (this.state !== "READY") return { state: "unavailable", reason: "Saved-note index is not ready" };
+    const paths = [...this.files].filter(([, entry2]) => entry2.declaredId === objectId).map(([path]) => path).sort();
+    if (paths.length > 1) return { state: "ambiguous", paths };
+    const detail = paths.length === 1 ? this.files.get(paths[0])?.detail : null;
+    return detail ? { state: "available", path: paths[0], frontmatter: detail } : { state: "missing" };
   }
   objectAt(path) {
     return this.files.get(path)?.object ?? null;
@@ -12104,7 +12426,7 @@ var RDIndex = class {
     return this.tombstones.has(path);
   }
   candidatePaths() {
-    return [...this.files.keys()];
+    return [...this.files].filter(([path, entry2]) => entry2.object !== null || /^(CASES|EVIDENCE|HYPOTHESES|LOOPS|ARCHIVE)\//.test(path)).map(([path]) => path);
   }
   bumpToken(path) {
     const next = (this.readTokens.get(path) ?? 0) + 1;
@@ -12117,16 +12439,25 @@ var RDIndex = class {
     let content3;
     try {
       content3 = await this.adapter.read(path);
-    } catch {
+    } catch (err) {
+      if (this.lifecycle === lifecycleAtStart && this.readTokens.get(path) === token && !this.tombstones.has(path)) {
+        this.files.delete(path);
+        this.depMap.remove(path);
+        this.readFailures.set(path, String(err));
+      }
       return;
     }
     if (this.lifecycle !== lifecycleAtStart) return;
     if (this.readTokens.get(path) !== token) return;
     if (this.tombstones.has(path)) return;
+    this.readFailures.delete(path);
     const revision = ++this.revisionCounter;
     const parsed = parseObject(path, content3, this.adapter.mtime(path), revision);
     this.files.set(path, {
       object: parsed.object,
+      detail: parsed.detail,
+      declaredId: parsed.declaredId,
+      diagnostics: parsed.diagnostics,
       assertions: parsed.assertions,
       ordinaryLinks: parsed.ordinaryLinks,
       generation: revision
@@ -12138,9 +12469,7 @@ var RDIndex = class {
     const candidates = this.candidatePaths();
     const idByPath = /* @__PURE__ */ new Map();
     for (const [path, entry2] of this.files) {
-      if (entry2.object?.id !== null && entry2.object !== null) {
-        idByPath.set(path, entry2.object.id);
-      }
+      if (entry2.declaredId !== null) idByPath.set(path, entry2.declaredId);
     }
     const normalized = [];
     for (const [path, entry2] of this.files) {
@@ -12637,6 +12966,7 @@ var PendingPathScheduler = class {
     this.clock = clock;
     this.pending = /* @__PURE__ */ new Set();
     this.firstSeen = /* @__PURE__ */ new Map();
+    this.lastSeen = /* @__PURE__ */ new Map();
     this.timer = null;
     this.disposed = false;
     this.nowMs = 0;
@@ -12647,6 +12977,7 @@ var PendingPathScheduler = class {
     if (!this.pending.has(path)) {
       this.firstSeen.set(path, this.nowMs);
     }
+    this.lastSeen.set(path, this.nowMs);
     this.pending.add(path);
     this.resetTimer(this.debounceMs);
   }
@@ -12659,7 +12990,10 @@ var PendingPathScheduler = class {
   earliestDeadline() {
     let earliest = this.maxWaitMs;
     for (const [path, seen] of this.firstSeen) {
-      const remaining = this.maxWaitMs - (this.nowMs - seen);
+      const remaining = Math.min(
+        this.maxWaitMs - (this.nowMs - seen),
+        this.debounceMs - (this.nowMs - (this.lastSeen.get(path) ?? seen))
+      );
       if (remaining < earliest) earliest = remaining;
     }
     return Math.max(0, earliest);
@@ -12673,7 +13007,8 @@ var PendingPathScheduler = class {
     for (const path of this.pending) {
       const seen = this.firstSeen.get(path) ?? this.nowMs;
       const age = this.nowMs - seen;
-      if (age + this.debounceMs >= this.maxWaitMs) {
+      const quiet = this.nowMs - (this.lastSeen.get(path) ?? seen);
+      if (age >= this.maxWaitMs || quiet >= this.debounceMs) {
         fire.push(path);
       } else {
         keep.push(path);
@@ -12681,7 +13016,10 @@ var PendingPathScheduler = class {
     }
     this.pending.clear();
     for (const p of keep) this.pending.add(p);
-    for (const p of fire) this.firstSeen.delete(p);
+    for (const p of fire) {
+      this.firstSeen.delete(p);
+      this.lastSeen.delete(p);
+    }
     for (const p of fire) void this.task(p);
     if (this.pending.size > 0) {
       this.resetTimer(this.debounceMs);
@@ -12695,6 +13033,7 @@ var PendingPathScheduler = class {
     const all2 = [...this.pending];
     this.pending.clear();
     this.firstSeen.clear();
+    this.lastSeen.clear();
     for (const path of all2) void this.task(path);
   }
   dispose() {
@@ -12705,6 +13044,7 @@ var PendingPathScheduler = class {
     }
     this.pending.clear();
     this.firstSeen.clear();
+    this.lastSeen.clear();
   }
   get pendingPaths() {
     return [...this.pending];
@@ -12718,6 +13058,8 @@ var RuntimeWiring = class {
     this.buildPhase = "BUILDING";
     this.pendingPaths = /* @__PURE__ */ new Set();
     this.disposed = false;
+    this.refreshPromise = null;
+    this.vaultListeners = /* @__PURE__ */ new Set();
     this.activeFileListeners = /* @__PURE__ */ new Set();
     this.index = new RDIndex(adapter);
     this.controller = new ContextController(this.index);
@@ -12727,6 +13069,39 @@ var RuntimeWiring = class {
   }
   async start() {
     this.registerListeners();
+    await this.refresh();
+    await this.workspace.onLayoutReady(async () => {
+      if (this.disposed) return;
+      const active = this.workspace.getActiveFile();
+      if (active !== null) {
+        await this.controller.initializeAnchor(active.path);
+      }
+    });
+  }
+  /** Explicit full reconciliation for missed filesystem events. Concurrent
+   * requests share one build and live changes are replayed before completion. */
+  refresh() {
+    if (this.disposed) return Promise.resolve();
+    if (this.refreshPromise !== null) return this.refreshPromise;
+    this.buildPhase = "BUILDING";
+    this.scheduler?.dispose();
+    this.scheduler = null;
+    const work = this.rebuild().then(async () => {
+      const active = this.workspace.getActiveFile();
+      if (!this.disposed && active !== null) await this.controller.onIndexRefreshed(active.path);
+    });
+    this.refreshPromise = work.catch((err) => {
+      if (!this.disposed) {
+        this.buildPhase = "LIVE";
+        this.scheduler = new PendingPathScheduler((p) => void this.applyModify(p));
+      }
+      throw err;
+    }).finally(() => {
+      this.refreshPromise = null;
+    });
+    return this.refreshPromise;
+  }
+  async rebuild() {
     await this.index.build();
     if (this.disposed) return;
     this.buildPhase = "REPLAYING";
@@ -12746,13 +13121,20 @@ var RuntimeWiring = class {
       this.pendingPaths.clear();
     }
     this.buildPhase = "LIVE";
-    await this.workspace.onLayoutReady(async () => {
-      if (this.disposed) return;
-      const active = this.workspace.getActiveFile();
-      if (active !== null) {
-        await this.controller.initializeAnchor(active.path);
+  }
+  onVaultChange(listener) {
+    this.vaultListeners.add(listener);
+    return () => {
+      this.vaultListeners.delete(listener);
+    };
+  }
+  notifyVault(path) {
+    for (const listener of [...this.vaultListeners]) {
+      try {
+        listener(path);
+      } catch {
       }
-    });
+    }
   }
   dispose() {
     this.disposed = true;
@@ -12762,6 +13144,8 @@ var RuntimeWiring = class {
     void this.controller.unload();
     this.index.dispose();
     this.scheduler = null;
+    this.vaultListeners.clear();
+    this.activeFileListeners.clear();
   }
   /** v0.4.2 §16: Dashboard live-update hookup. Delegates to the ONE
    * shared RDIndex commit notification — no second watcher, no
@@ -12788,13 +13172,24 @@ var RuntimeWiring = class {
   }
   registerListeners() {
     this.vault.on("create", (file) => {
-      if (isCandidatePath(file.path)) this.onPathEvent(file.path, "create");
+      this.notifyVault(file.path);
+      if (isIndexablePath(file.path)) this.onPathEvent(file.path, "create");
     });
     this.vault.on("modify", (file) => {
-      if (isCandidatePath(file.path)) this.onPathEvent(file.path, "modify");
+      this.notifyVault(file.path);
+      if (isIndexablePath(file.path)) this.onPathEvent(file.path, "modify");
     });
-    this.vault.on("rename", (file, oldPath) => void this.applyRename(oldPath, file.path));
-    this.vault.on("delete", (file) => void this.applyDelete(file.path));
+    this.vault.on("rename", (file, oldPath) => {
+      this.notifyVault(oldPath);
+      this.notifyVault(file.path);
+      this.pendingPaths.delete(oldPath);
+      void this.applyRename(oldPath, file.path);
+    });
+    this.vault.on("delete", (file) => {
+      this.notifyVault(file.path);
+      this.pendingPaths.delete(file.path);
+      void this.applyDelete(file.path);
+    });
     this.workspace.on("file-open", (file) => {
       if (file !== null) void this.controller.onFileOpen(file.path);
       this.notifyActiveFile(file !== null ? file.path : null);
@@ -12913,9 +13308,9 @@ var INITIAL = Object.freeze({
   workspaceMode: "investigation",
   graphSnapshot: null
 });
-function deepFreeze(value) {
+function deepFreeze2(value) {
   if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value)) deepFreeze(v);
+    for (const v of Object.values(value)) deepFreeze2(v);
     Object.freeze(value);
   }
   return value;
@@ -12993,7 +13388,7 @@ var RDWorkspaceStore = class {
   }
   update(patch) {
     if (this.disposed) return;
-    this.state = deepFreeze({ ...this.state, ...patch });
+    this.state = deepFreeze2({ ...this.state, ...patch });
     for (const listener of [...this.listeners]) listener(this.state);
   }
 };
@@ -13002,7 +13397,7 @@ function publishGraphLoad(store, load) {
   if (load.state === "available") {
     store.setSnapshotAvailability({
       state: "available",
-      note: `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations (freshness unverified)`
+      note: `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations ` + (load.origin === "live-index" ? "(live saved-note index)" : "(freshness unverified)")
     });
   } else if (load.state === "missing") {
     store.setSnapshotAvailability({
@@ -13022,100 +13417,6 @@ function publishGraphLoad(store, load) {
   }
 }
 
-// src/semantic-graph/graph-loader.ts
-var GRAPH_SCHEMA_TAG = "rd-semantic-graph-projection/1";
-var DEFAULT_SEMANTIC_GRAPH_PATH = "semantic-graph/graph.json";
-var GRAPH_RELATIONS = [
-  "supports",
-  "contradicts",
-  "derived_from",
-  "depends_on",
-  "revises",
-  "supersedes"
-];
-function deepFreeze2(value) {
-  if (value !== null && typeof value === "object") {
-    for (const v of Object.values(value)) deepFreeze2(v);
-    Object.freeze(value);
-  }
-  return value;
-}
-function isString(v) {
-  return typeof v === "string";
-}
-function parseNode(raw) {
-  if (typeof raw !== "object" || raw === null) return null;
-  const r = raw;
-  const pred = r.predecessor;
-  const succ = r.successor;
-  if (!isString(r.object_id) || !isString(r.kind) || !isString(r.status) || !isString(r.title) || pred !== null && !isString(pred) || succ !== null && !isString(succ)) {
-    return null;
-  }
-  return {
-    object_id: r.object_id,
-    kind: r.kind,
-    status: r.status,
-    title: r.title,
-    predecessor: pred,
-    successor: succ
-  };
-}
-function parseEdge(raw) {
-  if (typeof raw !== "object" || raw === null) return null;
-  const r = raw;
-  if (!isString(r.source) || !isString(r.target) || !isString(r.relation)) return null;
-  if (!GRAPH_RELATIONS.includes(r.relation)) return null;
-  return { source: r.source, target: r.target, relation: r.relation };
-}
-function parseDiagnostic(raw) {
-  if (typeof raw !== "object" || raw === null) return null;
-  const r = raw;
-  if (!isString(r.type) || !isString(r.object_id) || !Array.isArray(r.paths)) return null;
-  if (!r.paths.every(isString)) return null;
-  return { type: r.type, object_id: r.object_id, paths: r.paths };
-}
-function parseGraphSnapshot(raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { state: "invalid", reason: "malformed-json" };
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    return { state: "invalid", reason: "invalid-shape" };
-  }
-  const r = parsed;
-  if (r.schema !== GRAPH_SCHEMA_TAG) {
-    return { state: "invalid", reason: "unsupported-schema" };
-  }
-  if (!Array.isArray(r.nodes) || !Array.isArray(r.edges) || !Array.isArray(r.unresolved) || !Array.isArray(r.diagnostics)) {
-    return { state: "invalid", reason: "invalid-shape" };
-  }
-  const nodes = r.nodes.map(parseNode);
-  const edges = r.edges.map(parseEdge);
-  const unresolved = r.unresolved.map(parseEdge);
-  const diagnostics = r.diagnostics.map(parseDiagnostic);
-  if (nodes.includes(null) || edges.includes(null) || unresolved.includes(null) || diagnostics.includes(null)) {
-    return { state: "invalid", reason: "invalid-shape" };
-  }
-  return {
-    state: "available",
-    graph: deepFreeze2({
-      schema: GRAPH_SCHEMA_TAG,
-      nodes,
-      edges,
-      unresolved,
-      diagnostics
-    })
-  };
-}
-async function loadGraphFromSource(source) {
-  const read = await source.read();
-  if (read.state === "missing") return { state: "missing" };
-  if (read.state === "unavailable") return { state: "unavailable", reason: read.reason };
-  return parseGraphSnapshot(read.text);
-}
-
 // src/architecture/graph-snapshot-coordinator.ts
 var GraphSnapshotCoordinator = class {
   constructor(store, source) {
@@ -13123,10 +13424,14 @@ var GraphSnapshotCoordinator = class {
     this.source = source;
     /** Monotonically increasing load generation; 0 = never loaded. */
     this.generation = 0;
+    this.disposed = false;
     /** Generation of the snapshot currently published in the store. */
     this.published = 0;
     /** The single in-flight load that newer cold-open calls may join. */
     this.inFlight = null;
+    this.unsubscribe = source.subscribe?.(() => {
+      void this.refresh();
+    });
   }
   /** Generation of the published snapshot (0 when nothing has been
    * published yet). Surfaces render from the store itself; this
@@ -13138,9 +13443,9 @@ var GraphSnapshotCoordinator = class {
    * join the in-flight load when one is running, otherwise start
    * the next generation. Concurrent callers share ONE source read. */
   ensureLoaded() {
+    if (this.inFlight !== null) return this.inFlight.promise;
     const published = this.store.getState().graphSnapshot;
     if (published !== null) return Promise.resolve(published);
-    if (this.inFlight !== null) return this.inFlight.promise;
     return this.startLoad();
   }
   /** Explicit re-read: ALWAYS starts a fresh generation, so every
@@ -13149,11 +13454,21 @@ var GraphSnapshotCoordinator = class {
   refresh() {
     return this.startLoad();
   }
+  dispose() {
+    this.disposed = true;
+    this.generation++;
+    this.unsubscribe?.();
+    this.inFlight = null;
+  }
   startLoad() {
+    if (this.disposed) return Promise.resolve({ state: "unavailable", reason: "Plugin unloaded" });
     const generation = ++this.generation;
-    const promise = loadGraphFromSource(this.source).then((load) => {
+    const promise = loadGraphFromSource(this.source).catch((err) => ({
+      state: "unavailable",
+      reason: String(err)
+    })).then((load) => {
       if (this.inFlight?.generation === generation) this.inFlight = null;
-      if (generation > this.published) {
+      if (!this.disposed && generation === this.generation) {
         this.published = generation;
         publishGraphLoad(this.store, load);
       }
@@ -13191,7 +13506,7 @@ function renderArchiveHome(host, snapshot, collaboration, inspect, openCollabora
   };
   const landscape = section3("Knowledge Landscape");
   if (snapshot?.state === "available") {
-    createChild(landscape, "p", { cls: "rdah-note", text: "Objects in the loaded semantic snapshot \xB7 freshness unverified. Browse all in Archive Navigation." });
+    createChild(landscape, "p", { cls: "rdah-note", text: snapshot.origin === "live-index" ? "Objects from saved notes \xB7 updates follow file changes. Browse all in Archive Navigation." : "Objects in the loaded semantic snapshot \xB7 freshness unverified. Browse all in Archive Navigation." });
     const nodes = [...snapshot.graph.nodes].sort((a, b) => a.object_id < b.object_id ? -1 : a.object_id > b.object_id ? 1 : 0);
     if (!nodes.length) createChild(landscape, "p", { text: "No objects in this snapshot. This is not a Vault inventory." });
     for (const node2 of nodes.slice(0, 8)) {
@@ -13250,6 +13565,8 @@ var import_obsidian2 = require("obsidian");
 // src/semantic-graph/object-resolver.ts
 function resolveObject(graph, _workspace, objectId) {
   const matches = graph.nodes.filter((n) => n.object_id === objectId);
+  const duplicate = graph.diagnostics.find((d) => d.type === "duplicate_identity" && d.object_id === objectId);
+  if (matches.length === 0 && duplicate !== void 0) return { state: "ambiguous", matches, paths: duplicate.paths };
   if (matches.length === 1) return { state: "available", node: matches[0] };
   if (matches.length === 0) return { state: "missing" };
   return { state: "ambiguous", matches };
@@ -13395,7 +13712,7 @@ function buildPanelModelUnfrozen(input) {
     return {
       ...base,
       snapshotState: "available",
-      snapshotMessage: `${graph.nodes.length} objects, ${graph.edges.length} declared relations in this snapshot (freshness unverified).`,
+      snapshotMessage: `${graph.nodes.length} objects, ${graph.edges.length} declared relations ` + (input.load.origin === "live-index" ? "in the live saved-note index." : "in this snapshot (freshness unverified)."),
       diagnostics: emptyDiagnosticsCopy(graph.diagnostics),
       diagnosticsGroups: {
         snapshot: emptyDiagnosticsCopy(graph.diagnostics),
@@ -13425,7 +13742,7 @@ function buildPanelModelUnfrozen(input) {
       snapshotState: "available",
       snapshotMessage: "Snapshot loaded. Identity is ambiguous \u2014 no silent selection.",
       resolveState: "ambiguous",
-      ambiguousMatches: resolved.matches.map((n) => n.object_id),
+      ambiguousMatches: resolved.paths ?? resolved.matches.map((n) => n.object_id),
       diagnostics: emptyDiagnosticsCopy(graph.diagnostics),
       diagnosticsGroups: {
         snapshot: emptyDiagnosticsCopy(graph.diagnostics),
@@ -13890,31 +14207,31 @@ var RDThemeController = class {
 var STATUS_HEADER = /^##\s+Status\s*$/m;
 var HISTORY_HEADER = /^##\s+History\s*$/m;
 function isProposalArtifactPath(path) {
-  return /^\.proposals\/(?!\.\.(?:\/|$))[^\/]+\.md$/.test(path);
+  return /^\.proposals\/(?!\.\.(?:\/|$))[^\\/]+\.md$/.test(path);
 }
-function isDecidableProposalText(text3) {
-  const m = STATUS_HEADER.exec(text3);
+function isDecidableProposalText(text4) {
+  const m = STATUS_HEADER.exec(text4);
   if (m === null) return false;
-  const rest = text3.slice(m.index + m[0].length);
+  const rest = text4.slice(m.index + m[0].length);
   const next = /^##\s+/m.exec(rest);
   const body = (next === null ? rest : rest.slice(0, next.index)).trim();
   return body === "pending";
 }
-function sectionBounds(text3, header) {
-  const m = header.exec(text3);
+function sectionBounds(text4, header) {
+  const m = header.exec(text4);
   if (m === null) return null;
   const start = m.index + m[0].length;
-  const after = text3.slice(start);
+  const after = text4.slice(start);
   const next = /^##\s+/m.exec(after);
-  const end = next === null ? text3.length : start + next.index;
+  const end = next === null ? text4.length : start + next.index;
   return { start, end };
 }
-function applyDecisionToProposalText(text3, decision, timestamp2) {
-  const status = sectionBounds(text3, STATUS_HEADER);
+function applyDecisionToProposalText(text4, decision, timestamp2) {
+  const status = sectionBounds(text4, STATUS_HEADER);
   if (status === null) {
     return { ok: false, reason: "no Status section" };
   }
-  if (!isDecidableProposalText(text3)) {
+  if (!isDecidableProposalText(text4)) {
     return { ok: false, reason: "proposal is not pending (decisions are recorded once)" };
   }
   const newStatusBody = `
@@ -13926,7 +14243,7 @@ ${decision}
 > happens outside RD, limited to the approved scope.
 
 `;
-  let updated = text3.slice(0, status.start) + newStatusBody + text3.slice(status.end);
+  let updated = text4.slice(0, status.start) + newStatusBody + text4.slice(status.end);
   const historyLine = `- ${timestamp2} \u2014 Human decision: ${decision} (recorded via RD collaboration surface; not truth validation)`;
   const history = sectionBounds(updated, HISTORY_HEADER);
   if (history === null) {
@@ -13951,12 +14268,12 @@ ${historyLine}
 var PROPOSALS_DIR = ".proposals";
 var CONTRIBUTIONS_DIR = ".contributions";
 var ORGANIZATION_PROPOSALS_DIR = ".organization-proposals";
-function section2(text3, title) {
+function section2(text4, title) {
   const re = new RegExp(`^##\\s+${title}\\s*$`, "m");
-  const m = re.exec(text3);
+  const m = re.exec(text4);
   if (m === null) return "";
   const start = m.index + m[0].length;
-  const rest = text3.slice(start);
+  const rest = text4.slice(start);
   const next = /^##\s+/m.exec(rest);
   const body = (next === null ? rest : rest.slice(0, next.index)).trim();
   return body;
@@ -14125,6 +14442,8 @@ var CollaborationBrowser = class {
       trail: []
     });
     this.listeners = /* @__PURE__ */ new Set();
+    this.generation = 0;
+    this.disposed = false;
   }
   getState() {
     return this.state;
@@ -14136,9 +14455,11 @@ var CollaborationBrowser = class {
     };
   }
   /** Explicit re-read of available artifacts (user action only). */
-  async refresh(source) {
+  async refresh(source, preserveSelection = false) {
+    const generation = ++this.generation;
     const model = await buildCollaborationModel(source);
-    this.update({ model, selectedArtifact: null, trail: [] });
+    if (this.disposed || generation !== this.generation) return;
+    this.update(preserveSelection ? { model } : { model, selectedArtifact: null, trail: [] });
   }
   /** List → detail navigation (explicit kind + exact path). */
   select(kind, path) {
@@ -14157,9 +14478,12 @@ var CollaborationBrowser = class {
     });
   }
   dispose() {
+    this.disposed = true;
+    this.generation++;
     this.listeners.clear();
   }
   update(patch) {
+    if (this.disposed) return;
     this.state = deepFreeze4({ ...this.state, ...patch });
     for (const listener of [...this.listeners]) listener(this.state);
   }
@@ -14411,6 +14735,9 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
      * completed detail instead of rereading). */
     this.sourceDetail = void 0;
     this.sourceDetailObjectId = null;
+    this.unsubscribeBrowser = null;
+    this.collabDetailToken = 0;
+    this.openedBefore = false;
     /** Per-object in-flight ownership: at most one read per object id,
      * so re-selecting an object whose read is still pending never
      * starts a duplicate (review fix G/H). */
@@ -14455,7 +14782,22 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     if (this.deps.themeController !== void 0) {
       applyRDTheme(shell, this.deps.themeController.getCurrent());
     }
+    this.lastSnapshot = void 0;
+    this.clearSourceDetail();
+    this.unsubscribeBrowser = this.browser.subscribe(() => {
+      if (!this.active) return;
+      if (this.browser.getState().selectedArtifact !== null) void this.refreshCollabDetail();
+      else {
+        this.collabDetailToken++;
+        this.collabDetail = null;
+        this.renderBody();
+      }
+    });
     this.unsubscribe = this.deps.store.subscribe((state) => {
+      if (state.graphSnapshot !== this.lastSnapshot) {
+        this.lastSnapshot = state.graphSnapshot;
+        this.clearSourceDetail();
+      }
       if (state.workspaceMode === "collaboration" && this.lastMode !== "collaboration" && this.deps.collaborationSource !== void 0) {
         void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
       }
@@ -14467,7 +14809,10 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
       shell.classList.toggle("rdws-narrow", width > 0 && width < 700);
     });
     this.observer.observe(shell);
-    await this.coordinator.ensureLoaded();
+    if (this.openedBefore) await this.coordinator.refresh();
+    else await this.coordinator.ensureLoaded();
+    this.openedBefore = true;
+    this.lastSnapshot = this.deps.store.getState().graphSnapshot;
     if (!this.active || generation !== this.openGeneration) return;
     if (this.deps.collaborationSource !== void 0) {
       void this.browser.refresh(this.deps.collaborationSource).then(() => this.renderBody());
@@ -14482,7 +14827,10 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     this.observer = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
-    if (this.ownsBrowser) this.browser.dispose();
+    this.unsubscribeBrowser?.();
+    this.unsubscribeBrowser = null;
+    this.collabDetailToken++;
+    this.clearSourceDetail();
     emptyEl(this.contentEl);
   }
   /** Slim archival masthead: theme selection and the exact-id
@@ -14523,6 +14871,20 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
       if (e.key === "Enter") go();
     });
     createChild(right, "button", { cls: "rdws-button", text: "Inspect" }).addEventListener("click", go);
+    const refresh = createChild(right, "button", { cls: "rdws-button", text: "Refresh saved notes" });
+    const feedback = createChild(right, "span", { cls: "rdws-refresh-status" });
+    feedback.setAttribute("role", "status");
+    refresh.addEventListener("click", () => {
+      refresh.disabled = true;
+      feedback.textContent = "Refreshing\u2026";
+      void this.refreshAvailability().then(() => {
+        feedback.textContent = "Updated";
+      }).catch((err) => {
+        feedback.textContent = `Refresh failed: ${String(err)}`;
+      }).finally(() => {
+        refresh.disabled = false;
+      });
+    });
   }
   /** v1.8: explicit Human decision recording — the only write.
    * Records the decision, then re-reads artifacts and re-opens the
@@ -14542,10 +14904,10 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
    * (exact path), then re-render. Read-only. */
   async refreshCollabDetail() {
     if (this.deps.collaborationSource === void 0) return;
-    this.collabDetail = await resolveDetail(
-      this.deps.collaborationSource,
-      this.browser.getState()
-    );
+    const token = ++this.collabDetailToken;
+    const detail = await resolveDetail(this.deps.collaborationSource, this.browser.getState());
+    if (!this.active || token !== this.collabDetailToken) return;
+    this.collabDetail = detail;
     this.renderBody();
   }
   /** Explicit re-read of derived-state availability and snapshot
@@ -14553,7 +14915,20 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
    * every shell surface switches to the new published snapshot
    * together. Stale older generations can never overwrite it. */
   async refreshAvailability() {
+    await this.deps.refreshIndex?.();
+    this.clearSourceDetail();
     await this.coordinator.refresh();
+    if (this.deps.collaborationSource !== void 0) {
+      await this.browser.refresh(this.deps.collaborationSource, true);
+    }
+  }
+  clearSourceDetail() {
+    this.deps.sourceReader?.invalidate?.();
+    this.sourceDetail = void 0;
+    this.sourceDetailObjectId = null;
+    this.sourceReadToken++;
+    this.sourceReadInFlight.clear();
+    this.sourceReadTokenByObject.clear();
   }
   /** Source detail usable ONLY for the object it was read for. A
    * detail that belongs to another object is never reused — B
@@ -14579,12 +14954,12 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     this.sourceReadInFlight.add(objectId);
     const token = ++this.sourceReadToken;
     this.sourceReadTokenByObject.set(objectId, token);
-    void reader.resolve(objectId).then((detail) => {
-      this.sourceReadInFlight.delete(objectId);
+    void reader.resolve(objectId).catch((err) => ({ state: "unavailable", reason: String(err) })).then((detail) => {
       if ((this.sourceReadTokenByObject.get(objectId) ?? 0) !== token) {
         return;
       }
-      if (this.deps.store.getState().selectedObjectId !== objectId) {
+      this.sourceReadInFlight.delete(objectId);
+      if (!this.active || this.deps.store.getState().selectedObjectId !== objectId) {
         return;
       }
       this.sourceDetail = detail;
@@ -14686,22 +15061,22 @@ var RDWorkspaceShellView = class extends import_obsidian2.ItemView {
     mark.setAttribute("aria-hidden", "true");
     mark.textContent = "\xA7";
     const strip = createChild(dossier, "dl", { cls: "rdws-identity-strip" });
-    const stripItem = (label, text3, state) => {
+    const stripItem = (label, text4, state) => {
       const item = createChild(strip, "div", { cls: "rdws-strip-item" });
       if (state !== void 0) item.setAttribute("data-state", state);
       createChild(item, "dt", { text: label });
-      createChild(item, "dd", { text: text3 });
+      createChild(item, "dd", { text: text4 });
     };
     if (node2 !== void 0) {
       stripItem("kind", node2.kind);
       stripItem("lifecycle", node2.status);
-      stripItem("snapshot", "derived projection \xB7 freshness unverified");
+      stripItem("snapshot", load.origin === "live-index" ? "derived projection \xB7 live saved notes" : "derived projection \xB7 freshness unverified");
       const relationCount = graph.edges.filter((e) => e.source === selected || e.target === selected).length;
       const unresolvedCount = graph.unresolved.filter((e) => e.source === selected || e.target === selected).length;
       stripItem("relations", `${relationCount} declared${unresolvedCount > 0 ? ` \xB7 ${unresolvedCount} unresolved` : ""}`);
       const source = this.sourceDetailFor(selected);
       if (source !== void 0 && source.state === "available") {
-        stripItem("source", "resolved \xB7 current-source read", "available");
+        stripItem("source", load.origin === "live-index" ? "resolved \xB7 indexed saved source" : "resolved \xB7 current-source read", "available");
         const p = source.frontmatter.provenance;
         const withText = p === void 0 ? 0 : [p.observation, p.evidence, p.inference, p.conclusion].filter((v) => v !== void 0 && v !== "").length;
         stripItem("provenance", `${withText} of 4 layers carry text`);
@@ -14780,11 +15155,12 @@ var RD_KNOWLEDGE_PANEL_VIEW_TYPE = "rd-knowledge-panel";
 var RDKnowledgePanelView = class extends import_obsidian3.ItemView {
   constructor(leaf, deps) {
     super(leaf);
-    // Named graphLoad: View.load() is an Obsidian lifecycle method.
-    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
-    this.sourceDetail = void 0;
-    this.query = "";
     this.deps = deps;
+    this.graphLoad = { state: "unavailable", reason: "not loaded yet" };
+    this.query = "";
+    this.active = false;
+    this.readGeneration = 0;
+    this.refreshGeneration = 0;
   }
   getViewType() {
     return RD_KNOWLEDGE_PANEL_VIEW_TYPE;
@@ -14796,65 +15172,90 @@ var RDKnowledgePanelView = class extends import_obsidian3.ItemView {
     return "book-open";
   }
   async onOpen() {
+    this.active = true;
     emptyEl(this.contentEl);
     const shell = createChild(this.contentEl, "div", { cls: "rd-knowledge-panel-shell" });
     const bar = createChild(shell, "div", { cls: "rdkp-toolbar" });
     const input = createChild(bar, "input", { cls: "rdkp-input" });
     input.type = "text";
-    input.placeholder = "exact object_id (e.g. ko-20260919-0001)";
+    input.value = this.query;
+    input.placeholder = "exact object_id or legacy id";
     input.setAttribute("aria-label", "Knowledge object id (exact match)");
-    const apply = createChild(bar, "button", { cls: "rdkp-button", text: "Inspect" });
-    apply.addEventListener("click", () => {
+    const inspect = () => {
       this.query = input.value.trim();
-      this.renderPanel();
+      void this.readSelection();
+    };
+    createChild(bar, "button", { cls: "rdkp-button", text: "Inspect" }).addEventListener("click", inspect);
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") inspect();
     });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        this.query = input.value.trim();
-        this.renderPanel();
-      }
-    });
-    const reload = createChild(bar, "button", { cls: "rdkp-button", text: "Re-read snapshot" });
-    reload.addEventListener("click", () => {
-      void this.refresh();
+    createChild(bar, "button", { cls: "rdkp-button", text: "Re-read snapshot" }).addEventListener("click", () => {
+      void this.refresh(true);
     });
     createChild(shell, "div", { cls: "rdkp-panel-host" });
-    await this.refresh();
+    this.unsubscribe?.();
+    if (this.deps.store !== void 0) {
+      this.unsubscribe = this.deps.store.subscribe((state) => {
+        if (state.graphSnapshot !== null) this.acceptSnapshot(state.graphSnapshot);
+      });
+    } else {
+      this.unsubscribe = this.deps.source.subscribe?.(() => {
+        void this.refresh(false);
+      });
+    }
+    await this.refresh(false);
   }
   async onClose() {
+    this.active = false;
+    this.readGeneration++;
+    this.refreshGeneration++;
+    this.unsubscribe?.();
+    this.unsubscribe = void 0;
     emptyEl(this.contentEl);
   }
-  /** Refresh = re-read available data through the source ports.
-   * No Python spawn, no file mutation, no agent invocation. */
-  async refresh() {
-    this.deps.sourceReader?.invalidate?.();
-    this.graphLoad = await loadGraphFromSource(this.deps.source);
-    this.sourceDetail = void 0;
-    if (this.deps.sourceReader !== void 0 && this.query !== "") {
-      this.sourceDetail = await this.deps.sourceReader.resolve(this.query);
+  async refresh(explicit) {
+    const generation = ++this.refreshGeneration;
+    let load;
+    try {
+      load = this.deps.coordinator !== void 0 ? await (explicit ? this.deps.coordinator.refresh() : this.deps.coordinator.ensureLoaded()) : await loadGraphFromSource(this.deps.source);
+    } catch (err) {
+      load = { state: "unavailable", reason: String(err) };
     }
+    if (!this.active || generation !== this.refreshGeneration) return;
+    this.acceptSnapshot(load);
+  }
+  acceptSnapshot(load) {
+    if (!this.active || this.graphLoad === load) return;
+    this.graphLoad = load;
+    this.deps.sourceReader?.invalidate?.();
+    void this.readSelection();
+  }
+  async readSelection() {
+    const generation = ++this.readGeneration;
+    const query = this.query;
+    this.sourceDetail = void 0;
+    this.renderPanel();
+    if (query === "" || this.deps.sourceReader === void 0) return;
+    let detail;
+    try {
+      detail = await this.deps.sourceReader.resolve(query);
+    } catch (err) {
+      detail = { state: "unavailable", reason: String(err) };
+    }
+    if (!this.active || generation !== this.readGeneration || this.query !== query) return;
+    this.sourceDetail = detail;
     this.renderPanel();
   }
   renderPanel() {
+    if (!this.active) return;
     const host = this.contentEl.querySelector(".rdkp-panel-host");
     if (!(host instanceof HTMLElement)) return;
-    void this.resolveSourceAndRender();
-    const model = buildKnowledgePanelModel({
+    renderKnowledgePanel(host, buildKnowledgePanelModel({
       load: this.graphLoad,
       workspace: this.deps.workspace,
-      objectId: this.query === "" ? void 0 : this.query,
+      objectId: this.query || void 0,
       sourceDetail: this.sourceDetail
-    });
-    renderKnowledgePanel(host, model);
-  }
-  /** Query changes trigger an exact source resolution (async),
-   * then a re-render. Snapshot data renders immediately. */
-  async resolveSourceAndRender() {
-    if (this.deps.sourceReader === void 0 || this.query === "") return;
-    const detail = await this.deps.sourceReader.resolve(this.query);
-    if (detail === this.sourceDetail) return;
-    this.sourceDetail = detail;
-    this.renderPanel();
+    }));
   }
 };
 
@@ -14914,7 +15315,7 @@ function buildGraphProjection(index2, selectedPath) {
   const { objects } = index2.snapshot();
   const typeByPath = /* @__PURE__ */ new Map();
   for (const o of objects) typeByPath.set(o.path, o);
-  const selectable = objects.filter((o) => o.type === "case" || o.type === "evidence" || o.type === "hypothesis" || o.type === "loop").sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, type: o.type, title: o.title }));
+  const selectable = objects.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0).map((o) => ({ path: o.path, id: o.id, type: o.type, title: o.title }));
   const data = {
     indexState: index2.state,
     phase: "NO_OBJECT_SELECTED",
@@ -14959,10 +15360,10 @@ var WIDTH = 1140;
 var NODE_W = 280;
 var NODE_H = 116;
 var STEP = 160;
-function svg(parent, tag, attributes, text3) {
+function svg(parent, tag, attributes, text4) {
   const el = document.createElementNS(NS, tag);
   for (const [key, value] of Object.entries(attributes)) el.setAttribute(key, value);
-  if (text3 !== void 0) el.textContent = text3;
+  if (text4 !== void 0) el.textContent = text4;
   parent.appendChild(el);
   return el;
 }
@@ -15671,7 +16072,7 @@ function buildInvestigationProjection(index2) {
     contradiction: 0
   };
   for (const object of objects) {
-    counts[object.type] += 1;
+    counts[object.type] = (counts[object.type] ?? 0) + 1;
   }
   for (const relation of relations) {
     if (relation.predicate === "contradicts") counts.contradiction += 1;
@@ -15829,6 +16230,7 @@ var RDInvestigationView = class extends import_obsidian6.ItemView {
       ["EVIDENCE", data.counts.evidence],
       ["HYPOTHESIS", data.counts.hypothesis],
       ["LOOP", data.counts.loop],
+      ...["observation", "fact", "concept", "decision", "reference", "process"].filter((kind) => (data.counts[kind] ?? 0) > 0).map((kind) => [kind.toUpperCase(), data.counts[kind] ?? 0]),
       ["BROKEN", data.counts.broken],
       ["AMBIGUOUS", data.counts.ambiguous],
       ["CONTRADICTION", data.counts.contradiction]
@@ -15950,6 +16352,7 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
      * onOpen and onClose, and each onOpen starts a new open
      * generation so a stale awaited continuation can never render. */
     this.active = false;
+    this.filter = "";
     this.openGeneration = 0;
     this.coordinator = deps.coordinator ?? new GraphSnapshotCoordinator(deps.store, deps.source);
   }
@@ -15982,6 +16385,7 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
    * knowledge objects, surface destinations. */
   render() {
     if (!this.active) return;
+    const filterFocused = this.contentEl.querySelector(".rdan-filter") === document.activeElement;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;
@@ -16019,10 +16423,20 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
     }
     const objects = createChild(rail, "div", { cls: "rdan-group rdan-objects" });
     createChild(objects, "div", { cls: "rdan-label", text: "Knowledge Objects" });
+    const filter = createChild(objects, "input", { cls: "rdan-filter" });
+    filter.type = "search";
+    filter.placeholder = "Filter by title or id";
+    filter.setAttribute("aria-label", "Filter knowledge objects by title or id");
+    filter.value = this.filter;
+    filter.addEventListener("input", () => {
+      this.filter = filter.value;
+      this.applyFilter();
+    });
+    createChild(objects, "div", { cls: "rdan-filter-status" }).setAttribute("role", "status");
     if (snapshot === null || snapshot.state !== "available") {
       createChild(objects, "div", {
         cls: "rdan-empty",
-        text: "snapshot unavailable \u2014 the vault still contains its knowledge; regenerate the derived graph with the projector when needed"
+        text: "snapshot unavailable \u2014 the vault still contains its knowledge; use Refresh saved notes to retry the live index"
       });
     } else {
       const nodes = [...snapshot.graph.nodes].sort((a, b) => a.object_id.localeCompare(b.object_id));
@@ -16047,6 +16461,7 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
         for (const node2 of group) {
           const row = createChild(objects, "button", { cls: "rdan-object-row" });
           row.setAttribute("aria-label", `inspect ${node2.object_id}`);
+          row.dataset.search = `${node2.object_id} ${node2.title}`.toLowerCase();
           if (node2.object_id === selected) row.setAttribute("aria-pressed", "true");
           createChild(row, "span", { cls: "rdan-object-row-id", text: node2.object_id });
           createChild(row, "span", {
@@ -16066,6 +16481,8 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
         }
       }
     }
+    this.applyFilter();
+    if (filterFocused) filter.focus({ preventScroll: true });
     const surfaces = createChild(rail, "div", { cls: "rdan-group" });
     createChild(surfaces, "div", { cls: "rdan-label", text: "Surfaces" });
     for (const surface of SURFACES) {
@@ -16087,6 +16504,17 @@ var RDArchiveNavView = class extends import_obsidian7.ItemView {
         });
       }
     }
+  }
+  applyFilter() {
+    const query = this.filter.trim().toLowerCase();
+    const rows = [...this.contentEl.querySelectorAll(".rdan-object-row")];
+    let matches = 0;
+    for (const row of rows) {
+      row.hidden = !(row.dataset.search ?? "").includes(query);
+      if (!row.hidden) matches++;
+    }
+    const status = this.contentEl.querySelector(".rdan-filter-status");
+    if (status !== null) status.textContent = query ? `${matches} of ${rows.length} objects match` : "";
   }
 };
 
@@ -16193,6 +16621,7 @@ var RDInspectorView = class extends import_obsidian8.ItemView {
           createChild(meta, "dd", { text: v });
         };
         metaRow("id", node2.object_id);
+        metaRow("title", node2.title);
         metaRow("kind", node2.kind);
         metaRow("lifecycle", node2.status);
         if (node2.predecessor !== null) metaRow("predecessor", node2.predecessor);
@@ -16412,96 +16841,6 @@ var RDShellController = class {
   }
 };
 
-// src/semantic-graph/ko-detail-reader.ts
-function extractFrontmatterBlock(text3) {
-  const normalized = text3.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  if (!normalized.startsWith("---\n")) return null;
-  const lines = normalized.split("\n");
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") return lines.slice(1, i).join("\n");
-  }
-  return null;
-}
-function scalar(raw) {
-  let v = raw.trim();
-  if (v === "" || v === "null" || v === "~") return void 0;
-  const q = v[0];
-  if (q === '"' || q === "'") {
-    const end = v.indexOf(q, 1);
-    if (end === -1) return void 0;
-    return v.slice(1, end) || void 0;
-  }
-  const comment = v.indexOf(" #");
-  if (comment !== -1) v = v.slice(0, comment).trim();
-  return v === "" || v === "null" ? void 0 : v;
-}
-function parseKoFrontmatter(block) {
-  const lines = block.split("\n");
-  const scalars = {};
-  const createdFrom = [];
-  const provenance = {};
-  let i = 0;
-  let inCreatedFrom = false;
-  let inProvenance = false;
-  while (i < lines.length) {
-    const line = lines[i];
-    const top = /^([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const nested = /^\s+([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const item = /^\s+-\s+(.*)$/.exec(line);
-    if (top) {
-      inCreatedFrom = false;
-      inProvenance = false;
-      const key = top[1];
-      if (key === "created_from") {
-        inCreatedFrom = true;
-        const rest = top[2].trim();
-        if (rest === "[]") {
-          inCreatedFrom = false;
-          i++;
-          continue;
-        }
-        if (rest !== "") {
-          inCreatedFrom = false;
-          i++;
-          continue;
-        }
-      } else if (key === "provenance") {
-        inProvenance = true;
-        i++;
-        continue;
-      } else {
-        scalars[key] = scalar(top[2]);
-      }
-    } else if (inProvenance && nested) {
-      provenance[nested[1]] = scalar(nested[2]);
-    } else if (inCreatedFrom && item) {
-      const v = scalar(item[1]);
-      if (v !== void 0) createdFrom.push(v);
-    }
-    i++;
-  }
-  const objectId = scalars.object_id;
-  if (objectId === void 0) return null;
-  const hasProvenanceKeys = provenance.observation !== void 0 || provenance.evidence !== void 0 || provenance.inference !== void 0 || provenance.conclusion !== void 0;
-  return {
-    object_id: objectId,
-    kind: scalars.kind,
-    status: scalars.status,
-    title: scalars.title,
-    workspace_context: scalars.workspace_context,
-    creator_role: scalars.creator_role,
-    created_from: createdFrom.length > 0 ? createdFrom : void 0,
-    provenance: hasProvenanceKeys ? provenance : void 0
-  };
-}
-function koDetailFromNote(path, text3) {
-  const block = extractFrontmatterBlock(text3);
-  if (block === null) return { state: "missing" };
-  const fm = parseKoFrontmatter(block);
-  if (fm === null) return { state: "missing" };
-  return { state: "available", path, frontmatter: fm };
-}
-
 // src/views/ko-surface.ts
 function renderKoSurface(host, input) {
   const expanded = new Set([...host.querySelectorAll("details[open]")].map((el) => el.dataset.section));
@@ -16564,7 +16903,7 @@ function renderKoSurface(host, input) {
     if (resolved.state !== "available") {
       for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: `Object ${resolved.state} in the loaded snapshot. No title or path substitution.` });
     } else {
-      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: "Derived snapshot \xB7 freshness unverified \xB7 source declarations may differ." });
+      for (const el of [relations, lineage]) createChild(el, "p", { cls: "rdko-note", text: load.origin === "live-index" ? "Derived from the saved-note index \xB7 declarations are not validation." : "Derived snapshot \xB7 freshness unverified \xB7 source declarations may differ." });
       if (resolved.node.kind !== fm.kind || resolved.node.status !== fm.status) {
         createChild(relations, "p", { cls: "rdko-note", text: `Snapshot/source differ: snapshot kind ${resolved.node.kind}, status ${resolved.node.status}. Not reconciled.` });
       }
@@ -16692,9 +17031,9 @@ var RDKoLeafThemeController = class {
       return;
     }
     if (this.surfaces.get(leaf)?.path !== file.path) this.unmark(leaf);
-    let text3;
+    let text4;
     try {
-      text3 = await this.plugin.app.vault.cachedRead(file);
+      text4 = await this.plugin.app.vault.cachedRead(file);
     } catch {
       if (this.generations.get(leaf) === generation) this.unmark(leaf);
       return;
@@ -16703,7 +17042,7 @@ var RDKoLeafThemeController = class {
     if (!this.plugin.app.workspace.getLeavesOfType(MARKDOWN_VIEW_TYPE).includes(leaf)) return;
     const current = leaf.view.file;
     if (leaf.view !== view || current == null || current.path !== file.path) return;
-    const block = extractFrontmatterBlock(text3);
+    const block = extractFrontmatterBlock(text4);
     const frontmatter = block === null ? null : parseKoFrontmatter(block);
     if (frontmatter === null) {
       this.unmark(leaf);
@@ -16711,11 +17050,11 @@ var RDKoLeafThemeController = class {
     }
     this.mark(leaf);
     const previous2 = this.surfaces.get(leaf);
-    if (previous2?.text === text3 && previous2.element.parentElement === view.containerEl) return;
+    if (previous2?.text === text4 && previous2.element.parentElement === view.containerEl) return;
     const element2 = previous2?.element ?? document.createElement("section");
     element2.className = "rd-ko-surface";
     view.containerEl.insertBefore(element2, view.contentEl ?? null);
-    const record = { path: file.path, text: text3, frontmatter, element: element2 };
+    const record = { path: file.path, text: text4, frontmatter, element: element2 };
     this.surfaces.set(leaf, record);
     this.renderSurface(record);
   }
@@ -17127,7 +17466,9 @@ function buildRDViewRegistry() {
     createView: (leaf, services) => new RDKnowledgePanelView(leaf, {
       source: services.graphSource,
       sourceReader: services.koSourceReader,
-      workspace: "default"
+      workspace: "default",
+      store: services.workspaceStore,
+      coordinator: services.graphCoordinator
     })
   });
   registry.add({
@@ -17148,7 +17489,8 @@ function buildRDViewRegistry() {
       themeController: services.themeController,
       browser: services.collaborationBrowser,
       shellController: services.shellController,
-      coordinator: services.graphCoordinator
+      coordinator: services.graphCoordinator,
+      refreshIndex: services.refreshIndex
     })
   });
   registry.add({
@@ -17203,11 +17545,29 @@ function registerRDViews(plugin, services) {
     workspaceStore,
     services.graphSource
   );
+  plugin.register(() => graphCoordinator.dispose());
+  plugin.register(() => workspaceStore.dispose());
   const themeController = new RDThemeController(
     createDefaultThemeRegistry(),
     "rational-archive"
   );
   const collaborationBrowser = new CollaborationBrowser();
+  const unsubscribeArtifacts = services.onVaultChange?.((path) => {
+    if (/^\.(proposals|contributions|organization-proposals)\/[^/]+\.md$/i.test(path)) {
+      void collaborationBrowser.refresh(services.collaborationSource, true);
+    }
+  });
+  if (unsubscribeArtifacts !== void 0) plugin.register(unsubscribeArtifacts);
+  plugin.addCommand({ id: "refresh-rd-knowledge", name: "Refresh RD knowledge from saved notes", callback: async () => {
+    try {
+      await services.refreshIndex?.();
+      services.koSourceReader.invalidate?.();
+      await graphCoordinator.refresh();
+      await collaborationBrowser.refresh(services.collaborationSource, true);
+    } catch (err) {
+      console.error("RD knowledge refresh failed", err);
+    }
+  } });
   const shellController = new RDShellController(plugin.app, workspaceStore);
   plugin.register(() => shellController.dispose());
   plugin.register(() => collaborationBrowser.dispose());
@@ -17242,25 +17602,10 @@ function registerRDViews(plugin, services) {
 }
 
 // src/architecture/obsidian-graph-ports.ts
-var ObsidianGraphSourceImpl = class {
-  constructor(plugin) {
-    this.plugin = plugin;
-  }
-  async read() {
-    const adapter = this.plugin.app.vault.adapter;
-    try {
-      if (!await adapter.exists(DEFAULT_SEMANTIC_GRAPH_PATH)) {
-        return { state: "missing" };
-      }
-      return { state: "available", text: await adapter.read(DEFAULT_SEMANTIC_GRAPH_PATH) };
-    } catch (err) {
-      return { state: "unavailable", reason: String(err) };
-    }
-  }
-};
 var ObsidianKoSourceReaderImpl = class {
-  constructor(plugin) {
+  constructor(plugin, liveIndex) {
     this.plugin = plugin;
+    this.liveIndex = liveIndex;
     this.index = null;
   }
   invalidate() {
@@ -17270,11 +17615,11 @@ var ObsidianKoSourceReaderImpl = class {
     if (this.index !== null) return this.index;
     const map2 = /* @__PURE__ */ new Map();
     const adapter = this.plugin.app.vault.adapter;
-    const files = this.plugin.app.vault.getMarkdownFiles().map((f) => f.path).sort();
+    const files = this.plugin.app.vault.getMarkdownFiles().map((f) => f.path).filter(isIndexablePath).sort();
     for (const path of files) {
       try {
-        const text3 = await adapter.read(path);
-        const block = extractFrontmatterBlock(text3);
+        const text4 = await adapter.read(path);
+        const block = extractFrontmatterBlock(text4);
         if (block === null) continue;
         const fm = parseKoFrontmatter(block);
         if (fm === null) continue;
@@ -17288,13 +17633,14 @@ var ObsidianKoSourceReaderImpl = class {
     return map2;
   }
   async resolve(objectId) {
+    if (this.liveIndex !== void 0) return this.liveIndex.detailById(objectId);
     try {
       const map2 = await this.ensureIndex();
       const paths = map2.get(objectId) ?? [];
       if (paths.length === 0) return { state: "missing" };
       if (paths.length > 1) return { state: "ambiguous", paths };
-      const text3 = await this.plugin.app.vault.adapter.read(paths[0]);
-      return koDetailFromNote(paths[0], text3);
+      const text4 = await this.plugin.app.vault.adapter.read(paths[0]);
+      return koDetailFromNote(paths[0], text4);
     } catch (err) {
       return { state: "unavailable", reason: String(err) };
     }
@@ -17335,9 +17681,9 @@ var ObsidianProposalDecisionPortImpl = class {
       if (!await adapter.exists(path)) {
         return { state: "missing" };
       }
-      const text3 = await adapter.read(path);
+      const text4 = await adapter.read(path);
       const now = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
-      const result = applyDecisionToProposalText(text3, decision, now);
+      const result = applyDecisionToProposalText(text4, decision, now);
       if (!result.ok) {
         return { state: "invalid", reason: result.reason };
       }
@@ -17355,7 +17701,7 @@ var ObsidianReadAdapterImpl = class {
     this.plugin = plugin;
   }
   list() {
-    return this.plugin.app.vault.getMarkdownFiles().map((f) => f.path).filter((p) => isCandidatePath(p));
+    return this.plugin.app.vault.getMarkdownFiles().map((f) => f.path).filter((p) => isIndexablePath(p));
   }
   async read(path) {
     return await this.plugin.app.vault.adapter.read(path);
@@ -17410,14 +17756,16 @@ var RationalDeliriumPlugin = class extends import_obsidian10.Plugin {
       controller: this.controller,
       index: wiring.index,
       onIndexCommit: (cb) => wiring.onIndexCommit(cb),
+      refreshIndex: () => wiring.refresh(),
+      onVaultChange: (cb) => wiring.onVaultChange(cb),
       onActiveFile: (cb) => wiring.onActiveFile(cb),
       activeFileProvider: () => {
         const f = this.app.workspace.getActiveFile();
         return f !== null ? f.path : null;
       },
       navigation,
-      graphSource: new ObsidianGraphSourceImpl(this),
-      koSourceReader: new ObsidianKoSourceReaderImpl(this),
+      graphSource: new IndexedGraphSource(wiring.index),
+      koSourceReader: new ObsidianKoSourceReaderImpl(this, wiring.index),
       collaborationSource: new ObsidianCollaborationSourceImpl(this),
       decisionPort: new ObsidianProposalDecisionPortImpl(this)
     });

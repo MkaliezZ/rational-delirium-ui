@@ -1,9 +1,9 @@
 {
   "id": "rational-delirium",
   "name": "Rational Delirium",
-  "version": "0.4.4",
+  "version": "1.10.0",
   "minAppVersion": "1.13.7",
-  "description": "Read-only CASE workspace projection: context, relations and native navigation for the Rational Delirium vault.",
+  "description": "Local Markdown knowledge workspace: live object index, declared relations, provenance and human-reviewed contributions.",
   "isDesktopOnly": true,
   "css": [
     "styles.css",

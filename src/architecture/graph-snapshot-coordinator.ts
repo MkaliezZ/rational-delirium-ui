@@ -30,6 +30,8 @@ import { publishGraphLoad, type RDWorkspaceStore } from "./workspace-state";
 export class GraphSnapshotCoordinator {
   /** Monotonically increasing load generation; 0 = never loaded. */
   private generation = 0;
+  private disposed = false;
+  private readonly unsubscribe: (() => void) | undefined;
   /** Generation of the snapshot currently published in the store. */
   private published = 0;
   /** The single in-flight load that newer cold-open calls may join. */
@@ -39,7 +41,9 @@ export class GraphSnapshotCoordinator {
   constructor(
     private readonly store: RDWorkspaceStore,
     private readonly source: GraphSource,
-  ) {}
+  ) {
+    this.unsubscribe = source.subscribe?.(() => { void this.refresh(); });
+  }
 
   /** Generation of the published snapshot (0 when nothing has been
    * published yet). Surfaces render from the store itself; this
@@ -52,9 +56,9 @@ export class GraphSnapshotCoordinator {
    * join the in-flight load when one is running, otherwise start
    * the next generation. Concurrent callers share ONE source read. */
   ensureLoaded(): Promise<GraphLoadResult> {
+    if (this.inFlight !== null) return this.inFlight.promise;
     const published = this.store.getState().graphSnapshot;
     if (published !== null) return Promise.resolve(published);
-    if (this.inFlight !== null) return this.inFlight.promise;
     return this.startLoad();
   }
 
@@ -65,14 +69,24 @@ export class GraphSnapshotCoordinator {
     return this.startLoad();
   }
 
+  dispose(): void {
+    this.disposed = true;
+    this.generation++;
+    this.unsubscribe?.();
+    this.inFlight = null;
+  }
+
   private startLoad(): Promise<GraphLoadResult> {
+    if (this.disposed) return Promise.resolve({state: "unavailable", reason: "Plugin unloaded"});
     const generation = ++this.generation;
-    const promise = loadGraphFromSource(this.source).then((load) => {
+    const promise = loadGraphFromSource(this.source).catch((err): GraphLoadResult => ({
+      state: "unavailable", reason: String(err),
+    })).then((load) => {
       if (this.inFlight?.generation === generation) this.inFlight = null;
       // Stale completion rejection: only a generation newer than
       // everything published so far may enter the store; an older
       // load completing late is dropped without touching state.
-      if (generation > this.published) {
+      if (!this.disposed && generation === this.generation) {
         this.published = generation;
         publishGraphLoad(this.store, load);
       }

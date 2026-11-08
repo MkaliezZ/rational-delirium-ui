@@ -1,3 +1,4 @@
+// Historical Obsidian contribution-contract assertions remain against the archived skill.
 /** v1.8 Human Approved Agent Workflow tests — decision transform,
  * approve/reject actions, wording boundaries, contribution linking,
  * no automatic execution, no mutation path beyond the decision port.
@@ -194,7 +195,7 @@ describe("v1.8 execution and mutation boundaries", () => {
   });
 
   it("skill carries the approved workflow guidance with boundaries", () => {
-    const skill = readFileSync(join(root, "skills", "rational-delirium-agent-skill.md"), "utf-8");
+    const skill = readFileSync(join(root, "skills", "legacy-obsidian-agent-skill-v1.7.1.md"), "utf-8");
     const norm = skill.replace(/\s+/g, " ");
     expect(norm).toContain("Approved Workflow");
     expect(norm).toContain("WAIT for the Human decision");

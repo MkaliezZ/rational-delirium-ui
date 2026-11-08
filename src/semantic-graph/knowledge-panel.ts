@@ -150,7 +150,7 @@ function buildPanelModelUnfrozen(input: PanelInput): KnowledgePanelModel {
       snapshotState: "available",
       snapshotMessage:
         `${graph.nodes.length} objects, ${graph.edges.length} declared relations ` +
-        `in this snapshot (freshness unverified).`,
+        (input.load.origin === "live-index" ? "in the live saved-note index." : "in this snapshot (freshness unverified)."),
       diagnostics: emptyDiagnosticsCopy(graph.diagnostics),
       diagnosticsGroups: {
         snapshot: emptyDiagnosticsCopy(graph.diagnostics),
@@ -181,7 +181,7 @@ function buildPanelModelUnfrozen(input: PanelInput): KnowledgePanelModel {
       snapshotState: "available",
       snapshotMessage: "Snapshot loaded. Identity is ambiguous — no silent selection.",
       resolveState: "ambiguous",
-      ambiguousMatches: resolved.matches.map((n) => n.object_id),
+      ambiguousMatches: resolved.paths ?? resolved.matches.map((n) => n.object_id),
       diagnostics: emptyDiagnosticsCopy(graph.diagnostics),
       diagnosticsGroups: {
         snapshot: emptyDiagnosticsCopy(graph.diagnostics),

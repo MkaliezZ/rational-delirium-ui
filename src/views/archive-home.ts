@@ -23,7 +23,7 @@ export function renderArchiveHome(
   };
   const landscape = section("Knowledge Landscape");
   if (snapshot?.state === "available") {
-    createChild(landscape, "p", { cls: "rdah-note", text: "Objects in the loaded semantic snapshot · freshness unverified. Browse all in Archive Navigation." });
+    createChild(landscape, "p", { cls: "rdah-note", text: snapshot.origin === "live-index" ? "Objects from saved notes · updates follow file changes. Browse all in Archive Navigation." : "Objects in the loaded semantic snapshot · freshness unverified. Browse all in Archive Navigation." });
     const nodes = [...snapshot.graph.nodes].sort((a, b) => a.object_id < b.object_id ? -1 : a.object_id > b.object_id ? 1 : 0);
     if (!nodes.length) createChild(landscape, "p", { text: "No objects in this snapshot. This is not a Vault inventory." });
     for (const node of nodes.slice(0, 8)) {

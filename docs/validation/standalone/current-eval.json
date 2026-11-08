@@ -1,0 +1,343 @@
+{
+  "schema": "rd-task-eval-result/1",
+  "run": "current",
+  "corpus": "eval/corpus.json",
+  "queryCount": 26,
+  "positiveQueryCount": 25,
+  "expectedEmptyQueryCount": 1,
+  "corpusSha256": "d136fe27c1cbadc85e78989ce559921ae1577cf5b7f56cd534cae5f950ce6226",
+  "baselineAlgorithmSha256": "d9ed23e326481249f63111f2eed2678725583017ae34da191783342ead0de18a",
+  "recallAt5": 1,
+  "mrrAt5": 1,
+  "strictPrecisionAt5": 0.8666666666666667,
+  "noResultAccuracy": 1,
+  "checks": {
+    "seedIncluded": true,
+    "supportIncluded": true,
+    "contradictionIncluded": true,
+    "unresolvedVisible": true,
+    "encodedBudget": true,
+    "legacyIdentity": true
+  },
+  "queries": [
+    {
+      "query": "ko-20261107-0142",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.7483000000000004
+    },
+    {
+      "query": "Agent 记忆的修订边界",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md",
+        "Knowledge/a-distractor.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 4.388300000000015
+    },
+    {
+      "query": "智能体长期记忆",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 4.087200000000024
+    },
+    {
+      "query": "Agent memory",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 3.1648999999999887
+    },
+    {
+      "query": "记忆 修订",
+      "relevant": [
+        "Knowledge/z-memory.md",
+        "Knowledge/z-evidence.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md",
+        "Knowledge/z-evidence.md",
+        "Knowledge/a-distractor.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 3.453600000000023
+    },
+    {
+      "query": "频繁改写的风险",
+      "relevant": [
+        "Knowledge/z-conflict.md"
+      ],
+      "hits": [
+        "Knowledge/z-conflict.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.631200000000007
+    },
+    {
+      "query": "本地资料备份流程",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ],
+      "hits": [
+        "Knowledge/z-backup.md",
+        "Knowledge/a-backup-old.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.465900000000005
+    },
+    {
+      "query": "backup",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ],
+      "hits": [
+        "Knowledge/z-backup.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.3185000000000002
+    },
+    {
+      "query": "数据丢失怎么办",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ],
+      "hits": [
+        "Knowledge/z-backup.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.3967999999999847
+    },
+    {
+      "query": "备份还原文件",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ],
+      "hits": [
+        "Knowledge/z-backup.md",
+        "Knowledge/a-backup-old.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 1.9841000000000122
+    },
+    {
+      "query": "找不到笔记",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ],
+      "hits": [
+        "Knowledge/z-search.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 1.9230000000000018
+    },
+    {
+      "query": "中文 检索",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ],
+      "hits": [
+        "Knowledge/z-search.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 3.157699999999977
+    },
+    {
+      "query": "审核改动",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ],
+      "hits": [
+        "Knowledge/z-review.md",
+        "Knowledge/z-backup.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 3.345899999999972
+    },
+    {
+      "query": "审批",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ],
+      "hits": [
+        "Knowledge/z-review.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.6200999999999794
+    },
+    {
+      "query": "Agent 提案",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ],
+      "hits": [
+        "Knowledge/z-review.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.175399999999968
+    },
+    {
+      "query": "橙色便签",
+      "relevant": [
+        "Notes/inbox.md"
+      ],
+      "hits": [
+        "Notes/inbox.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 1.9572000000000003
+    },
+    {
+      "query": "研究会 地点",
+      "relevant": [
+        "Notes/inbox.md"
+      ],
+      "hits": [
+        "Notes/inbox.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 1.7296999999999798
+    },
+    {
+      "query": "E-LEGACY-7",
+      "relevant": [
+        "EVIDENCE/legacy.md"
+      ],
+      "hits": [
+        "EVIDENCE/legacy.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 0.1634000000000242
+    },
+    {
+      "query": "夜间工作记录",
+      "relevant": [
+        "Knowledge/z-sleep.md"
+      ],
+      "hits": [
+        "Knowledge/z-sleep.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.0820000000000505
+    },
+    {
+      "query": "完全不存在的火星档案",
+      "relevant": [],
+      "hits": [],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 1.8444000000000074
+    },
+    {
+      "query": "长期记忆频繁覆盖",
+      "relevant": [
+        "Knowledge/z-conflict.md"
+      ],
+      "hits": [
+        "Knowledge/z-conflict.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.375499999999988
+    },
+    {
+      "query": "原始来源旧版本相反证据",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ],
+      "hits": [
+        "Knowledge/z-memory.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.578899999999976
+    },
+    {
+      "query": "备份文件如何还原",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ],
+      "hits": [
+        "Knowledge/z-backup.md",
+        "Knowledge/a-backup-old.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.2549000000000206
+    },
+    {
+      "query": "批准以后文件变化",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ],
+      "hits": [
+        "Knowledge/z-review.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 3.0260000000000105
+    },
+    {
+      "query": "中文标题正文检索",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ],
+      "hits": [
+        "Knowledge/z-search.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.9669000000000096
+    },
+    {
+      "query": "新的观察修订任务记忆",
+      "relevant": [
+        "Knowledge/z-evidence.md"
+      ],
+      "hits": [
+        "Knowledge/z-evidence.md",
+        "Knowledge/z-memory.md"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "ms": 2.1052999999999997
+    }
+  ],
+  "elapsedMs": 104.82489999999999,
+  "limitations": "Synthetic relevance labels; deterministic retrieval/context evaluation, not real-user acceptance or model answer faithfulness. Baseline is the pre-eval standalone prototype, not a native Obsidian search comparison."
+}

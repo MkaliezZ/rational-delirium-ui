@@ -1,182 +1,59 @@
-# Rational Delirium（理性谵妄）
+# 理性失序 · Rational Delirium
 
-**一个面向人类主导知识组织的 Obsidian 插件。**
+**1.10.0：四板块知识工作区。** 案例、证据、假设和重复模式相互支持；从材料整理带出处的知识单元，保留两套对象格式和原身份。新增多角色、关系编辑、内容包导入导出，以及遵循减少动态效果设置的动效。
 
-Rational Delirium（RD）在 Obsidian 内提供档案式知识阅读与导航体验，包括 Archive Home、Knowledge Object 展示、声明关系、溯源信息以及贡献记录。
+[三层设计 v1.0](docs/architecture/three-layer-design-v1.0.md) · [四板块使用说明](docs/four-role-workspace.md) · [本轮验收](docs/validation/v1.10.0/readiness.md)
 
-**v1.7.0 — Archive Home Experience** 是当前冻结的可用基线版本。
+**供人和 Agent 使用的本地个人知识库，Obsidian 为可选入口。**
 
-[English](README.md) · [v1.7.0 release notes](docs/releases/v1.7.0-archive-home-experience.md)
+当前版本 **1.10.0**。这次升级基于任务 eval，保留稳定身份、来源和声明关系，改进检索排序，加入独立浏览器界面、CLI/MCP、受控修订与失败恢复。
 
-## 概览
+## 启动
 
-Markdown 仍然是知识来源。Obsidian 仍然是运行环境。RD 提供的是位于该环境中的知识展示与组织层。
+需要 Node 24+。从源码运行：
 
-Knowledge Object 是带有声明身份、类型、生命周期以及上下文信息的笔记。RD 中的展示不会证明其中内容一定正确。Proposal、Contribution Record 等工作流产物也与 Knowledge Object 保持区分。
-
-RD 不是独立数据库，不是 AI 替代品，也不是自主知识管理系统。它不会运行 Agent，也不会自动将 Agent 建议转化为已接受知识。
-
-## 功能
-
-### Archive Home
-
-通过 **RD Workspace** 进入个人知识档案入口。
-
-当没有选中对象时，Archive Home 展示：
-
-- 已声明对象、类型、生命周期状态和标题组成的知识概览；
-- 已存在的 Proposal 和 Contribution 记录；
-- 已声明关系、未解析声明以及 snapshot 诊断信息。
-
-这些列表和统计描述的是当前加载的 snapshot 或已有 artifact 记录，不代表实时 Vault 全量统计，也不是质量评分。
-
-![Archive Home with Archive Navigation and Inspector in Obsidian](docs/images/01-workspace.png)
-
-### Knowledge Object Surface
-
-在保持原生 Markdown 体验的同时查看知识对象身份、溯源、关系和谱系。
-
-可以检查精确对象身份，并沿声明连接进行导航，而不会替换底层笔记。
-
-Provenance 区分 Observation、Evidence、Inference 和 Conclusion。缺失或未解析信息会被保留，不会由 Agent 或界面自动补全。
-
-![Knowledge Object identity, provenance and relations in a native Obsidian note](docs/images/06-knowledge-object.png)
-
-### Graph Intelligence
-
-探索声明语义关系、方向以及来源上下文。
-
-Graph Intelligence 不是 Obsidian 普通 Markdown 链接图，也不是相似度引擎或推荐系统。关系不代表可信度、重要性或正确性。
-
-![Graph Intelligence displaying a selected fixture with no declared relations](docs/images/02-graph.png)
-
-### Inspector
-
-右侧 Inspector 保持对象上下文、声明字段和诊断信息可见，方便在浏览过程中检查对象状态。
-
-选择对象只是展示状态，不会改变生命周期，也不会验证内容。
-
-### Obsidian 集成
-
-RD 使用真实 Obsidian View 和 dock leaf。
-
-你的 Vault、原生 Markdown、Live Preview、Properties 和普通笔记编辑流程都会继续保留。
-
-左侧 Archive Navigator、中间 Workspace 和右侧 Inspector 协同工作，但不会替代 Obsidian。
-
-## 使用 Agent + RD Skill
-
-外部 Agent 可以辅助研究、整理信息、准备 Knowledge Object 以及提出组织建议。
-
-Agent 是贡献者，人类保持知识最终决定权。
-
-```text
-External Agent
-      ↓
-读取 RD Skill
-      ↓
-准备 Knowledge Object 创建 / 整理建议
-      ↓
-Human review
-      ↓
-人工在明确流程下应用修改
-      ↓
-Obsidian Vault 中的 Markdown + Contribution Record
-      ↓
-RD 展示
-```
-
-Agent 可以帮助：
-
-- 整理资料；
-- 提取 Knowledge Object；
-- 建立声明关系；
-- 保留来源信息。
-
-RD 不提供：
-
-- 自动判断真相；
-- 自动批准修改；
-- 未经确认修改 Vault；
-- 自动替代人的知识判断。
-
-## 架构边界
-
-```text
-Obsidian Vault
-   ├─ Knowledge 数据 / 派生展示 → RD Knowledge Views
-   └─ Proposal / Contribution Artifact → Collaboration
-
-Human Decision 与 Agent Contribution 保持分离。
-```
-
-核心原则：
-
-- Knowledge ≠ Truth（知识 ≠ 真相）
-- Projection ≠ Authority（投影 ≠ 权威）
-- Agent Contribution ≠ Human Decision（Agent 贡献 ≠ 人类决定）
-- Relationship ≠ Confidence（关系 ≠ 可信度）
-- Visibility ≠ Validation（可见 ≠ 已验证）
-
-## 快速开始
-
-当前版本使用手动安装方式。
-
-需要从冻结 tag 的 `dist/` 获取：
-
-```text
-main.js
-manifest.json
-styles.css
-tokens-rational-archive.css
-```
-
-复制到：
-
-```text
-<vault>/.obsidian/plugins/rational-delirium/
-```
-
-然后在 Obsidian Community plugins 中启用 RD。
-
-从源码构建：
-
-```bash
-git clone https://github.com/MkaliezZ/rational-delirium-ui.git
-cd rational-delirium-ui
-git checkout v1.7.0-archive-home-experience
+```powershell
 npm ci
 npm run build
+node dist-agent/rd.mjs demo --root ./example-knowledge
+node dist-agent/rd.mjs serve --root ./example-knowledge
 ```
 
-## 当前状态
+打开打印的本地地址，默认 `http://127.0.0.1:4399`。示例只接受空目录，内容均为合成资料。自己的 Markdown 目录先用 `init --root 目录` 初始化，再用 `serve --root 目录` 启动。初始化只添加工作区元数据和外置审阅密钥，不迁移笔记。
 
-```text
-v1.7.0-archive-home-experience
+构建后的独立包只需 `rd.mjs`、`web/` 与 Node，不需要 Obsidian、Python、模型账号或数据库。发布包提供 Windows 启动脚本。
 
-STATUS: FROZEN
+## 日常使用
 
-MODE:
-Real Usage Validation
+- **知识库**：搜索标题、中文关键词、作者别名与精确 ID，阅读和编辑普通笔记及知识对象。
+- **推演**：用带摘要的分组论证图比较支持、反驳和依赖；点击卡片核对原始文件与声明位置，也可切换列表。
+- **Agent 提案**：看修改前后、引用依据和影响范围；批准与应用分开，源文件或证据改变后拒绝使用旧决定。
+- **修订历史**：保留决定与实际写入的连接，支持提出恢复提案和核对中断写入。
+
+旧 `type/id` 和新 `object_id/kind` 共用索引；未声明对象的 Markdown 不会被强行转换。重复身份不任意选择，缺失来源不隐藏。界面采用深色档案与橙红强调，来源保持可读。
+
+## Agent 接入
+
+```powershell
+node dist-agent/rd.mjs mcp --root 你的知识目录
+node dist-agent/rd.mjs mcp --root 你的知识目录 --write
+node dist-agent/rd.mjs search --root 你的知识目录 --query "记忆 修订"
 ```
 
-RD 当前进入真实使用阶段：
+MCP 默认只读；`--write` 增加提出和执行已批准提案的能力，始终不提供批准工具。使用 [Agent workflow](skills/rational-delirium-agent-skill.md)。检索相关性不等于可信度，声明关系不等于事实推导。本版不内置模型。
 
-- 使用 Agent + RD Skill 整理真实知识；
-- 在 Obsidian 中验证长期工作流；
-- 根据实际反馈决定未来开发方向。
+[完整使用、命令与恢复指南](docs/standalone-knowledge.md) · [eval 与验收记录](docs/validation/standalone/readiness.md) · [UI 设计规划](docs/design/standalone-ui-plan.md)
 
-## 限制
+## 验证
 
-RD 有意不提供：
+```powershell
+python -m pip install -r semantic-graph/requirements.txt
+npm run validate
+node scripts/scale-agent.mjs
+```
 
-- Agent 运行和调度；
-- AI 模型调用；
-- 自动修改 Vault；
-- 自动判断知识正确性。
+固定合成语料的前后对照、服务测试与浏览器走查分别记录。自动化通过不等于真实长期使用、真实资料质量或模型回答忠实性已被验证。
 
-缺少 semantic snapshot 不代表 Vault 没有知识。RD 只展示当前可用数据。
+可选 Obsidian 插件仍可用 `npm run build:plugin` 构建，安装见 [插件工作流](docs/personal-knowledge-workflow.md)。旧 Markdown 提案界面不授权新执行器；旧 Python 导出器和 append-only gate 仅保留兼容用途。
 
-## License
-
-MIT
+首版独立运行范围是文本知识、来源核对与受控修订；PDF/OCR、附件预览、内置模型对话和多设备同步尚未提供。MIT 许可。

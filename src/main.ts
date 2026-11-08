@@ -1,13 +1,13 @@
+import { IndexedGraphSource } from "./semantic-graph/index-graph-source";
 import { Plugin, TFile } from "obsidian";
 import { ContextController } from "./context/context-controller";
-import { isCandidatePath } from "./scope";
+import { isIndexablePath } from "./scope";
 import { ObsidianNavigationPort } from "./platform/obsidian-navigation";
 import { RuntimeWiring } from "./runtime/runtime-wiring";
 import type { ReadAdapter } from "./platform/obsidian-read-adapter";
 import type { WorkspaceLike, VaultLike } from "./runtime/runtime-wiring";
 import { registerRDViews } from "./architecture/rd-view-setup";
 import {
-  ObsidianGraphSourceImpl,
   ObsidianKoSourceReaderImpl,
   ObsidianCollaborationSourceImpl,
   ObsidianProposalDecisionPortImpl,
@@ -19,7 +19,7 @@ class ObsidianReadAdapterImpl {
   list(): readonly string[] {
     return this.plugin.app.vault
       .getMarkdownFiles().map((f) => f.path)
-      .filter((p) => isCandidatePath(p));
+      .filter((p) => isIndexablePath(p));
   }
   async read(path: string): Promise<string> {
     return await this.plugin.app.vault.adapter.read(path);
@@ -75,14 +75,16 @@ export default class RationalDeliriumPlugin extends Plugin {
       controller: this.controller,
       index: wiring.index,
       onIndexCommit: (cb: () => void) => wiring.onIndexCommit(cb),
+      refreshIndex: () => wiring.refresh(),
+      onVaultChange: (cb) => wiring.onVaultChange(cb),
       onActiveFile: (cb: (path: string | null) => void) => wiring.onActiveFile(cb),
       activeFileProvider: () => {
         const f = this.app.workspace.getActiveFile();
         return f !== null ? f.path : null;
       },
       navigation,
-      graphSource: new ObsidianGraphSourceImpl(this),
-      koSourceReader: new ObsidianKoSourceReaderImpl(this),
+      graphSource: new IndexedGraphSource(wiring.index),
+      koSourceReader: new ObsidianKoSourceReaderImpl(this, wiring.index),
       collaborationSource: new ObsidianCollaborationSourceImpl(this),
       decisionPort: new ObsidianProposalDecisionPortImpl(this),
     });

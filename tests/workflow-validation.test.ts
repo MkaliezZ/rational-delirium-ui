@@ -1,3 +1,4 @@
+// Historical Obsidian contribution-contract assertions remain against the archived skill.
 /** v1.9 Agent Skill Workflow Validation tests — skill workflow
  * instructions, lifecycle example, contribution linkage fields,
  * collaboration linkage display, no runtime / execution controls.
@@ -51,7 +52,7 @@ const contributionText = [
 ].join("\n");
 
 describe("v1.9 skill workflow instructions", () => {
-  const skill = readFileSync(join(root, "skills", "rational-delirium-agent-skill.md"), "utf-8")
+  const skill = readFileSync(join(root, "skills", "legacy-obsidian-agent-skill-v1.7.1.md"), "utf-8")
     .replace(/\s+/g, " ");
 
   it("carries the three-phase workflow with MUST boundaries", () => {

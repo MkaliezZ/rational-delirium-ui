@@ -128,6 +128,7 @@ export class RDInvestigationView extends ItemView {
       ["EVIDENCE", data.counts.evidence],
       ["HYPOTHESIS", data.counts.hypothesis],
       ["LOOP", data.counts.loop],
+      ...["observation", "fact", "concept", "decision", "reference", "process"].filter((kind) => (data.counts[kind as keyof typeof data.counts] ?? 0) > 0).map((kind): [string, number] => [kind.toUpperCase(), data.counts[kind as keyof typeof data.counts] ?? 0]),
       ["BROKEN", data.counts.broken],
       ["AMBIGUOUS", data.counts.ambiguous],
       ["CONTRADICTION", data.counts.contradiction],

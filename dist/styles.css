@@ -2604,6 +2604,12 @@ body.rd-rational-archive-shell .rd-ko-leaf ::-webkit-scrollbar-thumb:hover {
   grid-template-columns: 1fr;
 }
 
+/* Live archive search; type-group counts continue to describe the whole index. */
+.rd-archive-nav .rdan-filter { width: 100%; margin: 6px 0; }
+.rd-archive-nav .rdan-filter-status { font-size: 11px; color: var(--text-muted); }
+.rd-archive-nav .rdan-object-row[hidden] { display: none; }
+
+
 /* Archive Home: presentation only, scoped to the Workspace landing surface. */
 .rd-workspace-shell .rd-archive-home { color: var(--rd-identity-title-text); margin-bottom: 32px; }
 .rd-workspace-shell .rd-archive-home .rdah-eyebrow,

@@ -37,7 +37,7 @@ export interface AttentionItem {
   targetResolution: ResolutionState;
 }
 
-export interface InvestigationCounts {
+export interface InvestigationCounts extends Partial<Record<RDObjectType, number>> {
   case: number;
   evidence: number;
   hypothesis: number;
@@ -130,7 +130,7 @@ export function buildInvestigationProjection(
   for (const object of objects) {
     // §7: ARCHIVE is NOT a fifth object type; archived is object
     // metadata, objects still count under their canonical type.
-    counts[object.type] += 1;
+    counts[object.type] = (counts[object.type] ?? 0) + 1;
   }
   for (const relation of relations) {
     if (relation.predicate === "contradicts") counts.contradiction += 1;

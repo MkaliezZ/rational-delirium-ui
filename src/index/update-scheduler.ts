@@ -12,6 +12,7 @@ export interface SchedulerTask {
 export class PendingPathScheduler {
   private readonly pending = new Set<string>();
   private readonly firstSeen = new Map<string, number>();
+  private readonly lastSeen = new Map<string, number>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private nowMs = 0;
@@ -29,6 +30,7 @@ export class PendingPathScheduler {
     if (!this.pending.has(path)) {
       this.firstSeen.set(path, this.nowMs);
     }
+    this.lastSeen.set(path, this.nowMs);
     this.pending.add(path);
     this.resetTimer(this.debounceMs);
   }
@@ -46,7 +48,8 @@ export class PendingPathScheduler {
     let earliest = this.maxWaitMs;
     for (const [path, seen] of this.firstSeen) {
       void path;
-      const remaining = this.maxWaitMs - (this.nowMs - seen);
+      const remaining = Math.min(this.maxWaitMs - (this.nowMs - seen),
+        this.debounceMs - (this.nowMs - (this.lastSeen.get(path) ?? seen)));
       if (remaining < earliest) earliest = remaining;
     }
     return Math.max(0, earliest);
@@ -61,7 +64,8 @@ export class PendingPathScheduler {
     for (const path of this.pending) {
       const seen = this.firstSeen.get(path) ?? this.nowMs;
       const age = this.nowMs - seen;
-      if (age + this.debounceMs >= this.maxWaitMs) {
+      const quiet = this.nowMs - (this.lastSeen.get(path) ?? seen);
+      if (age >= this.maxWaitMs || quiet >= this.debounceMs) {
         fire.push(path); // hard deadline reached
       } else {
         keep.push(path);
@@ -69,7 +73,7 @@ export class PendingPathScheduler {
     }
     this.pending.clear();
     for (const p of keep) this.pending.add(p);
-    for (const p of fire) this.firstSeen.delete(p);
+    for (const p of fire) { this.firstSeen.delete(p); this.lastSeen.delete(p); }
     for (const p of fire) void this.task(p);
     if (this.pending.size > 0) {
       this.resetTimer(this.debounceMs);
@@ -84,6 +88,7 @@ export class PendingPathScheduler {
     const all = [...this.pending];
     this.pending.clear();
     this.firstSeen.clear();
+    this.lastSeen.clear();
     for (const path of all) void this.task(path);
   }
 
@@ -95,6 +100,7 @@ export class PendingPathScheduler {
     }
     this.pending.clear();
     this.firstSeen.clear();
+    this.lastSeen.clear();
   }
 
   get pendingPaths(): readonly string[] {

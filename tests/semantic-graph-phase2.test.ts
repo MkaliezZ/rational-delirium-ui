@@ -338,16 +338,16 @@ describe("Phase 2 boundary proofs", () => {
     expect(Object.keys(readerProto)).toEqual(["resolve"]);
   });
 
-  it("13. no schema modification: artifact contract still enforced exactly", () => {
-    // (a) schema tag constant unchanged
-    expect(GRAPH_SCHEMA_TAG).toBe("rd-semantic-graph-projection/1");
+  it("13. versioned artifact contracts still reject unsupported schema and relations", () => {
+    // (a) extended unified relations use a new schema; old exports remain readable
+    expect(GRAPH_SCHEMA_TAG).toBe("rd-semantic-graph-projection/2");
     // (b) unknown schema tags still rejected without migration
     const future = parseGraphSnapshot(JSON.stringify({
-      schema: "rd-semantic-graph-projection/2", nodes: [], edges: [],
+      schema: "rd-semantic-graph-projection/9", nodes: [], edges: [],
       unresolved: [], diagnostics: [],
     }));
     expect(future).toEqual({ state: "invalid", reason: "unsupported-schema" });
-    // (c) the six-relation enum is still closed: an invented relation
+    // (c) the relation enum is still closed: an invented relation
     // type is invalid-shape, not accepted into the presentation.
     const invented = parseGraphSnapshot(JSON.stringify({
       schema: GRAPH_SCHEMA_TAG,

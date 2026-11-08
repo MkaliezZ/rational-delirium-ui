@@ -139,19 +139,13 @@ function refuseConstructs(
   visit(doc.contents, false);
 }
 
-export function parseFrontmatter(
-  content: string,
-  path: string,
-): FrontmatterParseResult {
+export function parseYamlFields(
+  text: string, path: string,
+): { fields: Record<string, unknown>; diagnostics: RDDiagnostic[] } {
   const diagnostics: RDDiagnostic[] = [];
-  const relations: FrontmatterRelationEntry[] = [];
-  const block = splitFrontmatter(content);
-  if (block === null) {
-    return { fields: {}, relations, fileSuppressed: false, diagnostics };
-  }
   let doc: Document.Parsed;
   try {
-    doc = parseDocument(block.text, {
+    doc = parseDocument(text, {
       strict: true,
       merge: false,
       schema: "core",
@@ -163,7 +157,7 @@ export function parseFrontmatter(
       message: `invalid YAML: ${(err as Error).message.split("\n")[0]}`,
       path,
     });
-    return { fields: {}, relations, fileSuppressed: true, diagnostics };
+    return { fields: {}, diagnostics };
   }
   if (doc.errors.length > 0 || doc.warnings.length > 0) {
     const first =
@@ -173,26 +167,21 @@ export function parseFrontmatter(
       message: first.split("\n")[0],
       path,
     });
-    return { fields: {}, relations, fileSuppressed: true, diagnostics };
+    return { fields: {}, diagnostics };
   }
   refuseConstructs(doc, diagnostics, path);
   if (diagnostics.length > 0) {
-    // §23: structural frontmatter errors → file-level suppression
-    const fields: Record<string, unknown> = {};
-    const root = doc.contents;
-    if (isMap(root)) {
-      for (const pair of root.items) {
-        const keyNode = pair.key as { toString(): string } | null;
-        const key = keyNode === null ? "" : String(keyNode);
-        const value = pair.value
-          ? (pair.value as unknown as { toJSON(): unknown }).toJSON()
-          : null;
-        fields[key] = value;
+    const fields: Record<string, unknown> = Object.create(null);
+    if (isMap(doc.contents)) {
+      for (const pair of doc.contents.items) {
+        if (isScalar(pair.key) && typeof pair.key.value === "string" && isScalar(pair.value)) {
+          fields[pair.key.value] = pair.value.value;
+        }
       }
     }
-    return { fields, relations: [], fileSuppressed: true, diagnostics };
+    return { fields, diagnostics };
   }
-  const fields: Record<string, unknown> = {};
+  const fields: Record<string, unknown> = Object.create(null);
   const root = doc.contents;
   if (isMap(root)) {
     for (const pair of root.items) {
@@ -219,12 +208,27 @@ export function parseFrontmatter(
     });
   }
   if (diagnostics.length > 0) {
-    return { fields, relations: [], fileSuppressed: true, diagnostics };
+    return { fields, diagnostics };
   }
+  return { fields, diagnostics };
+}
+
+export function parseFrontmatter(content: string, path: string): FrontmatterParseResult {
+  const block = splitFrontmatter(content);
+  if (block === null) {
+    const unclosed = /^\ufeff?---\r?\n/.test(content);
+    return { fields: {}, relations: [], fileSuppressed: unclosed, diagnostics: unclosed
+      ? [{code: "frontmatter-unclosed", message: "Opening YAML delimiter has no closing delimiter", path}] : [] };
+  }
+  const { fields, diagnostics } = parseYamlFields(block.text, path);
+  const relations: FrontmatterRelationEntry[] = [];
+  if (diagnostics.length > 0) return { fields, diagnostics, relations, fileSuppressed: true };
   // RD-08 §23: any relation-field structural error → file-level
   // semantic relation suppression (not per-field salvage)
   let anyRelationFieldError = false;
+  const isKo = typeof fields.object_id === "string";
   for (const predicate of FRONTMATTER_RELATION_FIELDS) {
+    if (!isKo && ["derived_from", "depends_on", "revises", "supersedes"].includes(predicate)) continue;
     if (!(predicate in fields)) continue;
     const value = fields[predicate];
     const items: unknown[] = Array.isArray(value) ? value : [value];
@@ -240,7 +244,10 @@ export function parseFrontmatter(
         });
         continue;
       }
-      const link = parseFrontmatterWikilink(item);
+      const value = item.trim();
+      const link = parseFrontmatterWikilink(value) ??
+        (isKo && value !== "" && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value)
+          ? { raw: value, targetName: value, referenceKind: "id" as const } : null);
       if (link === null) {
         anyRelationFieldError = true;
         diagnostics.push({

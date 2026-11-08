@@ -1,4 +1,4 @@
-"""RD v1.2.1 — Semantic Graph Projection MVP (standalone, stdlib only).
+"""RD v1.2.1 — Semantic Graph Projection MVP (standalone KO compatibility exporter; PyYAML).
 
 Projects Markdown files carrying the RD v1.1.0 Knowledge Object
 frontmatter into a derived semantic-graph artifact (JSON):
@@ -55,6 +55,8 @@ import argparse
 import json
 import re
 import sys
+
+import yaml
 from pathlib import Path
 from typing import Optional
 
@@ -92,84 +94,82 @@ def extract_frontmatter(text: str) -> Optional[str]:
     return None
 
 
-def _scalar(raw: str) -> Optional[str]:
-    """Parse a YAML-subset scalar: quoted string, plain string with an
-    optional trailing comment, or null. Returns None for null/empty."""
-    v = raw.strip()
-    if not v:
-        return None
-    if v[0] in ('"', "'"):
-        q = v[0]
-        end = v.find(q, 1)
-        if end == -1:
-            return None  # unterminated quote — malformed
-        inner = v[1:end]
-        return inner if inner else None
-    if " #" in v:
-        v = v.split(" #", 1)[0].rstrip()
-    if v in ("null", "~"):
-        return None
-    return v
+class StrictLoader(yaml.SafeLoader):
+    """Safe YAML with duplicate keys, aliases, anchors and merge keys refused."""
+
+
+# YAML 1.2 core behavior for ordinary strings such as yes/no and dates.
+StrictLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in entries
+          if tag not in {"tag:yaml.org,2002:bool", "tag:yaml.org,2002:timestamp"}]
+    for key, entries in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+StrictLoader.add_implicit_resolver("tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF"))
+
+
+def _mapping(loader, node):
+    result = {}
+    for key_node, value_node in node.value:
+        if key_node.tag == "tag:yaml.org,2002:merge":
+            raise ValueError("YAML merge keys are not supported")
+        key = loader.construct_object(key_node)
+        if not isinstance(key, str) or key in result:
+            raise ValueError("non-string or duplicate YAML key")
+        result[key] = loader.construct_object(value_node)
+    return result
+
+
+StrictLoader.add_constructor("tag:yaml.org,2002:map", _mapping)
+
+
+def parse_fields(frontmatter: str) -> dict:
+    for event in yaml.parse(frontmatter):
+        if isinstance(event, yaml.events.AliasEvent) or getattr(event, "anchor", None):
+            raise ValueError("YAML aliases and anchors are not supported")
+    fields = yaml.load(frontmatter, Loader=StrictLoader)
+    if not isinstance(fields, dict):
+        raise ValueError("frontmatter must be a mapping")
+    return fields
 
 
 def parse_ko(frontmatter: str) -> Optional[dict]:
-    """Parse a frontmatter block into node data + declared relations.
-    Returns None when the file is not a valid Knowledge Object for
-    projection purposes (node-relevant fields only; not a full
-    schema validation)."""
-    scalars: dict[str, Optional[str]] = {}
-    relations: dict[str, list[str]] = {r: [] for r in RELATIONS}
-    lines = frontmatter.split("\n")
-    i, n = 0, len(lines)
-    while i < n:
-        m = _TOP_KEY_RE.match(lines[i])
-        if m:
-            key, rest = m.group(1), m.group(2)
-            if key in NEEDED_SCALARS:
-                scalars[key] = _scalar(rest)
-                i += 1
-                continue
-            if key in relations:
-                rest = rest.strip()
-                if rest == "[]":
-                    i += 1
-                    continue
-                if rest:
-                    return None  # relations are block lists in this subset
-                i += 1
-                while i < n:
-                    lm = _LIST_ITEM_RE.match(lines[i])
-                    if not lm:
-                        break
-                    val = _scalar(lm.group(1))
-                    if val is None:
-                        return None  # malformed relation entry
-                    relations[key].append(val)
-                    i += 1
-                continue
-        i += 1
-
-    object_id = scalars.get("object_id")
-    kind = scalars.get("kind")
-    status = scalars.get("status")
-    title = scalars.get("title")
-    if not object_id or not _OBJECT_ID_RE.match(object_id):
+    """Full safe YAML parsing; this compatibility exporter remains KO-only.
+    Use npm run project-graph for the unified legacy + KO runtime projection."""
+    try:
+        fields = parse_fields(frontmatter)
+    except (yaml.YAMLError, ValueError, TypeError):
         return None
-    if kind not in KINDS:
+    object_id = fields.get("object_id")
+    kind, status, title = (fields.get(key) for key in ("kind", "status", "title"))
+    if not isinstance(object_id, str) or not _OBJECT_ID_RE.fullmatch(object_id):
         return None
-    if status not in STATUSES:
+    if not isinstance(kind, str) or kind not in KINDS:
         return None
-    if not title:
+    if not isinstance(status, str) or status not in STATUSES:
         return None
-    return {
-        "object_id": object_id,
-        "kind": kind,
-        "status": status,
-        "title": title,
-        "predecessor": scalars.get("predecessor"),
-        "successor": scalars.get("successor"),
-        "relations": relations,
-    }
+    if not isinstance(title, str) or not title.strip():
+        return None
+    if "id" in fields and fields["id"] != object_id:
+        return None
+    relations = {}
+    for relation in RELATIONS:
+        value = fields.get(relation)
+        if value is None:
+            items = []
+        elif isinstance(value, str):
+            items = [value]
+        elif isinstance(value, list):
+            items = value
+        else:
+            return None
+        if any(not isinstance(item, str) or not item.strip() for item in items):
+            return None
+        relations[relation] = [item.strip() for item in items]
+    return {"object_id": object_id, "kind": kind, "status": status, "title": title,
+            "predecessor": fields.get("predecessor") if isinstance(fields.get("predecessor"), str) else None,
+            "successor": fields.get("successor") if isinstance(fields.get("successor"), str) else None,
+            "relations": relations}
 
 
 def _collect_markdown(inputs: list[str]) -> list[Path]:
@@ -180,23 +180,27 @@ def _collect_markdown(inputs: list[str]) -> list[Path]:
             files.extend(sorted(q for q in p.rglob("*.md") if q.is_file()))
         elif p.is_file():
             files.append(p)
-    return files
+    return sorted({p.resolve() for p in files})
 
 
 def project(inputs: list[str]) -> dict:
     """Project Markdown inputs into the semantic-graph artifact.
     Pure function of file contents; deterministic."""
     parsed: list[dict] = []
+    invalid_diagnostics: list[dict] = []
     declared_paths: dict[str, list[str]] = {}
     for path in _collect_markdown(inputs):
         try:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
-            continue  # unreadable/non-UTF-8 files are not KOs; excluded
+            invalid_diagnostics.append({"type": "source_unreadable", "object_id": "", "paths": [str(path)]})
+            continue
         fm = extract_frontmatter(text)
         if fm is None:
             continue
         ko = parse_ko(fm)
+        if ko is None and re.search(r"^object_id\s*:", fm, re.MULTILINE):
+            invalid_diagnostics.append({"type": "invalid_knowledge_object", "object_id": "", "paths": [str(path)]})
         if ko is not None:
             parsed.append(ko)
             declared_paths.setdefault(ko["object_id"], []).append(str(path))
@@ -219,6 +223,9 @@ def project(inputs: list[str]) -> dict:
         for object_id in sorted(id_counts)
         if id_counts[object_id] > 1
     ]
+
+    diagnostics.extend(invalid_diagnostics)
+    diagnostics.sort(key=lambda d: (d["type"], d["object_id"], d["paths"]))
 
     nodes = [
         {

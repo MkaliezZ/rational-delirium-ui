@@ -1,9 +1,10 @@
-/** v1.6.1 — Obsidian implementations of the read-only graph ports.
- * Moved verbatim from main.ts (behavior unchanged) so the view
- * setup module can construct them without main.ts growing.
- * adapter.exists/read only — no write verb anywhere. */
+/** Obsidian read sources and the separately guarded proposal-decision port.
+ * Production knowledge reads resolve through the shared saved-note index.
+ * Artifact-source adapters remain available for compatibility consumers. */
 
 import type { Plugin } from "obsidian";
+import type { RDIndex } from "../index/rd-index";
+import { isIndexablePath } from "../scope";
 import type { GraphSource } from "../semantic-graph/graph-loader";
 import { DEFAULT_SEMANTIC_GRAPH_PATH } from "../semantic-graph/graph-loader";
 import type { KoDetailResult, KoSourceReader } from "../semantic-graph/ko-detail-reader";
@@ -40,7 +41,7 @@ export class ObsidianGraphSourceImpl implements GraphSource {
 export class ObsidianKoSourceReaderImpl implements KoSourceReader {
   private index: Map<string, string[]> | null = null;
 
-  constructor(private readonly plugin: Plugin) {}
+  constructor(private readonly plugin: Plugin, private readonly liveIndex?: RDIndex) {}
 
   invalidate(): void {
     this.index = null;
@@ -51,7 +52,7 @@ export class ObsidianKoSourceReaderImpl implements KoSourceReader {
     const map = new Map<string, string[]>();
     const adapter = this.plugin.app.vault.adapter;
     const files = this.plugin.app.vault
-      .getMarkdownFiles().map((f) => f.path).sort();
+      .getMarkdownFiles().map((f) => f.path).filter(isIndexablePath).sort();
     for (const path of files) {
       try {
         const text = await adapter.read(path);
@@ -71,6 +72,7 @@ export class ObsidianKoSourceReaderImpl implements KoSourceReader {
   }
 
   async resolve(objectId: string): Promise<KoDetailResult> {
+    if (this.liveIndex !== undefined) return this.liveIndex.detailById(objectId);
     try {
       const map = await this.ensureIndex();
       const paths = map.get(objectId) ?? [];

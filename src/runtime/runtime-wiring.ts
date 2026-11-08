@@ -4,7 +4,7 @@
 import { RDIndex } from "../index/rd-index";
 import { ContextController } from "../context/context-controller";
 import { PendingPathScheduler } from "../index/update-scheduler";
-import { isCandidatePath } from "../scope";
+import { isIndexablePath } from "../scope";
 import type { ReadAdapter } from "../platform/obsidian-read-adapter";
 import type { NavigationPort } from "../platform/navigation-core";
 
@@ -33,6 +33,8 @@ export class RuntimeWiring {
   private readonly workspace: WorkspaceLike;
   private readonly vault: VaultLike;
   private readonly navigation: NavigationPort;
+  private refreshPromise: Promise<void> | null = null;
+  private readonly vaultListeners = new Set<(path: string) => void>();
   private readonly activeFileListeners = new Set<(path: string | null) => void>();
 
   constructor(
@@ -50,6 +52,39 @@ export class RuntimeWiring {
 
   async start(): Promise<void> {
     this.registerListeners();
+    await this.refresh();
+    await this.workspace.onLayoutReady(async () => {
+      if (this.disposed) return;
+      const active = this.workspace.getActiveFile();
+      if (active !== null) {
+        await this.controller.initializeAnchor(active.path);
+      }
+    });
+  }
+
+  /** Explicit full reconciliation for missed filesystem events. Concurrent
+   * requests share one build and live changes are replayed before completion. */
+  refresh(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.refreshPromise !== null) return this.refreshPromise;
+    this.buildPhase = "BUILDING";
+    this.scheduler?.dispose();
+    this.scheduler = null;
+    const work = this.rebuild().then(async () => {
+      const active = this.workspace.getActiveFile();
+      if (!this.disposed && active !== null) await this.controller.onIndexRefreshed(active.path);
+    });
+    this.refreshPromise = work.catch((err) => {
+      if (!this.disposed) {
+        this.buildPhase = "LIVE";
+        this.scheduler = new PendingPathScheduler((p) => void this.applyModify(p));
+      }
+      throw err;
+    }).finally(() => { this.refreshPromise = null; });
+    return this.refreshPromise;
+  }
+
+  private async rebuild(): Promise<void> {
     await this.index.build();
     if (this.disposed) return;
     this.buildPhase = "REPLAYING";
@@ -69,13 +104,17 @@ export class RuntimeWiring {
       this.pendingPaths.clear();
     }
     this.buildPhase = "LIVE";
-    await this.workspace.onLayoutReady(async () => {
-      if (this.disposed) return;
-      const active = this.workspace.getActiveFile();
-      if (active !== null) {
-        await this.controller.initializeAnchor(active.path);
-      }
-    });
+  }
+
+  onVaultChange(listener: (path: string) => void): () => void {
+    this.vaultListeners.add(listener);
+    return () => { this.vaultListeners.delete(listener); };
+  }
+
+  private notifyVault(path: string): void {
+    for (const listener of [...this.vaultListeners]) {
+      try { listener(path); } catch { /* one subscriber cannot block saved-note updates */ }
+    }
   }
 
   dispose(): void {
@@ -86,6 +125,8 @@ export class RuntimeWiring {
     void this.controller.unload();
     this.index.dispose();
     this.scheduler = null;
+    this.vaultListeners.clear();
+    this.activeFileListeners.clear();
   }
 
   /** v0.4.2 §16: Dashboard live-update hookup. Delegates to the ONE
@@ -111,13 +152,19 @@ export class RuntimeWiring {
 
   private registerListeners(): void {
     this.vault.on("create", (file) => {
-      if (isCandidatePath(file.path)) this.onPathEvent(file.path, "create");
+      this.notifyVault(file.path);
+      if (isIndexablePath(file.path)) this.onPathEvent(file.path, "create");
     });
     this.vault.on("modify", (file) => {
-      if (isCandidatePath(file.path)) this.onPathEvent(file.path, "modify");
+      this.notifyVault(file.path);
+      if (isIndexablePath(file.path)) this.onPathEvent(file.path, "modify");
     });
-    this.vault.on("rename", (file, oldPath) => void this.applyRename(oldPath, file.path));
-    this.vault.on("delete", (file) => void this.applyDelete(file.path));
+    this.vault.on("rename", (file, oldPath) => {
+      this.notifyVault(oldPath); this.notifyVault(file.path);
+      this.pendingPaths.delete(oldPath);
+      void this.applyRename(oldPath, file.path);
+    });
+    this.vault.on("delete", (file) => { this.notifyVault(file.path); this.pendingPaths.delete(file.path); void this.applyDelete(file.path); });
     this.workspace.on("file-open", (file) => {
       if (file !== null) void this.controller.onFileOpen(file.path);
       this.notifyActiveFile(file !== null ? file.path : null);

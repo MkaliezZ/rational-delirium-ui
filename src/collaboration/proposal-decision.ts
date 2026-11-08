@@ -41,7 +41,7 @@ const HISTORY_HEADER = /^##\s+History\s*$/m;
 export function isProposalArtifactPath(path: string): boolean {
   // Exactly one filename segment under .proposals/, no traversal,
   // no nested paths, no backslashes — the narrow write surface.
-  return /^\.proposals\/(?!\.\.(?:\/|$))[^\/]+\.md$/.test(path);
+  return /^\.proposals\/(?!\.\.(?:\/|$))[^\\/]+\.md$/.test(path);
 }
 
 /** Can a decision be recorded on this proposal text? Only when a

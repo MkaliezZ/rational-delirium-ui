@@ -1,0 +1,16 @@
+{
+  "schema": "rd-role-eval/1",
+  "description": "Synthetic developer-authored examples. Measures paragraph role suggestions and abstention, not truth, real-world usefulness or model reasoning.",
+  "examples": [
+    {"id":"dated-event","markdown":"# 记录\n\n2026-11-06，这次研究发现了一个反例。\n","roles":["case"]},
+    {"id":"measured-record","markdown":"# 记录\n\n实测显示，检索耗时下降了 20%。\n","roles":["evidence"]},
+    {"id":"tentative-explanation","markdown":"# 记录\n\n也许分歧来自不同的任务情境。\n","roles":["hypothesis"]},
+    {"id":"author-pattern-claim","markdown":"# 记录\n\n多次任务中反复出现相似现象，需要继续找反例。\n","roles":["loop"]},
+    {"id":"case-and-evidence","markdown":"# 记录\n\n2026-11-05，这次访谈记录显示 3 位参与者有不同选择。\n","roles":["case","evidence"]},
+    {"id":"explicit-role-heading","markdown":"# 记录\n\n## 证据与依据\n这里保存一段待核对的引用原文。\n","roles":["evidence"]},
+    {"id":"plain-workflow","markdown":"# 记录\n\n流程：先读取文件，再打开编辑器，最后保存。\n","roles":[]},
+    {"id":"poem","markdown":"# 记录\n\n窗边的光让人想起一段旧诗。\n","roles":[]},
+    {"id":"negated-pattern","markdown":"# 记录\n\n没有发现重复模式，这只是一次孤立记录。\n","roles":[]},
+    {"id":"definition","markdown":"# 记录\n\n光合作用是绿色植物利用光能合成有机物的过程。\n","roles":[]}
+  ]
+}

@@ -1,0 +1,197 @@
+
+> rational-delirium-ui@1.10.0 validate
+> npm run typecheck && npm run build && npm test && npm run check-artifacts && npm run check-agent-artifacts && npm run test:python && npm run eval
+
+
+> rational-delirium-ui@1.10.0 typecheck
+> tsc -p tsconfig.json
+
+
+> rational-delirium-ui@1.10.0 build
+> npm run build:plugin && npm run build:agent
+
+
+> rational-delirium-ui@1.10.0 build:plugin
+> node scripts/build.mjs
+
+
+  dist\main.js  581.0kb
+
+Done in 38ms
+build complete: dist/main.js, dist/manifest.json, dist/styles.css, dist/tokens-rational-archive.css
+
+> rational-delirium-ui@1.10.0 build:agent
+> node scripts/build-agent.mjs
+
+
+  dist-agent\rd.mjs  608.4kb
+
+Done in 36ms
+
+  dist-agent\index.mjs  580.8kb
+
+Done in 26ms
+
+  dist-agent\web\app.js  205.1kb
+
+Done in 19ms
+Independent runtime built: dist-agent/rd.mjs + web/ (Node 24+, no Obsidian/Python/runtime npm install).
+
+> rational-delirium-ui@1.10.0 test
+> vitest run
+
+
+ RUN  v3.2.7 <repository>
+
+ ✓ tests/collaboration-surface.test.ts (17 tests) 259ms
+ ✓ tests/architecture-guard.test.ts (20 tests) 383ms
+   ✓ architecture regression guard (§40) > RuntimeWiring module exists and is importable  361ms
+ ✓ tests/rd-ko-leaf-theme.test.ts (29 tests) 250ms
+ ✓ tests/collaboration-runtime.test.ts (3 tests) 421ms
+   ✓ Collaboration real-host regressions > renders after async loading on first open and after closing/reopening the view  398ms
+ ✓ tests/investigation-view.test.ts (15 tests) 249ms
+ ✓ tests/graph-view.test.ts (14 tests) 258ms
+ ✓ tests/production-acceptance.test.ts (25 tests) 272ms
+ ✓ tests/production-integration.test.ts (12 tests) 333ms
+ ✓ tests/workspace-source-lifecycle.test.ts (8 tests) 693ms
+ ✓ tests/unified-knowledge-index.test.ts (10 tests) 472ms
+ ✓ tests/shell-architecture.test.ts (13 tests) 261ms
+ ✓ tests/graph-presentation.test.ts (14 tests) 224ms
+ ✓ tests/source-nav-repair.test.ts (7 tests) 198ms
+ ✓ tests/knowledge-panel-lifecycle.test.ts (6 tests) 199ms
+ ✓ tests/loop-view.test.ts (12 tests) 202ms
+ ✓ tests/workspace-reading-surface.test.ts (15 tests) 275ms
+ ✓ tests/graph-live.test.ts (5 tests) 241ms
+ ✓ tests/graph-snapshot-coordinator.test.ts (8 tests) 146ms
+ ✓ tests/graph-repair.test.ts (15 tests) 208ms
+ ✓ tests/loop-live.test.ts (4 tests) 177ms
+ ✓ tests/knowledge-workspace.test.ts (10 tests) 184ms
+ ✓ tests/animation-polish.test.ts (8 tests) 172ms
+ ✓ tests/shell-css-isolation.test.ts (9 tests) 140ms
+ ✓ tests/index-lifecycle.test.ts (10 tests) 161ms
+ ✓ tests/workspace-dossier-composition.test.ts (11 tests) 104ms
+ ✓ tests/runtime-admission.test.ts (8 tests) 142ms
+ ✓ tests/investigation-live.test.ts (4 tests) 167ms
+ ✓ tests/loop-projection.test.ts (14 tests) 107ms
+ ✓ tests/graph-projection.test.ts (12 tests) 106ms
+ ✓ tests/investigation-projection.test.ts (11 tests) 115ms
+ ✓ tests/ko-surface.test.ts (8 tests) 66ms
+ ✓ tests/targeted-closure.test.ts (31 tests) 96ms
+ ✓ tests/semantic-graph-phase2.test.ts (14 tests) 64ms
+ ✓ tests/correctness-regressions.test.ts (39 tests) 85ms
+ ✓ tests/read-only-boundary.test.ts (4 tests) 66ms
+ ✓ tests/archive-home.test.ts (9 tests) 78ms
+ ✓ tests/delivery-contract.test.ts (4 tests) 5345ms
+   ✓ installation and portable graph export > deploys exactly the four matching runtime files without changing vault settings  3610ms
+   ✓ installation and portable graph export > exports both schemas with exactly the live index semantics and deterministic output  1437ms
+ ✓ tests/object-parser.test.ts (14 tests) 57ms
+ ✓ tests/context-state.test.ts (9 tests) 59ms
+ ✓ tests/async-race.test.ts (5 tests) 38ms
+ ✓ tests/refresh-reliability.test.ts (6 tests) 35ms
+ ✓ tests/human-approved-workflow.test.ts (10 tests) 28ms
+ ✓ tests/relation-parser.test.ts (16 tests) 29ms
+ ✓ tests/theme-system.test.ts (10 tests) 25ms
+ ✓ tests/scope.test.ts (5 tests) 32ms
+ ✓ tests/semantic-graph.test.ts (9 tests) 23ms
+ ✓ tests/view-accessibility.test.ts (7 tests) 21ms
+ ✓ tests/workflow-validation.test.ts (11 tests) 18ms
+ ✓ tests/workspace-visual-system.test.ts (9 tests) 18ms
+ ✓ tests/plugin-architecture.test.ts (14 tests) 16ms
+ ✓ tests/knowledge-capture-draft.test.ts (1 test) 20ms
+ ✓ tests/home-lifecycle-restore.test.ts (5 tests) 16ms
+ ✓ tests/relation-normalizer.test.ts (8 tests) 6ms
+ ✓ tests/navigation.test.ts (5 tests) 4ms
+ ✓ tests/knowledge-motion.test.ts (2 tests) 5ms
+ ✓ tests/graph-schema-compatibility.test.ts (2 tests) 3ms
+ ✓ tests/four-role-workbench.test.ts (21 tests) 2688ms
+   ✓ portable knowledge assets > round-trips Markdown, IDs, roles, citations and relations without migrating approval authority  419ms
+ ✓ tests/standalone-knowledge.test.ts (28 tests) 3321ms
+   ✓ local access and agent transport > a separate MCP agent proposes and applies only after an operator signs the exact version  418ms
+
+ Test Files  58 passed (58)
+      Tests  655 passed (655)
+   Start at  09:08:40
+   Duration  12.13s (transform 2.83s, setup 0ms, collect 14.37s, tests 19.38s, environment 34.47s, prepare 8.26s)
+
+
+> rational-delirium-ui@1.10.0 check-artifacts
+> node scripts/check-artifacts.mjs
+
+ARTIFACT_CHECK=PASS
+SHA256 main.js = bce8adfc4bab4817e4db329e449584c9c7631c7496e89b47a63316d8d69a8e2b
+SHA256 manifest.json = 5a9b5a8e6ce910476e6aed5a436e938e15e18e752ed32d84b325bb0e57745e70
+SHA256 styles.css = 017ff89df2f7dd150f8cbdcaba008a365166928da23c12ddd7b96047dd3ddd17
+SHA256 tokens-rational-archive.css = 03521943706b4a88793051e433e1a1a240f4e281f5ceca7484738d4bdeaa59e3
+
+> rational-delirium-ui@1.10.0 check-agent-artifacts
+> node scripts/check-agent-artifacts.mjs
+
+AGENT_ARTIFACT_CHECK=PASS; isolated CLI demo/status/search, 30 runtime assets
+
+> rational-delirium-ui@1.10.0 test:python
+> python -B -m unittest discover -s semantic-graph/tests && python -B -m unittest discover -s mutation-gate/tests
+
+....................
+----------------------------------------------------------------------
+Ran 20 tests in 0.138s
+
+OK
+..........................................
+----------------------------------------------------------------------
+Ran 42 tests in 0.584s
+
+OK
+
+> rational-delirium-ui@1.10.0 eval
+> node scripts/eval-knowledge.mjs --replay-baseline && node scripts/eval-knowledge.mjs && node scripts/eval-roles.mjs
+
+{
+  "run": "baseline",
+  "recallAt5": 0.76,
+  "mrrAt5": 0.7,
+  "checks": {
+    "seedIncluded": true,
+    "supportIncluded": true,
+    "contradictionIncluded": true,
+    "unresolvedVisible": true,
+    "encodedBudget": true,
+    "legacyIdentity": true
+  },
+  "misses": [
+    "Agent 记忆的修订边界",
+    "记忆 修订",
+    "本地资料备份流程",
+    "长期记忆频繁覆盖",
+    "原始来源旧版本相反证据",
+    "备份文件如何还原",
+    "批准以后文件变化",
+    "中文标题正文检索",
+    "新的观察修订任务记忆"
+  ]
+}
+{
+  "run": "current",
+  "recallAt5": 1,
+  "mrrAt5": 1,
+  "checks": {
+    "seedIncluded": true,
+    "supportIncluded": true,
+    "contradictionIncluded": true,
+    "unresolvedVisible": true,
+    "encodedBudget": true,
+    "legacyIdentity": true
+  },
+  "misses": []
+}
+{
+  "schema": "rd-role-eval-result/1",
+  "corpus": "eval/roles-corpus.json",
+  "method": "paragraph-rules/1",
+  "sampleCount": 10,
+  "exactMatch": 1,
+  "rolePrecision": 1,
+  "roleRecall": 1,
+  "unknownAbstention": 1,
+  "sourceSpanAccuracy": 1,
+  "limitations": "Synthetic developer-authored examples. Measures paragraph role suggestions and abstention, not truth, real-world usefulness or model reasoning."
+}

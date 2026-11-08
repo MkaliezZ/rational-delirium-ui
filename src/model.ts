@@ -1,40 +1,51 @@
 /** Core internal model for the Rational Delirium read-only projection. */
 
-export type RDObjectType = "case" | "evidence" | "hypothesis" | "loop";
+export type RDObjectType = "case" | "evidence" | "hypothesis" | "loop"
+  | "observation" | "fact" | "concept" | "decision" | "reference" | "process";
+
+export const LEGACY_OBJECT_TYPES = ["case", "evidence", "hypothesis", "loop"] as const;
+export const KO_KINDS = ["observation", "fact", "concept", "hypothesis", "decision", "reference", "process"] as const;
 
 export const RD_OBJECT_TYPES: readonly RDObjectType[] = [
   "case",
   "evidence",
   "hypothesis",
   "loop",
+  "observation", "fact", "concept", "decision", "reference", "process",
 ];
 
 /** Predicates exactly as declared in note content. */
 export type RelationPredicate =
   | "related"
+  | "complements"
   | "supports"
   | "supported_by"
   | "contradicts"
   | "contradicted_by"
   | "derived_from"
   | "repeats_in"
-  | "observed_in";
+  | "observed_in"
+  | "depends_on" | "revises" | "supersedes";
 
 /** Predicates after logical normalization. */
 export type LogicalPredicate =
   | "related"
+  | "complements"
   | "supports"
   | "contradicts"
   | "derived_from"
   | "repeats_in"
-  | "observed_in";
+  | "observed_in"
+  | "depends_on" | "revises" | "supersedes";
 
 export const FRONTMATTER_RELATION_FIELDS: readonly RelationPredicate[] = [
   "related",
+  "complements",
   "supports",
   "supported_by",
   "contradicts",
   "contradicted_by",
+  "derived_from", "depends_on", "revises", "supersedes",
 ];
 
 export const BODY_RELATION_PREDICATES: readonly RelationPredicate[] = [
@@ -62,6 +73,8 @@ export interface RDSourceLocation {
 }
 
 export interface RDLink {
+  /** Explicit identity reference in KO declarations; never filename matching. */
+  referenceKind?: "id";
   /** The inner text of one [[...]] reference. */
   raw: string;
   /** Target without alias/heading/block decoration. */
@@ -114,6 +127,7 @@ export interface RDDiagnostic {
 }
 
 export interface RDObject {
+  schema?: "legacy" | "ko";
   path: string;
   id: string | null;
   type: RDObjectType;

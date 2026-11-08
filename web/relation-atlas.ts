@@ -1,0 +1,43 @@
+import {KNOWLEDGE_ROLES,ROLE_LABELS,type KnowledgeRole} from "../src/knowledge-roles";
+export type AtlasNode={id:string;path:string;title:string;roles:KnowledgeRole[];body?:string;status?:string|null};
+export type AtlasEdge={source:string;target:string;relation:string;assertions?:any[]};
+export type AtlasPath={nodes:string[];edges:number[];kind:"direct"|"via"|"between";stance:"support"|"counter"|"context"};
+export type AtlasModel={focus:string;nodes:Map<string,AtlasNode>;edges:AtlasEdge[];paths:AtlasPath[];detached:AtlasNode[];roleCounts:Record<string,number>;truncated:boolean;unresolved:number;omittedRelations:number};
+export type AtlasFilter={role:"all"|KnowledgeRole;stance:"all"|AtlasPath["stance"]};
+export const RELATION_LABELS:Record<string,string>={supports:"支持",contradicts:"反驳",complements:"补充",related:"相关",derived_from:"派生自",observed_in:"观察于",repeats_in:"重复于",depends_on:"依赖",revises:"修订",supersedes:"替代"};
+const stance=(edges:AtlasEdge[]):AtlasPath["stance"]=>edges.some(e=>e.relation==="contradicts")?"counter":edges.some(e=>e.relation==="supports")?"support":"context";
+const order={counter:0,support:1,context:2},kindOrder={direct:0,via:1,between:2};
+/** Layout paths preserve each original edge's direction. They never create transitive support. */
+export function buildAtlas(focus:string,context:any):AtlasModel{
+    const nodes=new Map<string,AtlasNode>((context.objects??[]).filter((n:any)=>n.id).map((n:any)=>[n.id,{...n,roles:KNOWLEDGE_ROLES.filter(r=>n.roles?.includes(r))}]));
+    const seen=new Set<string>();
+    const edges:AtlasEdge[]=(context.edges??[]).filter((e:AtlasEdge)=>{
+        const key=JSON.stringify([e.source,e.relation,e.target]);
+        if(seen.has(key)||!nodes.has(e.source)||!nodes.has(e.target))return false;seen.add(key);return true;
+    });
+    const candidates:AtlasPath[]=[],selected=new Map<string,AtlasPath>();
+    const addCandidate=(ids:string[],indices:number[],kind:AtlasPath["kind"])=>candidates.push({nodes:ids,edges:indices,kind,stance:stance(indices.map(i=>edges[i]))});
+    edges.forEach((e,i)=>{if(e.source===focus||e.target===focus){const other=e.source===focus?e.target:e.source;if(other!==focus)addCandidate([focus,other],[i],"direct");}});
+    const direct=[...candidates];
+    for(const path of direct){const middle=path.nodes[1];edges.forEach((e,i)=>{if(e.source===middle||e.target===middle){const end=e.source===middle?e.target:e.source;if(end!==focus&&end!==middle)addCandidate([focus,middle,end],[...path.edges,i],"via");}});}
+    const compare=(a:AtlasPath,b:AtlasPath)=>order[a.stance]-order[b.stance]||kindOrder[a.kind]-kindOrder[b.kind]||a.edges.join(",").localeCompare(b.edges.join(","),"en",{numeric:true});
+    const add=(p:AtlasPath)=>selected.set(JSON.stringify([p.nodes,p.edges]),p);
+    direct.forEach(add);
+    const reached=new Set(direct.flatMap(p=>p.nodes));
+    for(const id of nodes.keys())if(id!==focus&&!reached.has(id)){const best=candidates.filter(p=>p.nodes.at(-1)===id).sort(compare)[0];if(best)add(best);}
+    // Every returned declaration stays reachable, including edges between two related units.
+    edges.forEach((e,i)=>{if([...selected.values()].some(p=>p.edges.includes(i)))return;const best=candidates.filter(p=>p.edges.includes(i)).sort(compare)[0];if(best)add(best);else add({nodes:[e.source,e.target],edges:[i],kind:"between",stance:stance([e])});});
+    const paths=[...selected.values()].sort(compare),included=new Set(paths.flatMap(p=>p.nodes));
+    return {focus,nodes,edges,paths,detached:[...nodes.values()].filter(n=>n.id!==focus&&!included.has(n.id)),roleCounts:Object.fromEntries(KNOWLEDGE_ROLES.map(r=>[r,[...nodes.values()].filter(n=>n.id!==focus&&n.roles.includes(r)).length])),truncated:!!context.truncated,unresolved:context.unresolved?.length??0,omittedRelations:context.omittedRelations??0};
+}
+export function filteredPaths(model:AtlasModel,filter:AtlasFilter){return model.paths.filter(p=>(filter.stance==="all"||filter.stance===p.stance)&&(filter.role==="all"||p.nodes.some(id=>id!==model.focus&&model.nodes.get(id)?.roles.includes(filter.role as KnowledgeRole))));}
+const statusLabel=(s:string|null|undefined)=>({candidate:"候选",refuted:"已有反驳记录",supported:"已有支持记录",open:"待检验",active:"当前使用",reviewed:"已审阅",verified:"已核对",archived:"已归档",superseded:"已被修订"}[s??""]??s??"");
+const snippet=(text="")=>text.replace(/^#+\s.*$/gm,"").replace(/^(?:observed_in|repeats_in|derived_from):.*$/gm,"").replace(/\[\[([^|\]]+)\|([^\]]+)\]\]/g,"$2").replace(/[>*`#]/g,"").replace(/\s+/g," ").trim().slice(0,90);
+export function atlasMarkup(model:AtlasModel,esc:(v:unknown)=>string,filter:AtlasFilter={role:"all",stance:"all"}){
+    const paths=filteredPaths(model,filter),groups=[{key:"counter",title:"分歧与反例",label:"反驳路径"},{key:"support",title:"支持与依据",label:"支持路径"},{key:"context",title:"补充与上下文",label:"补充路径"}] as const;
+    const nodeMarkup=(id:string)=>{const n=model.nodes.get(id)!,current=id===model.focus,roles=n.roles.length?n.roles:[null];return `<${current?"div":"button"} class="atlas-node ${current?"current":""}" ${current?"":`data-action="atlas-focus" data-atlas-id="${esc(id)}"`}><span class="atlas-node-meta">${roles.map(r=>`<span class="atlas-role" data-role="${r??"note"}">${r?r.toUpperCase():"NOTE"}</span>`).join("")}<span>${current?"当前":esc(statusLabel(n.status))}</span></span><strong>${esc(n.title)}</strong>${!current&&n.body?`<span class="atlas-snippet">${esc(snippet(n.body))}</span>`:""}</${current?"div":"button"}>`;};
+    const pathMarkup=(p:AtlasPath)=>`<article class="atlas-path ${p.stance}"><div class="atlas-path-caption">${({direct:"与当前知识的直接关系",via:"经由一条中间知识",between:"关联单元之间的直接关系"})[p.kind]}</div><div class="atlas-chain" data-length="${p.nodes.length}">${p.nodes.map((id,i)=>{
+        let html=nodeMarkup(id);if(i<p.edges.length){const edgeIndex=p.edges[i],e=model.edges[edgeIndex],forward=e.source===id,from=model.nodes.get(e.source)!,to=model.nodes.get(e.target)!;html+=`<button class="atlas-connector ${esc(e.relation)}" data-action="atlas-inspect" data-atlas-edge="${edgeIndex}" aria-label="核对关系：${esc(from.title)} ${esc(RELATION_LABELS[e.relation]??e.relation)} ${esc(to.title)}"><span>${esc(RELATION_LABELS[e.relation]??e.relation)}</span><img src="/icons/arrow-${forward?"right":"left"}.svg" alt=""><small>核对声明</small></button>`;}return html;
+    }).join("")}</div>${p.kind==="via"?'<p class="atlas-via-note">逐段关系 · 不合并为直接支持或反驳</p>':""}</article>`;
+    return `<section id="relation-atlas" class="relation-atlas" aria-label="知识关系路径"><header class="atlas-heading"><div><span class="eyebrow">CASE / EVIDENCE / HYPOTHESIS / LOOP</span><h2>沿着依据，看清关系</h2><p class="small muted">${model.nodes.size} 个单元 · ${model.edges.length} 条已声明关系 · 两步内的关联范围</p></div><button data-action="kb-link">建立关系</button></header><div class="atlas-roles" role="group" aria-label="按关联知识角色筛选"><button data-action="atlas-role" data-role="all" aria-pressed="${filter.role==="all"}">全部角色</button>${KNOWLEDGE_ROLES.map(r=>`<button data-action="atlas-role" data-role="${r}" aria-pressed="${filter.role===r}"><span>${r.toUpperCase()}</span>${ROLE_LABELS[r]} <b>${model.roleCounts[r]}</b></button>`).join("")}</div><p class="atlas-hint">角色计数不含当前单元。点击知识继续展开；点击关系核对原始声明。</p><div class="atlas-stances" role="group" aria-label="按关系作用筛选"><button data-action="atlas-stance" data-stance="all" aria-pressed="${filter.stance==="all"}">全部路径</button>${groups.map(g=>`<button data-action="atlas-stance" data-stance="${g.key}" aria-pressed="${filter.stance===g.key}">${g.label} <span>${filteredPaths(model,{role:filter.role,stance:g.key}).length}</span></button>`).join("")}</div><div class="atlas-paths">${groups.filter(g=>filter.stance==="all"||filter.stance===g.key).map(g=>{const matches=paths.filter(p=>p.stance===g.key);if(!matches.length)return "";return `<section class="atlas-group ${g.key}"><h3>${g.title}<span>${matches.length} 条路径</span></h3>${matches.slice(0,4).map(pathMarkup).join("")}${matches.length>4?`<details class="atlas-more"><summary>展开其余 ${matches.length-4} 条${g.label}</summary>${matches.slice(4).map(pathMarkup).join("")}</details>`:""}</section>`;}).join("")||'<p class="notice">这个范围没有匹配的已声明路径。可以切换角色或查看全部路径。</p>'}</div>${model.detached.length?`<details class="atlas-detached"><summary>本次上下文中没有完整连接的单元 · ${model.detached.length}</summary><div class="atlas-detached-grid">${model.detached.map(n=>nodeMarkup(n.id)).join("")}</div></details>`:""}<footer class="atlas-footer">箭头表示原始声明的方向。支持与反驳均为已有记录。${model.truncated?"当前上下文有截断，可打开知识继续展开。":""}${model.unresolved?` ${model.unresolved} 条目标待解析。`:""}${model.omittedRelations?` ${model.omittedRelations} 条关系未载入。`:""}</footer></section>`;
+}

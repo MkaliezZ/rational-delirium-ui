@@ -36,6 +36,8 @@ import { CollaborationBrowser } from "../collaboration/collaboration-surface";
 
 /** Everything views need, supplied by main.ts. */
 export interface RDServices {
+  readonly refreshIndex?: () => Promise<void>;
+  readonly onVaultChange?: (cb: (path: string) => void) => () => void;
   readonly controller: ContextController;
   readonly index: RDIndex;
   readonly onIndexCommit: (cb: () => void) => () => void;
@@ -120,6 +122,8 @@ export function buildRDViewRegistry(): RDViewRegistry {
         source: services.graphSource as GraphSource,
         sourceReader: services.koSourceReader as KoSourceReader,
         workspace: "default",
+        store: services.workspaceStore as RDWorkspaceStore,
+        coordinator: services.graphCoordinator as GraphSnapshotCoordinator,
       }),
   });
 
@@ -143,6 +147,7 @@ export function buildRDViewRegistry(): RDViewRegistry {
         browser: services.collaborationBrowser as CollaborationBrowser,
         shellController: services.shellController as RDShellController,
         coordinator: services.graphCoordinator as GraphSnapshotCoordinator,
+        refreshIndex: services.refreshIndex as (() => Promise<void>) | undefined,
       }),
   });
 
@@ -212,6 +217,8 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
   // (cold-open dedup, explicit generations, stale rejection).
   const graphCoordinator = new GraphSnapshotCoordinator(
     workspaceStore, services.graphSource);
+  plugin.register(() => graphCoordinator.dispose());
+  plugin.register(() => workspaceStore.dispose());
   // v1.6.2: single shipped theme; explicit, session-only selection.
   const themeController = new RDThemeController(
     createDefaultThemeRegistry(), "rational-archive");
@@ -219,6 +226,23 @@ export function registerRDViews(plugin: Plugin, services: RDServices): RDViewReg
   // (which drives its explicit refreshes) and the inspector dock
   // (which only subscribes).
   const collaborationBrowser = new CollaborationBrowser();
+  const unsubscribeArtifacts = services.onVaultChange?.((path) => {
+    if (/^\.(proposals|contributions|organization-proposals)\/[^/]+\.md$/i.test(path)) {
+      void collaborationBrowser.refresh(services.collaborationSource, true);
+    }
+  });
+  if (unsubscribeArtifacts !== undefined) plugin.register(unsubscribeArtifacts);
+  plugin.addCommand({id: "refresh-rd-knowledge", name: "Refresh RD knowledge from saved notes", callback: async () => {
+    try {
+      await services.refreshIndex?.();
+      services.koSourceReader.invalidate?.();
+      await graphCoordinator.refresh();
+      await collaborationBrowser.refresh(services.collaborationSource, true);
+    } catch (err) {
+      // The index publishes its unavailable state; avoid an unhandled command rejection.
+      console.error("RD knowledge refresh failed", err);
+    }
+  }});
   // V2 Phase A: the shell controller owns the body scope class and
   // the dock leaves while an RD Workspace leaf is open.
   const shellController = new RDShellController(plugin.app, workspaceStore);

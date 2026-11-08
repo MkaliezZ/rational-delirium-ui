@@ -1,29 +1,43 @@
 {
   "name": "rational-delirium-ui",
-  "version": "0.4.4",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
-  "description": "Rational Delirium read-only Obsidian plugin candidate (CASE workspace)",
+  "description": "理性失序 · Rational Delirium: independent local Markdown knowledge, evidence maps and controlled Agent revisions",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "build": "node scripts/build.mjs",
-    "check-artifacts": "node scripts/check-artifacts.mjs"
+    "build": "npm run build:plugin && npm run build:agent",
+    "check-artifacts": "node scripts/check-artifacts.mjs",
+    "project-graph": "node scripts/project-graph.mjs",
+    "test:python": "python -B -m unittest discover -s semantic-graph/tests && python -B -m unittest discover -s mutation-gate/tests",
+    "validate": "npm run typecheck && npm run build && npm test && npm run check-artifacts && npm run check-agent-artifacts && npm run test:python && npm run eval",
+    "build:plugin": "node scripts/build.mjs",
+    "build:agent": "node scripts/build-agent.mjs",
+    "start": "node dist-agent/rd.mjs serve",
+    "eval": "node scripts/eval-knowledge.mjs --replay-baseline && node scripts/eval-knowledge.mjs && node scripts/eval-roles.mjs",
+    "check-agent-artifacts": "node scripts/check-agent-artifacts.mjs",
+    "eval:record": "node scripts/eval-knowledge.mjs --replay-baseline --record && node scripts/eval-knowledge.mjs --record"
   },
   "dependencies": {
+    "@phosphor-icons/core": "2.1.1",
+    "fflate": "0.8.3",
     "mdast-util-from-markdown": "^2.0.2",
     "yaml": "^2.6.1"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "esbuild": "^0.24.2",
     "happy-dom": "^16.7.2",
     "obsidian": "^1.7.2",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5",
-    "@types/node": "^24.0.0"
+    "vitest": "^3.0.5"
   },
   "allowScripts": {
     "esbuild@0.24.2": true,
     "esbuild@0.28.2": true
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

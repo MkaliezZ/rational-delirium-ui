@@ -56,6 +56,7 @@ export class RDArchiveNavView extends ItemView {
    * onOpen and onClose, and each onOpen starts a new open
    * generation so a stale awaited continuation can never render. */
   private active = false;
+  private filter = "";
   private openGeneration = 0;
 
   constructor(leaf: WorkspaceLeaf, private readonly deps: RDArchiveNavDeps) {
@@ -95,6 +96,7 @@ export class RDArchiveNavView extends ItemView {
    * knowledge objects, surface destinations. */
   private render(): void {
     if (!this.active) return;
+    const filterFocused = this.contentEl.querySelector(".rdan-filter") === document.activeElement;
     emptyEl(this.contentEl);
     const state = this.deps.store.getState();
     const selected = state.selectedObjectId;
@@ -137,12 +139,19 @@ export class RDArchiveNavView extends ItemView {
 
     const objects = createChild(rail, "div", { cls: "rdan-group rdan-objects" });
     createChild(objects, "div", { cls: "rdan-label", text: "Knowledge Objects" });
+    const filter = createChild(objects, "input", {cls: "rdan-filter"}) as HTMLInputElement;
+    filter.type = "search";
+    filter.placeholder = "Filter by title or id";
+    filter.setAttribute("aria-label", "Filter knowledge objects by title or id");
+    filter.value = this.filter;
+    filter.addEventListener("input", () => { this.filter = filter.value; this.applyFilter(); });
+    createChild(objects, "div", {cls: "rdan-filter-status"}).setAttribute("role", "status");
     if (snapshot === null || snapshot.state !== "available") {
       createChild(objects, "div", {
         cls: "rdan-empty",
         text:
           "snapshot unavailable — the vault still contains its knowledge; " +
-          "regenerate the derived graph with the projector when needed",
+          "use Refresh saved notes to retry the live index",
       });
     } else {
       const nodes = [...snapshot.graph.nodes]
@@ -172,6 +181,7 @@ export class RDArchiveNavView extends ItemView {
         for (const node of group) {
           const row = createChild(objects, "button", { cls: "rdan-object-row" });
           row.setAttribute("aria-label", `inspect ${node.object_id}`);
+          row.dataset.search = `${node.object_id} ${node.title}`.toLowerCase();
           if (node.object_id === selected) row.setAttribute("aria-pressed", "true");
           createChild(row, "span", { cls: "rdan-object-row-id", text: node.object_id });
           createChild(row, "span", {
@@ -190,6 +200,9 @@ export class RDArchiveNavView extends ItemView {
         }
       }
     }
+
+    this.applyFilter();
+    if (filterFocused) filter.focus({preventScroll: true});
 
     const surfaces = createChild(rail, "div", { cls: "rdan-group" });
     createChild(surfaces, "div", { cls: "rdan-label", text: "Surfaces" });
@@ -211,4 +224,16 @@ export class RDArchiveNavView extends ItemView {
       }
     }
   }
+  private applyFilter(): void {
+    const query = this.filter.trim().toLowerCase();
+    const rows = [...this.contentEl.querySelectorAll<HTMLButtonElement>(".rdan-object-row")];
+    let matches = 0;
+    for (const row of rows) {
+      row.hidden = !(row.dataset.search ?? "").includes(query);
+      if (!row.hidden) matches++;
+    }
+    const status = this.contentEl.querySelector(".rdan-filter-status");
+    if (status !== null) status.textContent = query ? `${matches} of ${rows.length} objects match` : "";
+  }
+
 }

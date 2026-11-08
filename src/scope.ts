@@ -35,8 +35,17 @@ export function isCandidatePath(path: string): boolean {
 export function isForbiddenDataSource(path: string): boolean {
   const norm = normalizeVaultPath(path);
   return FORBIDDEN_DATA_PREFIXES.some(
-    (prefix) => norm === prefix.slice(0, -1) || norm.startsWith(prefix),
+    (prefix) => norm.toLowerCase() === prefix.slice(0, -1).toLowerCase() || norm.toLowerCase().startsWith(prefix.toLowerCase()),
   );
+}
+
+/** Both schemas share this read boundary. Legacy eligibility still requires
+ * a knowledge root; declared KOs may live in any ordinary Markdown folder. */
+export function isIndexablePath(path: string): boolean {
+  const norm = normalizeVaultPath(path);
+  return !norm.startsWith("/") && !/^[A-Za-z]:/.test(norm) && norm.toLowerCase().endsWith(".md") && !norm.split("/").some(
+    (part) => part === ".." || part === "." || part.startsWith("."))
+    && !isForbiddenDataSource(norm);
 }
 
 /** Default normal working set excludes proof and demo objects. */

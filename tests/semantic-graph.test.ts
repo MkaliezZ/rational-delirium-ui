@@ -96,7 +96,7 @@ describe("v1.3.1 §1 semantic graph loader", () => {
     const wrongShape = parseGraphSnapshot('{"schema":"x"}');
     expect(wrongShape.state).toBe("invalid");
     const future = parseGraphSnapshot(
-      GOOD.replace("rd-semantic-graph-projection/1", "rd-semantic-graph-projection/2"),
+      GOOD.replace(GRAPH_SCHEMA_TAG, "rd-semantic-graph-projection/9"),
     );
     expect(future).toEqual({ state: "invalid", reason: "unsupported-schema" });
     const model = buildKnowledgePanelModel({ load: future, workspace: "default" });

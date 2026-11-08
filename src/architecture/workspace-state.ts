@@ -173,7 +173,7 @@ export function publishGraphLoad(store: RDWorkspaceStore, load: GraphLoadResult)
       state: "available",
       note:
         `${load.graph.nodes.length} objects, ${load.graph.edges.length} declared relations ` +
-        "(freshness unverified)",
+        (load.origin === "live-index" ? "(live saved-note index)" : "(freshness unverified)"),
     });
   } else if (load.state === "missing") {
     store.setSnapshotAvailability({

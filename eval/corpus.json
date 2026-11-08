@@ -1,0 +1,287 @@
+{
+  "schema": "rd-task-eval/1",
+  "description": "Synthetic Chinese/English personal knowledge tasks. Labels are fixture judgments, not real-user or LLM evaluations.",
+  "files": [
+    {
+      "path": "Knowledge/z-memory.md",
+      "id": "ko-20261107-0142",
+      "title": "Agent 记忆的修订边界",
+      "aliases": [
+        "智能体长期记忆",
+        "Agent memory"
+      ],
+      "tags": [
+        "记忆",
+        "版本"
+      ],
+      "body": "# Agent 记忆的修订边界\n当新的证据改变当前解释时，可以提出修订。应保留原始来源、旧版本和相反证据。持续重写并非适用于全部任务。",
+      "extra": {
+        "supported_by": [
+          "ko-20261107-0087"
+        ],
+        "contradicted_by": [
+          "ko-20261107-0092"
+        ],
+        "derived_from": [
+          "ko-20261107-0079"
+        ],
+        "depends_on": [
+          "ko-20261107-0999"
+        ]
+      }
+    },
+    {
+      "path": "Knowledge/z-evidence.md",
+      "id": "ko-20261107-0087",
+      "title": "任务记忆的动态价值",
+      "body": "# 任务记忆的动态价值\n示例观察：在多轮研究任务中，保留来源的修订有助于跟随新的观察。此观察没有证明所有记忆都应该重写。"
+    },
+    {
+      "path": "Knowledge/z-conflict.md",
+      "id": "ko-20261107-0092",
+      "title": "长期记忆的一致性问题",
+      "aliases": [
+        "频繁改写的风险"
+      ],
+      "body": "# 长期记忆的一致性问题\n相反证据：频繁覆盖历史会破坏解释的可追溯性。应保留原记录与版本，区分当前结论与过去的判断。"
+    },
+    {
+      "path": "Knowledge/z-context.md",
+      "id": "ko-20261107-0079",
+      "title": "记忆与环境耦合",
+      "body": "# 记忆与环境耦合\n解释随任务情境变化。知识不是静止的仓储。"
+    },
+    {
+      "path": "Knowledge/z-backup.md",
+      "id": "ko-20261107-0201",
+      "title": "本地资料备份流程",
+      "aliases": [
+        "备份",
+        "backup",
+        "数据丢失怎么办"
+      ],
+      "tags": [
+        "恢复"
+      ],
+      "body": "# 本地资料备份流程\n每次批量改动前保留快照。定期验证能从备份还原文件。同步会传播误删除，不能代替备份。"
+    },
+    {
+      "path": "Knowledge/a-backup-old.md",
+      "id": "ko-20261107-0200",
+      "title": "本地资料备份流程",
+      "status": "superseded",
+      "body": "# 本地资料备份流程\n旧方案：只做一份文件复制。此版本已由新流程替代。",
+      "extra": {
+        "successor": "ko-20261107-0201"
+      }
+    },
+    {
+      "path": "Knowledge/z-search.md",
+      "id": "ko-20261107-0301",
+      "title": "中文知识检索",
+      "aliases": [
+        "找不到笔记",
+        "搜索"
+      ],
+      "tags": [
+        "检索"
+      ],
+      "body": "# 中文知识检索\n标题、别名与正文应同时参与候选检索，返回匹配的来源段落。"
+    },
+    {
+      "path": "Knowledge/z-review.md",
+      "id": "ko-20261107-0401",
+      "title": "Agent 提案审阅流程",
+      "aliases": [
+        "审批",
+        "审核改动"
+      ],
+      "body": "# Agent 提案审阅流程\n先看具体差异，再核对引用依据。批准记录决定，应用才会改变文件。原文件变化时旧决定不适用。"
+    },
+    {
+      "path": "Knowledge/z-sleep.md",
+      "id": "ko-20261107-0501",
+      "title": "夜间工作记录",
+      "body": "# 夜间工作记录\n关闭音乐后，阅读更加专注。这里只是一则个人观察，不是普遍结论。"
+    },
+    {
+      "path": "Notes/inbox.md",
+      "title": "收件箱",
+      "note": true,
+      "body": "# 收件箱\n周五研究会：携带纸质资料和橙色便签。会议地点在二楼阅读室。"
+    },
+    {
+      "path": "EVIDENCE/legacy.md",
+      "id": "E-LEGACY-7",
+      "legacy": true,
+      "title": "历史观察记录",
+      "body": "# 历史观察记录\n早期观察采用旧格式保存，保留其身份。",
+      "extra": {
+        "supports": "[[Knowledge/z-memory]]"
+      }
+    },
+    {
+      "path": "Knowledge/a-distractor.md",
+      "id": "ko-20261107-0600",
+      "title": "周末清单",
+      "body": "# 周末清单\n顺手阅读一篇关于 Agent 记忆的修订边界的文章，暂未形成判断。"
+    }
+  ],
+  "queries": [
+    {
+      "query": "ko-20261107-0142",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ]
+    },
+    {
+      "query": "Agent 记忆的修订边界",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ]
+    },
+    {
+      "query": "智能体长期记忆",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ]
+    },
+    {
+      "query": "Agent memory",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ]
+    },
+    {
+      "query": "记忆 修订",
+      "relevant": [
+        "Knowledge/z-memory.md",
+        "Knowledge/z-evidence.md"
+      ]
+    },
+    {
+      "query": "频繁改写的风险",
+      "relevant": [
+        "Knowledge/z-conflict.md"
+      ]
+    },
+    {
+      "query": "本地资料备份流程",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ]
+    },
+    {
+      "query": "backup",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ]
+    },
+    {
+      "query": "数据丢失怎么办",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ]
+    },
+    {
+      "query": "备份还原文件",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ]
+    },
+    {
+      "query": "找不到笔记",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ]
+    },
+    {
+      "query": "中文 检索",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ]
+    },
+    {
+      "query": "审核改动",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ]
+    },
+    {
+      "query": "审批",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ]
+    },
+    {
+      "query": "Agent 提案",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ]
+    },
+    {
+      "query": "橙色便签",
+      "relevant": [
+        "Notes/inbox.md"
+      ]
+    },
+    {
+      "query": "研究会 地点",
+      "relevant": [
+        "Notes/inbox.md"
+      ]
+    },
+    {
+      "query": "E-LEGACY-7",
+      "relevant": [
+        "EVIDENCE/legacy.md"
+      ]
+    },
+    {
+      "query": "夜间工作记录",
+      "relevant": [
+        "Knowledge/z-sleep.md"
+      ]
+    },
+    {
+      "query": "完全不存在的火星档案",
+      "relevant": []
+    },
+    {
+      "query": "长期记忆频繁覆盖",
+      "relevant": [
+        "Knowledge/z-conflict.md"
+      ]
+    },
+    {
+      "query": "原始来源旧版本相反证据",
+      "relevant": [
+        "Knowledge/z-memory.md"
+      ]
+    },
+    {
+      "query": "备份文件如何还原",
+      "relevant": [
+        "Knowledge/z-backup.md"
+      ]
+    },
+    {
+      "query": "批准以后文件变化",
+      "relevant": [
+        "Knowledge/z-review.md"
+      ]
+    },
+    {
+      "query": "中文标题正文检索",
+      "relevant": [
+        "Knowledge/z-search.md"
+      ]
+    },
+    {
+      "query": "新的观察修订任务记忆",
+      "relevant": [
+        "Knowledge/z-evidence.md"
+      ]
+    }
+  ]
+}

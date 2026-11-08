@@ -12,7 +12,7 @@ import { RDArchiveNavView } from "../src/views/archive-nav-view";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const example = (name: string) => readFileSync(join(root, "examples", name), "utf8");
 const pending = example("proposal-example.md");
-const approved = pending.replace("\npending\n", "\napproved\n") +
+const approved = pending.replace(/^(pending)\r?$/m, "approved") +
   "\n## Human Decision\n\napproved — explicit Human decision\n" +
   "\n## History\n\n- Human approved this proposal; not truth validation.\n";
 const contribution = example("contribution-record-example.md");

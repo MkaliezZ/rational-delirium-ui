@@ -1,5 +1,7 @@
 node_modules/
 coverage/
+__pycache__/
+*.py[cod]
 .tmp/
 .npm-cache/
 .bundle-sanity/
@@ -26,3 +28,9 @@ artifacts/screenshots/
 artifacts/cdp/
 artifacts/runtime*/
 artifacts/*runtime*vault*/
+
+# Reproducible independent runtime; distributed as a release package.
+dist-agent/
+/example-knowledge/
+/knowledge/
+/.rd/

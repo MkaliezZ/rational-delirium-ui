@@ -159,6 +159,7 @@ export class RDInspectorView extends ItemView {
           createChild(meta, "dd", { text: v });
         };
         metaRow("id", node.object_id);
+        metaRow("title", node.title);
         metaRow("kind", node.kind);
         metaRow("lifecycle", node.status);
         if (node.predecessor !== null) metaRow("predecessor", node.predecessor);

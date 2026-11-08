@@ -151,7 +151,6 @@ export function buildGraphProjection(
   for (const o of objects) typeByPath.set(o.path, o);
 
   const selectable = objects
-    .filter((o) => o.type === "case" || o.type === "evidence" || o.type === "hypothesis" || o.type === "loop")
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
     .map((o) => ({ path: o.path, id: o.id, type: o.type, title: o.title }));
 

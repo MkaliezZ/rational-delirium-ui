@@ -1,0 +1,9 @@
+{
+  "files": 1000,
+  "objects": 1000,
+  "indexMs": 713.2165999999997,
+  "queryP50Ms": 363.84999999999854,
+  "queryP95Ms": 412.7048999999997,
+  "externalEditRefreshed": true,
+  "method": "1000 synthetic mixed-format notes, full disk reconciliation before each request. Local engineering scale check, not long-term or real-vault acceptance."
+}

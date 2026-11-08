@@ -47,12 +47,14 @@ describe("index lifecycle", () => {
     await index.build();
   });
 
-  it("initial build indexes only in-scope candidates", () => {
+  it("initial build discovers both schemas but keeps ordinary notes out", () => {
     const { objects, pathsById } = index.snapshot();
     expect(objects.length).toBe(5);
     expect(pathsById.get("CASE-0001")).toEqual(["CASES/CASE-0001.md"]);
     expect(index.state).toBe("READY");
-    expect(adapter.readsOf("00_HOME/Home.md")).toBe(0);
+    // Ordinary Markdown must be read once to discover declared KOs outside legacy roots.
+    expect(adapter.readsOf("00_HOME/Home.md")).toBe(1);
+    expect(index.objectAt("00_HOME/Home.md")).toBeNull();
   });
 
   it("candidate resolution links relations", () => {

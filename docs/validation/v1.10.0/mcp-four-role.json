@@ -1,0 +1,14 @@
+{
+  "transport": "MCP stdio, built Node 24 runtime",
+  "result": "passed",
+  "checks": [
+    "analyze exact source",
+    "propose_organize leaves material unchanged",
+    "apply refuses unsigned proposal",
+    "local operator signs digest",
+    "Agent applies signed proposal",
+    "boards shows adopted evidence",
+    "export_assets retains source citation"
+  ],
+  "stderr": ""
+}

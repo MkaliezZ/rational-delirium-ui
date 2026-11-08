@@ -1,0 +1,13 @@
+Use case: ui-mockup / precise palette edit.
+Edit the attached selected UI concept for the product 理性失序 · RATIONAL DELIRIUM. This image is the user's chosen direction, called 夜间推演台. Preserve its composition, typography, spacing, pane proportions, node arrangement, all Chinese and English texts, and warm near-black archive atmosphere. Preserve the underlying desktop app screen dimensions/aspect ratio (approximately 1440 x 1024). No additional screens or features.
+The user likes this direction but wants the green removed, favoring red or orange. Produce ONE refined version with a restrained burnt-orange/vermilion accent system, not an overall red-tinted screen.
+Exact color direction:
+- Base remains warm near-black #11110F; raised #1D1C19; rules #3D3933.
+- Primary text warm paper #E9E5DA; secondary #ADA69B.
+- Replace ALL acid green/chartreuse and mint/green highlights with warm alternatives. Selected navigation underline, selected central node border, selected research-thread border, and the filled '打开原文' button become a clear orange-vermilion #ED754E. Use near-black text #11110F on the filled orange button.
+- Most UI remains monochromatic. Accent occupies only a small fraction of the whole screen.
+- The '支持' connector and label should be warm paper/stone #C9C1B4 (not green or orange); the '派生自' connector remains muted bone. Their relationship text carries meaning.
+- The '反驳' connector and label use a muted salmon #E79A8E with a subtly dashed edge, so contradiction is distinguishable from orange selection without implying an error. Do not turn all relationship links red.
+- The unresolved source dashed border stays gray and its text stays readable.
+Keep the elegant research-journal mood, large Chinese serif heading, calm evidence reading pane, source path/line provenance, and subdued vertical DELIRIUM word. No glow, gradients, extra saturated backgrounds or generic dashboard components. No green pixels used as UI accents. No added callouts explaining the changes. Current date anchor 2026-11-07; preserve existing 2026.11.07. The exact brand 理性失序 must remain intact.
+Output only the revised UI screenshot.

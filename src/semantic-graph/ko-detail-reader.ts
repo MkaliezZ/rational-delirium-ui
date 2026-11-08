@@ -1,3 +1,5 @@
+import { parseYamlFields } from "../parsers/frontmatter-parser";
+import { LEGACY_OBJECT_TYPES } from "../model";
 /** v1.3.1 Phase 2 — KO detail reader: read-only resolution of a
  * Knowledge Object's DECLARED frontmatter (v1.3.0 §8 "KO detail
  * reader" contract).
@@ -10,9 +12,9 @@
  *   workspace's vault (v1.3.0 §7): no title/filename matching, no
  *   folder guessing, no latest-file fallback. 0 → missing, 1 →
  *   available, >1 → ambiguous (paths listed; never silent choice).
- * - Source reads are CURRENT-source reads, not necessarily the
- *   state the graph snapshot was built from; the panel labels them
- *   as such and surfaces disagreements instead of reconciling.
+ * - Production details and graph projections share one committed saved-note
+ *   index. Compatibility artifact readers can still read a different source
+ *   revision, so those surfaces retain their source/snapshot distinction.
  * - Read-only port: no write verb exists on this surface.
  */
 
@@ -25,6 +27,8 @@ export interface KoProvenanceLayers {
 
 export interface KoFrontmatter {
   readonly object_id: string;
+  readonly predecessor?: string;
+  readonly successor?: string;
   readonly kind?: string;
   readonly status?: string;
   readonly title?: string;
@@ -58,76 +62,45 @@ export function extractFrontmatterBlock(text: string): string | null {
   return null;
 }
 
-function scalar(raw: string): string | undefined {
-  let v = raw.trim();
-  if (v === "" || v === "null" || v === "~") return undefined;
-  const q = v[0];
-  if (q === '"' || q === "'") {
-    const end = v.indexOf(q, 1);
-    if (end === -1) return undefined; // unterminated — malformed
-    return v.slice(1, end) || undefined;
-  }
-  const comment = v.indexOf(" #");
-  if (comment !== -1) v = v.slice(0, comment).trim();
-  return v === "" || v === "null" ? undefined : v;
+function text(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
-/** Parse a frontmatter block into declared KO fields. Returns null
- * when the block declares no object_id (not a KO / malformed);
- * declared-absent fields stay undefined so callers can distinguish
- * "declared empty" from "not declared". */
-export function parseKoFrontmatter(block: string): KoFrontmatter | null {
-  const lines = block.split("\n");
-  const scalars: Record<string, string | undefined> = {};
-  const createdFrom: string[] = [];
-  const provenance: Record<string, string | undefined> = {};
-  let i = 0;
-  let inCreatedFrom = false;
-  let inProvenance = false;
-  while (i < lines.length) {
-    const line = lines[i];
-    const top = /^([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const nested = /^\s+([A-Za-z_][A-Za-z0-9_]*):(.*)$/.exec(line);
-    const item = /^\s+-\s+(.*)$/.exec(line);
-    if (top) {
-      inCreatedFrom = false;
-      inProvenance = false;
-      const key = top[1];
-      if (key === "created_from") {
-        inCreatedFrom = true;
-        const rest = top[2].trim();
-        if (rest === "[]") { inCreatedFrom = false; i++; continue; }
-        if (rest !== "") { inCreatedFrom = false; i++; continue; }
-      } else if (key === "provenance") {
-        inProvenance = true;
-        i++;
-        continue;
-      } else {
-        scalars[key] = scalar(top[2]);
-      }
-    } else if (inProvenance && nested) {
-      provenance[nested[1]] = scalar(nested[2]);
-    } else if (inCreatedFrom && item) {
-      const v = scalar(item[1]);
-      if (v !== undefined) createdFrom.push(v);
+/** Normalize declared field names only. Legacy types/statuses/ids are
+ * retained verbatim; evidence never becomes fact and ids are never generated. */
+export function koFrontmatterFromFields(fields: Record<string, unknown>): KoFrontmatter | null {
+  const modern = Object.prototype.hasOwnProperty.call(fields, "object_id");
+  const legacy = typeof fields.type === "string" &&
+    (LEGACY_OBJECT_TYPES as readonly string[]).includes(fields.type);
+  const objectId = text(modern ? fields.object_id : legacy ? fields.id : undefined)?.trim();
+  if (!objectId) return null;
+  if (modern && fields.id !== undefined && fields.id !== objectId) return null;
+  const raw = fields.provenance;
+  const provenance: Record<string, string> = {};
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    for (const layer of ["observation", "evidence", "inference", "conclusion"]) {
+      const value = (raw as Record<string, unknown>)[layer];
+      if (typeof value === "string") provenance[layer] = value;
     }
-    i++;
   }
-  const objectId = scalars.object_id;
-  if (objectId === undefined) return null;
-  const hasProvenanceKeys =
-    provenance.observation !== undefined || provenance.evidence !== undefined ||
-    provenance.inference !== undefined || provenance.conclusion !== undefined;
   return {
     object_id: objectId,
-    kind: scalars.kind,
-    status: scalars.status,
-    title: scalars.title,
-    workspace_context: scalars.workspace_context,
-    creator_role: scalars.creator_role,
-    created_from: createdFrom.length > 0 ? createdFrom : undefined,
-    provenance: hasProvenanceKeys ? provenance : undefined,
+    kind: text(modern ? fields.kind : fields.type),
+    status: text(fields.status), title: text(fields.title),
+    predecessor: text(fields.predecessor), successor: text(fields.successor),
+    workspace_context: text(fields.workspace_context), creator_role: text(fields.creator_role),
+    created_from: Array.isArray(fields.created_from)
+      ? fields.created_from.filter((v): v is string => typeof v === "string") : undefined,
+    provenance: Object.keys(provenance).length > 0 ? provenance : undefined,
   };
+}
+
+/** Full YAML 1.2 parsing, shared with the live index. Invalid/duplicate
+ * declarations are never partly interpreted as a different identity. */
+export function parseKoFrontmatter(block: string): KoFrontmatter | null {
+  const parsed = parseYamlFields(block, "");
+  if (parsed.diagnostics.length > 0) return null;
+  return koFrontmatterFromFields(parsed.fields);
 }
 
 /** Compose a resolution through a parsed note: the caller (view or

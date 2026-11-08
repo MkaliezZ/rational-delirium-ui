@@ -4,7 +4,9 @@ import type {
   RDObjectType,
   RDRelationAssertion,
 } from "../model";
-import { RD_OBJECT_TYPES } from "../model";
+import { KO_KINDS, LEGACY_OBJECT_TYPES } from "../model";
+import { isCandidatePath } from "../scope";
+import { koFrontmatterFromFields, type KoFrontmatter } from "../semantic-graph/ko-detail-reader";
 import { parseFrontmatter, type FrontmatterRelationEntry } from "./frontmatter-parser";
 import { extractBodyRelations } from "./body-relations";
 import { frontmatterLocation } from "./source-location";
@@ -12,6 +14,9 @@ import { frontmatterLocation } from "./source-location";
 export interface ObjectParseResult {
   /** null when the file is not an RD object (no valid frontmatter.type). */
   object: RDObject | null;
+  detail: KoFrontmatter | null;
+  declaredId: string | null;
+  diagnostics: RDDiagnostic[];
   assertions: RDRelationAssertion[];
   /** Ordinary [[wikilinks]] in the body, for linked/backlink display. */
   ordinaryLinks: string[];
@@ -27,7 +32,7 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set([
   "refuted",
   "broken",
   "archived",
-  "invalid",
+  "invalid", "candidate", "reviewed", "superseded",
 ]);
 
 function firstTitle(content: string): string {
@@ -62,13 +67,31 @@ export function parseObject(
   const diagnostics: RDDiagnostic[] = [];
   const fm = parseFrontmatter(content, path);
   diagnostics.push(...fm.diagnostics);
-  const typeRaw = fm.fields["type"];
-  if (typeof typeRaw !== "string" || !RD_OBJECT_TYPES.includes(typeRaw as RDObjectType)) {
-    // Not an RD object (or invalid type): not indexed; diagnostics kept.
-    return { object: null, assertions: [], ordinaryLinks: [] };
+  const modern = Object.prototype.hasOwnProperty.call(fm.fields, "object_id");
+  const typeRaw = fm.fields[modern ? "kind" : "type"];
+  const idRaw = fm.fields[modern ? "object_id" : "id"];
+  const declaredId = modern && typeof idRaw === "string" && /^ko-\d{8}-\d+$/.test(idRaw) ? idRaw : null;
+  const reject = (code?: string, message?: string): ObjectParseResult => {
+    if (code) diagnostics.push({ code, message: message ?? code, path });
+    return { object: null, detail: null, declaredId, diagnostics, assertions: [], ordinaryLinks: [] };
+  };
+  const allowed: readonly string[] = modern ? KO_KINDS : LEGACY_OBJECT_TYPES;
+  if (typeof typeRaw !== "string" || !allowed.includes(typeRaw) || (!modern && !isCandidatePath(path))) {
+    return reject(modern ? "invalid-ko-kind" : undefined, "KO requires a declared supported kind");
+  }
+  if (modern && (typeof idRaw !== "string" || !/^ko-\d{8}-\d+$/.test(idRaw))) {
+    return reject("invalid-ko-id", "object_id must match ko-YYYYMMDD-number");
+  }
+  if (modern && fm.fields.id !== undefined && fm.fields.id !== idRaw) {
+    return reject("conflicting-identity", "id and object_id disagree; no identity was selected");
+  }
+  if (modern && (typeof fm.fields.title !== "string" || !fm.fields.title.trim())) {
+    return reject("missing-ko-title", "KO requires a non-empty title");
+  }
+  if (modern && !["candidate", "reviewed", "active", "superseded", "archived"].includes(String(fm.fields.status))) {
+    return reject("invalid-ko-status", "KO requires a declared lifecycle status");
   }
   const type = typeRaw as RDObjectType;
-  const idRaw = fm.fields["id"];
   let id: string | null = null;
   if (typeof idRaw === "string" && idRaw.trim().length > 0) {
     id = idRaw.trim();
@@ -92,12 +115,13 @@ export function parseObject(
     : [];
   const object: RDObject = {
     path,
+    schema: modern ? "ko" : "legacy",
     id,
     type,
     status,
-    title: firstTitle(content) || (id ?? path),
+    title: modern ? fm.fields.title as string : firstTitle(content) || (id ?? path),
     tags,
-    created: typeof fm.fields["created"] === "string" ? fm.fields["created"] : null,
+    created: typeof fm.fields[modern ? "created_at" : "created"] === "string" ? fm.fields[modern ? "created_at" : "created"] as string : null,
     lastVerified:
       typeof fm.fields["last_verified"] === "string"
         ? fm.fields["last_verified"]
@@ -108,13 +132,15 @@ export function parseObject(
     revision,
     diagnostics,
   };
+  const declared = koFrontmatterFromFields(fm.fields);
+  const detail = declared === null ? null : { ...declared, title: object.title };
   const assertions = fm.relations.map((e) => toAssertion(e, path, revision));
   const body = extractBodyRelations(content, path, revision);
   diagnostics.push(...body.diagnostics);
   // RD-08 §23: file-level suppression from frontmatter OR body
   if (fm.fileSuppressed || body.fileSuppressed) {
-    return { object, assertions: [], ordinaryLinks: body.ordinaryLinks };
+    return { object, detail, declaredId: id, diagnostics, assertions: [], ordinaryLinks: body.ordinaryLinks };
   }
   assertions.push(...body.assertions);
-  return { object, assertions, ordinaryLinks: body.ordinaryLinks };
+  return { object, detail, declaredId: id, diagnostics, assertions, ordinaryLinks: body.ordinaryLinks };
 }

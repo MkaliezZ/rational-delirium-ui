@@ -1,0 +1,9 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {KnowledgeService,RootFiles} from '../dist-agent/index.mjs';
+const root=path.resolve(import.meta.dirname,'..'),version=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version,base=path.join(root,'.tmp/agent-scale');fs.mkdirSync(base,{recursive:true});const vault=fs.mkdtempSync(path.join(base,'run-')),files=new RootFiles(vault);
+for(let i=0;i<1000;i++){const modern=i%2===0,id=modern?`ko-20261107-${i+1}`:`E-${i+1}`;files.write(`${modern?'Notes':'EVIDENCE'}/${i}.md`,`---\n${modern?`object_id: ${id}\nkind: concept\ntitle: 资料备份方案 ${i}\nstatus: active`:`id: ${id}\ntype: evidence\nstatus: verified`}\n---\n# 资料备份方案 ${i}\n每次改动前保留来源和版本。备份与恢复。\n`);}
+const service=new KnowledgeService(vault),t=performance.now();const status=await service.execute('status'),indexMs=performance.now()-t,queryTimes=[];
+for(let i=0;i<12;i++){const t=performance.now();const result=await service.execute('search',{query:i%2?'备份恢复':'来源版本',limit:5});if(!result.hits.length)throw Error('Scale query returned no results');queryTimes.push(performance.now()-t);}
+const before=(await service.execute('get',{id:'ko-20261107-1'})).revision;files.write('Notes/0.md',files.read('Notes/0.md').text+'\n外部修改\n');const after=(await service.execute('get',{id:'ko-20261107-1'})).revision;if(before===after)throw Error('External edit stale');
+queryTimes.sort((a,b)=>a-b);const result={files:status.counts.files,objects:status.counts.objects,indexMs,queryP50Ms:queryTimes[6],queryP95Ms:queryTimes[11],externalEditRefreshed:before!==after,method:'1000 synthetic mixed-format notes, full disk reconciliation before each request. Local engineering scale check, not long-term or real-vault acceptance.'};fs.writeFileSync(path.join(root,`docs/validation/v${version}/scale.json`),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));await service.close();
