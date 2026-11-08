@@ -6,9 +6,9 @@
 
 用 Markdown 保留材料，通过 **CASE / EVIDENCE / HYPOTHESIS / LOOP（案例、证据、假设、重复模式）** 连接经历、核对支持与反驳、比较解释，并随新材料修订认识。
 
-**v1.10.0 为工程预览版**，面向本地文本知识，以及已有 Markdown 或 Agent 使用习惯的用户。
+**v1.11.0 为工程预览版**，面向本地文本知识，以及已有 Markdown 或 Agent 使用习惯的用户。
 
-[下载工程预览](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.10.0) · [当前验收记录](docs/validation/v1.10.0/release.md) · [使用与恢复](docs/standalone-knowledge.md)
+[下载工程预览](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.11.0) · [当前验收记录](docs/validation/v1.11.0/release.md) · [使用与恢复](docs/standalone-knowledge.md)
 
 ## 可以做什么
 
@@ -59,6 +59,22 @@ node dist-agent/rd.mjs serve --root ./example-knowledge
 
 ## 连接 Agent
 
+### 从指定资料一键建库
+
+复制并修改 [scope.json 示例](examples/intake-scope.json)，或在本地页面点击 **Agent 自动建库** 生成范围文件。写明资料路径、GitHub 公共仓库、文档范围、需要对照的历史 ref 和整理目的，然后让本机 Agent 执行：
+
+```sh
+node dist-agent/rd.mjs intake --root ./my-knowledge --manifest ./scope.json --dsh-entry /absolute/path/dsh/lib/bin.js --serve
+```
+
+RD 会初始化目标目录、按范围收集原文快照，调用已配置的 DSH 判断重要性并完成 **CASE / EVIDENCE / HYPOTHESIS / LOOP** 分类；引用校验和第二轮关系语义复核后，生成 Markdown 知识单元，再启动本地界面。来源位置、哈希、GitHub 提交和历史快照都会保留。不确定的关联附带缺失依据，继续作为候选。重复运行同一命令即可增量采集，复用已处理且版本未变的来源，保留已有笔记。
+
+其他 Agent 可通过 `--adapter /path/to/adapter.mjs` 或 SDK `runIntake` 接入。未提供 Agent 适配器时仅采集原文，明确返回 `awaiting-agent`，不会声称已完成语义整理。支持 UTF-8 Markdown、纯文本及常见可见消息 JSON/JSONL 会话导出；PDF、Office 文件及其他聊天存储需先导出文本。GitHub 采集目前针对公共仓库，私库使用本地导出。
+
+[资料范围、适配器、限制、状态与恢复](docs/agent-intake.md)
+
+### 使用已有知识
+
 在兼容客户端中启动本地 MCP stdio 进程：
 
 ```sh
@@ -81,15 +97,16 @@ node dist-agent/agent-run.mjs --root /absolute/path/knowledge --questions /path/
 
 ## 验证与范围
 
-- **704 项 Vitest + 62 项 Python 检查**；完整 CI 在 Windows 和 Ubuntu 通过。
-- 本机 DSH 对 **14 道既有个人材料问题**完成实际复测：77 条引文、23 条正式关系与保存的来源及声明对齐；2 题保留来源覆盖未知。
+- **726 项 Vitest + 62 项 Python 检查**；完整 CI 在 Windows 和 Ubuntu 通过。
+- 新入口的真实 DSH 建库：**4 份来源 → 16 个知识单元**，50 条引文、15 条正式补充关系、3 条候选均通过对应检查；原个人库保留。[评估记录](docs/validation/v1.11.0/intake-eval.md)。
+- v1.10.0 的历史本机 DSH 答案评估对 **14 道既有个人材料问题**完成实际复测：77 条引文、23 条正式关系与保存的来源及声明对齐；2 题保留来源覆盖未知。
 - 独立运行包、MCP、HTTP、知识包和恢复场景已有工程检查；这些结果不等于长期可靠性或真实世界效果已验证。
 
-本次预览聚焦本地文本知识。PDF/OCR、附件预览、云同步及内置模型聊天进入后续开发。分类建议使用段落规则，语义分析依赖人工审阅或外部 Agent。14 道既有问题不属于新的盲测集，也不是通用准确率保证。
+本次预览聚焦本地文本知识。PDF/OCR、附件预览、云同步及内置模型聊天进入后续开发。单份材料的段落建议使用规则；自动建库调用用户配置的外部 Agent，经过宿主引用检查和第二轮关系语义复核。关系复核通过表示保存材料范围内的解释有依据，不能证明来源本身为真。14 道既有问题不属于新的盲测集，也不是通用准确率保证。
 
 知识 ZIP 用于迁移已索引 Markdown 和声明关系，不包含附件、批准密钥和完整执行历史。完整恢复需要另外保存工作区及外置密钥。
 
-[当前发布验收](docs/validation/v1.10.0/release.md) · [来源与版本评估](docs/validation/v1.10.0/source-coverage.md) · [四板块格式](docs/four-role-workspace.md) · [三层设计](docs/architecture/three-layer-design-v1.0.md)
+[当前发布验收](docs/validation/v1.11.0/release.md) · [来源与版本评估](docs/validation/v1.11.0/source-coverage.md) · [四板块格式](docs/four-role-workspace.md) · [三层设计](docs/architecture/three-layer-design-v1.0.md)
 
 ## 制作发布包
 

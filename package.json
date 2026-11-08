@@ -1,6 +1,6 @@
 {
   "name": "rational-delirium-ui",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "private": true,
   "type": "module",
   "description": "理性失序 · Rational Delirium: independent local Markdown knowledge, evidence maps and controlled Agent revisions",

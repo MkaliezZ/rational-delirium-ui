@@ -44,7 +44,7 @@ it("keeps reading, relations, provenance and overview navigation distinct in the
     await vi.waitFor(()=>expect(document.querySelector("#main h1")?.textContent).toBe("测试案例"));
     const click=async(action:string)=>{document.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!.click();await vi.waitFor(()=>expect(document.querySelector(`[data-action="${action}"]`)).not.toBeNull());};
     const source=document.querySelector<HTMLElement>("#source")!;
-    expect(source.hidden).toBe(true);expect(source.inert).toBe(true);expect(document.querySelector("#relation-atlas")).toBeNull();
+    expect(source.hidden).toBe(false);expect(source.inert).toBe(false);expect(source.textContent).toContain("知识角色");expect(document.querySelectorAll("[data-directory-role]")).toHaveLength(4);expect(document.querySelector("#relation-atlas")).toBeNull();
     await click("show-source");await vi.waitFor(()=>expect(source.hidden).toBe(false));expect(document.querySelector('[data-action="show-source"]')?.getAttribute("aria-expanded")).toBe("true");
     await click("close-source");expect(source.hidden).toBe(true);expect(document.activeElement?.getAttribute("data-action")).toBe("show-source");
     await click("related-content");await vi.waitFor(()=>expect(document.querySelector("#relation-atlas")).not.toBeNull());expect(document.querySelector("#main .article")).toBeNull();

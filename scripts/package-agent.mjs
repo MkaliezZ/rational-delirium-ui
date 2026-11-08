@@ -13,7 +13,7 @@ const output=flags.output?path.resolve(flags.output):path.resolve(root,'../deliv
 const stage=path.join(output,`rational-delirium-${version}`);
 const validation=flags['validation-log']?path.resolve(flags['validation-log']):path.join(root,`docs/validation/v${version}/full-validation.log`);
 const pluginFiles=['main.js','manifest.json','styles.css','tokens-rational-archive.css'];
-const content=['README.md','README_zh-CN.md','docs/standalone-knowledge.md','docs/agent-delivery.md','docs/agent-source-reading.md','docs/four-role-workspace.md','docs/validation/standalone','docs/design','design-qa.md','skills/rational-delirium-agent-skill.md','skills/legacy-obsidian-agent-skill-v1.7.1.md','eval','LICENSE','docs/architecture',`docs/validation/v${version}`];
+const content=['README.md','README_zh-CN.md','examples/intake-scope.json','docs/agent-intake.md','docs/standalone-knowledge.md','docs/agent-delivery.md','docs/agent-source-reading.md','docs/four-role-workspace.md','docs/validation/standalone','docs/design','design-qa.md','skills/rational-delirium-agent-skill.md','skills/legacy-obsidian-agent-skill-v1.7.1.md','eval','LICENSE','docs/architecture',`docs/validation/v${version}`];
 // Fail before creating a partial delivery; the package never reads a private vault.
 if(fs.existsSync(output))throw Error('Output already exists; preserve earlier deliveries and choose a new --output directory.');
 for(const file of [...RUNTIME_FILES.map(f=>'dist-agent/'+f),...content,...pluginFiles.map(f=>'dist/'+f),validation])if(!fs.existsSync(path.resolve(root,file)))throw Error('Required package input missing: '+file);
@@ -54,6 +54,14 @@ Agent 接入：
 node dist-agent/rd.mjs mcp --root /absolute/path/knowledge
 node dist-agent/agent-run.mjs --root /absolute/path/knowledge --questions /path/questions.json --output /path/new-run --dsh-entry /path/installed/dsh/lib/bin.js
 \`\`\`
+
+从指定资料自动建库：复制 examples/intake-scope.json 并填写资料范围（相对路径按 scope 文件位置解析），或在页面点击“Agent 自动建库”生成范围文件，然后让本机 Agent 执行：
+
+\`\`\`text
+node dist-agent/rd.mjs intake --root ./my-knowledge --manifest ./scope.json --dsh-entry /path/to/dsh/lib/bin.js --serve
+\`\`\`
+
+也可使用 --adapter /path/to/agent.mjs。未配置 Agent 时仅保存原文并返回 awaiting-agent。完成的采集会保留来源、历史快照和候选缺口；partial 状态表示还有待解决的批次或覆盖问题。重复运行可增量采集，已有知识保留。详见 docs/agent-intake.md。
 
 MCP 默认只读。--write 可提出并应用已批准提案，始终不提供批准工具。DSH 是可选的外部适配器，需自行安装并配置；本包不包含模型或 API 凭据。外部 Agent/模型可能处理所提供的资料，具体数据流向取决于该客户端配置。
 

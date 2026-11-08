@@ -1,0 +1,10 @@
+{
+  "schema": "rd-intake/1",
+  "name": "My project knowledge",
+  "purpose": "Keep important project decisions, observed results, open explanations and recurring patterns. Preserve conflicting accounts and version history.",
+  "sources": [
+    {"type": "local", "path": "./my-materials", "include": ["**/*.md", "**/*.txt", "**/*.jsonl"], "exclude": ["scratch/**"]},
+    {"type": "github", "repository": "MkaliezZ/rational-delirium-ui", "include": ["README.md", "README_zh-CN.md"], "historyRefs": ["v1.10.0"], "releases": true}
+  ],
+  "limits": {"maxFiles": 128, "maxBytes": 33554432}
+}

@@ -54,7 +54,7 @@ export class MutationEngine {
                 const block=splitFrontmatter(c.afterMarkdown), fields=block?parseYamlFields(block.text,c.path).fields:{};
                 requireValue(roleMetadataErrors(fields).length===0,"INVALID_OBJECT","Invalid role or citation metadata",roleMetadataErrors(fields));
                 const spans=[...(Array.isArray(fields.rd_relation_notes)?fields.rd_relation_notes.flatMap((n:any)=>n.evidence??[]):[]),...(Array.isArray(fields.rd_relation_candidates)?fields.rd_relation_candidates.flatMap((n:any)=>n.evidence??[]):[])];
-                for(const span of spans){const staged=changes.find(c=>c.path===span.path),text=staged?staged.afterMarkdown:this.current(span.path)?.text;if(text!==undefined&&text!==null&&sha256(text)===span.revision)requireValue(text.split(/\r\n|\r|\n/).slice(span.startLine-1,span.endLine).join("\n")===span.quote,"INVALID_CITATION","Relation quote does not match the cited source lines",{path:span.path});}
+                for(const span of spans){const staged=changes.find(c=>c.path===span.path),text=staged?staged.afterMarkdown:this.current(span.path)?.text;if(text!==undefined&&text!==null&&sha256(text)===span.revision)requireValue(span.quote.length>0&&text.split(/\r\n|\r|\n/).slice(span.startLine-1,span.endLine).join("\n").includes(span.quote.replace(/\r\n|\r/g,"\n")),"INVALID_CITATION","Relation quote does not match the cited source lines",{path:span.path});}
                 const parsed = parseObject(c.path, c.afterMarkdown, 0, 1);
                 requireValue(parsed.diagnostics.filter(d => d.code !== "unknown-status").length === 0, "INVALID_OBJECT", "New content has invalid declarations", parsed.diagnostics);
                 const previous = before ? parseObject(c.path, before.text, 0, 1) : null;
@@ -91,6 +91,11 @@ export class MutationEngine {
         const evidence = Array.isArray(args.evidence) ? args.evidence.map(e => string(e, "evidence reference")) : [];
         requireValue(evidence.length <= 64, "INVALID_ARGUMENT", "Too many evidence references");
         const evidenceSources = evidence.map(ref => { const source = this.kb.get(ref.endsWith(".md") ? { path: ref } : { id: ref }); return { id: source.id, path: source.path, revision: source.revision }; });
+        if(args.sourceRevisions!==undefined){
+            const expected=record(args.sourceRevisions);
+            requireValue(Object.keys(expected).length===evidence.length&&evidence.every(ref=>typeof expected[ref]==="string"&&/^[a-f0-9]{64}$/.test(expected[ref] as string)),"INVALID_ARGUMENT","sourceRevisions must pin every evidence reference");
+            for(let i=0;i<evidence.length;i++)requireValue(evidenceSources[i].revision===expected[evidence[i]],"STALE_EVIDENCE","Intake evidence changed before proposal creation",{path:evidenceSources[i].path});
+        }
         const base: Omit<Proposal, "digest"> = { schema: "rd-agent-proposal/1", id: "P-" + randomUUID(), workspaceId: config.workspaceId, createdAt: now(), actor: string(args.actor, "actor"), reason: string(args.reason, "reason"), evidence, evidenceSources,
             operations: [{ type: allowDelete ? "restore" : "change_markdown" }], changes, objectIds: changes.flatMap(c => { const id = c.afterMarkdown ? parseObject(c.path, c.afterMarkdown, 0, 1).declaredId : null; return id ? [id] : []; }) };
         const proposal: Proposal = { ...base, digest: digestOf(base) };

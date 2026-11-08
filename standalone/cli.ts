@@ -10,6 +10,10 @@ import { startServer } from "./http";
 import { errorData, record, requireValue } from "./errors";
 import { VERSION } from "./types";
 import { seedRoleDemo } from "./demo";
+import {runIntake} from "./intake";
+import {dshIntakeGenerator} from "./intake-dsh";
+import {randomUUID} from "node:crypto";
+import {pathToFileURL} from "node:url";
 const argv = process.argv.slice(2), command = argv.shift() ?? "help", flags: Record<string, string | boolean> = {};
 const output = (data: unknown) => process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 async function main() {
@@ -19,12 +23,29 @@ async function main() {
         flags[key] = argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[++i] : true;
     }
     if (command === "help" || command === "--help") {
-        output({ product: "理性失序 · Rational Delirium", version: VERSION, usage: "node rd.mjs <command> --root <folder> [--args file.json | --json '{...}']", commands: ["init", "demo", "serve", "mcp", "watch", "status", "list", "search", "get", "read_source", "check_citations", "check_relations", "source_coverage", "prepare_answer", "relations", "context", "validate", "export", "propose", "revise", "proposal", "proposals", "decide", "apply", "restore", "recover", "boards", "analyze", "suggestions", "export_assets", "propose_organize", "propose_roles", "propose_link", "organize", "set_roles", "link", "preview_import", "import_package"], examples: ['init --root ./knowledge', 'demo --root ./example', 'serve --root ./knowledge', 'search --root ./knowledge --query 记忆', 'get --root ./knowledge --id ko-20261107-0142', 'mcp --root ./knowledge --write'], notes: "MCP is read-only by default. --write exposes propose/apply, never approve. CLI decide requires --human, --reviewer and --digest. serve is a local operator UI; use --read-only for viewing only." });
+        output({ product: "理性失序 · Rational Delirium", version: VERSION, usage: "node rd.mjs <command> --root <folder> [--args file.json | --json '{...}']", commands: ["init", "intake", "demo", "serve", "mcp", "watch", "status", "list", "search", "get", "read_source", "check_citations", "check_relations", "source_coverage", "prepare_answer", "relations", "context", "validate", "export", "propose", "revise", "proposal", "proposals", "decide", "apply", "restore", "recover", "boards", "analyze", "suggestions", "export_assets", "propose_organize", "propose_roles", "propose_link", "organize", "set_roles", "link", "preview_import", "import_package"], examples: ['intake --root ./knowledge --manifest ./scope.json --dsh-entry /path/to/dsh/lib/bin.js --serve', 'init --root ./knowledge', 'demo --root ./example', 'serve --root ./knowledge', 'search --root ./knowledge --query 记忆', 'get --root ./knowledge --id ko-20261107-0142', 'mcp --root ./knowledge --write'], notes: "MCP is read-only by default. --write exposes propose/apply, never approve. CLI decide requires --human, --reviewer and --digest. serve is a local operator UI; use --read-only for viewing only." });
         return;
     }
     requireValue(typeof flags.root === "string", "INVALID_ARGUMENT", "--root is required");
     const root = path.resolve(flags.root);
     const key = typeof flags.key === "string" ? flags.key : undefined;
+    if(command === "intake") {
+        requireValue(typeof flags.manifest==="string","INVALID_ARGUMENT","intake requires --manifest <scope.json>; see examples/intake-scope.json");
+        const file=path.resolve(flags.manifest),manifest=JSON.parse(fs.readFileSync(file,"utf8").replace(/^\uFEFF/,""));
+        requireValue(!(flags["dsh-entry"]&&flags.adapter),"INVALID_ARGUMENT","Choose --dsh-entry OR --adapter");
+        const intakeFiles=new RootFiles(root,true);
+        const logs=intakeFiles.absolute(".rd/intake/dsh-"+randomUUID(),true,true);
+        const generate=typeof flags["dsh-entry"]==="string"?dshIntakeGenerator(flags["dsh-entry"],logs,Number(flags["timeout-ms"]??300000)):typeof flags.adapter==="string"?(await import(pathToFileURL(path.resolve(flags.adapter)).href)).generate:undefined;
+        requireValue(generate===undefined||typeof generate==="function","INVALID_ARGUMENT","Adapter module must export async generate(request)");
+        const result=await runIntake(root,manifest,generate,{base:path.dirname(file),key,onEvent:e=>{output(e);}});
+        output({ok:result.status==="complete"||result.status==="unchanged"||result.status==="awaiting-agent",data:result});
+        if(result.status==="partial")process.exitCode=2;
+        if(flags.serve===true&&["complete","unchanged","partial","awaiting-agent"].includes(result.status)){
+            const app=await startServer(new KnowledgeService(root,key),{port:flags.port?Number(flags.port):4399});output({ok:true,url:app.url,root});
+            const close=()=>{void app.close().then(()=>process.exit());};process.once("SIGINT",close);process.once("SIGTERM",close);
+        }
+        return;
+    }
     if (command === "init") {
         output({ ok: true, data: initialize(new RootFiles(root, true), key) });
         return;

@@ -6,13 +6,14 @@
 
 Keep your material in Markdown. Use **CASE / EVIDENCE / HYPOTHESIS / LOOP** to connect experiences, inspect supporting and opposing evidence, compare explanations, and revisit recurring patterns.
 
-**v1.10.0 is an engineering preview.** It is intended for local text knowledge and users comfortable with Markdown or existing agent clients.
+**v1.11.0 is an engineering preview.** It is intended for local text knowledge and users comfortable with Markdown or existing agent clients.
 
-[Download the preview](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.10.0) · [Current validation](docs/validation/v1.10.0/release.md) · [Usage and recovery](docs/standalone-knowledge.md)
+[Download the preview](https://github.com/MkaliezZ/rational-delirium-ui/releases/tag/v1.11.0) · [Current validation](docs/validation/v1.11.0/release.md) · [Usage and recovery](docs/standalone-knowledge.md)
 
 ## What you can do
 
 - Collect Markdown or plain text, preserve the original, and review paragraph-level role suggestions.
+- Build a knowledge base from an explicit local/GitHub scope with an existing Agent: collect source snapshots, extract important four-role knowledge, review directed relations and retain uncertain candidates.
 - Organize cases, evidence, hypotheses, and recurring patterns without duplicating a note's identity.
 - Browse a case index and directed relation views with excerpts, support, contradiction, supplements, and missing evidence.
 - Search saved content, aliases, declared relationships, and source references. Search relevance is lexical ranking, not a truth score.
@@ -59,6 +60,22 @@ The optional Obsidian plugin is built separately into `dist/` by the same build.
 
 ## Connect an agent
 
+### Build your knowledge base with one entry
+
+Copy and edit [scope.json](examples/intake-scope.json), or use **Agent 自动建库** in the local UI to generate it. Specify the material paths, public GitHub repository, document patterns, historical refs and purpose. Then let your local Agent run:
+
+```sh
+node dist-agent/rd.mjs intake --root ./my-knowledge --manifest ./scope.json --dsh-entry /absolute/path/dsh/lib/bin.js --serve
+```
+
+RD initializes the destination, collects the selected source text, calls your configured DSH Agent to judge importance and classify **CASE / EVIDENCE / HYPOTHESIS / LOOP**, checks citations, independently reviews proposed relationships, writes Markdown and opens the local service. Source locations, hashes, GitHub commits and historical snapshots are retained. Candidates carry missing evidence and remain separate from formal edges. Repeat the command for incremental collection; matching processed sources are reused and existing notes are preserved.
+
+For another Agent, use `--adapter /path/to/adapter.mjs` or SDK `runIntake`. Without an Agent adapter, the command only collects sources and returns `awaiting-agent`; it does not claim semantic organization is complete. Input supports UTF-8 Markdown/plain text and common visible-message JSON/JSONL exports. PDF/Office files and other chat stores need a text export first. GitHub intake currently uses public repositories; private repositories can be exported locally.
+
+[Scope, adapters, limits, statuses and recovery](docs/agent-intake.md)
+
+### Use existing knowledge
+
 Start a local MCP stdio server from a compatible client:
 
 ```sh
@@ -81,15 +98,16 @@ Rational Delirium does not bundle a model or API credentials. An external agent/
 
 ## Validation and scope
 
-- **704 Vitest + 62 Python checks**; the full validation workflow passes on Windows and Ubuntu.
-- One real local DSH re-evaluation covers **14 existing personal-material questions**: 77 exact citations and 23 formal relationships align with saved sources and declarations. Two questions retain source-coverage uncertainty.
+- **726 Vitest + 62 Python checks**; the full validation workflow passes on Windows and Ubuntu.
+- New real DSH intake: **4 sources → 16 knowledge units**, 50 exact citations, 15 formal complements and 3 candidates; original personal knowledge is preserved. [Evaluation](docs/validation/v1.11.0/intake-eval.md).
+- The historical v1.10.0 local DSH answer re-evaluation covers **14 existing personal-material questions**: 77 exact citations and 23 formal relationships align with saved sources and declarations. Two questions retain source-coverage uncertainty.
 - Independent-runtime, MCP, HTTP, knowledge-package, and recovery scenarios have engineering checks. These do not establish long-term reliability or real-world outcomes.
 
-The current preview focuses on local text knowledge. PDF/OCR, attachment previews, cloud synchronization, and built-in model chat are future work. Classification suggestions use paragraph rules; semantic analysis depends on human review or an external agent. Fourteen existing questions are not a new blind benchmark or a general accuracy guarantee.
+The current preview focuses on local text knowledge. PDF/OCR, attachment previews, cloud synchronization, and built-in model chat are future work. Manual paragraph suggestions use rules; automatic intake uses your configured external Agent with host source checks and a second relation-review call. A reviewed relation is a scoped interpretation, not proof that its source is true. Fourteen existing questions are not a new blind benchmark or a general accuracy guarantee.
 
 Knowledge ZIPs migrate indexed Markdown and declared relationships. They exclude attachments, approval keys, and complete execution history; keep the workspace and external keys separately for full recovery.
 
-[Release validation](docs/validation/v1.10.0/release.md) · [Source/version evaluation](docs/validation/v1.10.0/source-coverage.md) · [Four-role formats](docs/four-role-workspace.md) · [Three-layer design](docs/architecture/three-layer-design-v1.0.md)
+[Release validation](docs/validation/v1.11.0/release.md) · [Source/version evaluation](docs/validation/v1.11.0/source-coverage.md) · [Four-role formats](docs/four-role-workspace.md) · [Three-layer design](docs/architecture/three-layer-design-v1.0.md)
 
 ## Package a release
 

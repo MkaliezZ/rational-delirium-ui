@@ -1,4 +1,4 @@
-export const VERSION = "1.10.0";
+export const VERSION = "1.11.0";
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_PLAN_BYTES = 8 * 1024 * 1024;
 export const MAX_WORKSPACE_BYTES = 256 * 1024 * 1024;

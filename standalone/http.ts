@@ -27,7 +27,7 @@ export async function startServer(service: KnowledgeService, options: {
             if (url.pathname === "/api") {
                 requireValue(req.method === "POST", "METHOD_NOT_ALLOWED", "API requires POST");
                 const supplied = typeof req.headers["x-rd-token"] === "string" ? req.headers["x-rd-token"] : "";
-                requireValue(supplied.length === token.length && timingSafeEqual(Buffer.from(supplied), Buffer.from(token)), "UNAUTHORIZED", "Session token required");
+                requireValue(/^[a-f0-9]{64}$/.test(supplied) && timingSafeEqual(Buffer.from(supplied), Buffer.from(token)), "UNAUTHORIZED", "Session token required");
                 requireValue(req.headers["content-type"]?.startsWith("application/json"), "INVALID_ARGUMENT", "JSON request required");
                 let bytes = 0;
                 const chunks: Buffer[] = [];

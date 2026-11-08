@@ -25,7 +25,7 @@ export class KnowledgeService {
             await this.knowledge.refresh();
             const kb = this.knowledge, m = this.mutations;
             switch (command) {
-                case "status": return { version: VERSION, root: this.files.root, initialized: !!this.files.config(), revision: kb.revision, ...kb.validate(), recoveryRequired: this.files.exists(".rd/active.json", true), watchError: this.watchError };
+                case "status": return { version: VERSION, root: this.files.root, workspaceId: this.files.config()?.workspaceId ?? null, initialized: !!this.files.config(), revision: kb.revision, ...kb.validate(), recoveryRequired: this.files.exists(".rd/active.json", true), watchError: this.watchError };
                 case "list": return kb.list(args);
                 case "get": return kb.get(args);
                 case "read_source": return kb.readSource(args);

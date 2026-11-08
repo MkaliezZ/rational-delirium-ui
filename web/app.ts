@@ -3,7 +3,9 @@ import { KNOWLEDGE_ROLES, ROLE_LABELS, isRole, type KnowledgeRole } from "../src
 import { setupWorkbench } from "./workbench-ui";
 import { enter } from "./motion";
 import {assetLabel,overviewMarkup,readingParts,setInspectorOpen} from "./workspace-ui";
-import {caseIndexMarkup,type CaseFacets} from "./case-index";
+import {type CaseFacets} from "./case-index";
+import {sessionClient} from "./session";
+import {roleDirectory,propertyPanel,sourceOrigin,shellArgument} from "./dossier-shell";
 type View = "overview" | "inbox" | "library" | "investigate" | "proposals" | "history" | KnowledgeRole;
 type Note = {
     id: string | null;
@@ -34,8 +36,11 @@ type Row = {
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const main = $("#main"), source = $("#source"), index = $("#index-list"), search = $<HTMLInputElement>("#search");
 const token = $<HTMLMetaElement>('meta[name="rd-token"]').content;
+const session = sessionClient(token);
 const workbench=setupWorkbench({api,esc:v=>esc(v),notify:message=>notify(message),refresh:()=>refresh(),open:async(path,related)=>{const note=await api("get",{path});state.view=note.roles[0]??"library";state.path=path;state.query="";search.value="";if(related){window.scrollTo(0,0);await loadIndex();await openNote(path,true,"related");main.focus({preventScroll:true});}else await go(state.view);},inspect:async(path,edge,line)=>inspect(path,undefined,line,edge),note:()=>state.note,view:()=>state.view,settled:()=>{if(pendingEditorRefresh){pendingEditorRefresh=false;void refresh().catch(e=>notify(e.message));}}});
 const state = { view: "overview" as View, path: "", query: "", note: null as Note | null, source: null as Note | null, relations: [] as any[], rows: [] as Row[], proposals: [] as any[], recordMore:false, review:null as any, proposalId: "", noteTab:"content", counts:{} as Record<string,number>, caseFacets:{} as CaseFacets, offset: 0, total: 0, revision: "", status: null as any };
+let directoryRows:Record<string,Row[]>={},directoryRevision="",inspectorTab:"properties"|"relations"|"sources"="properties";
+let linkedTitles=new Map<string,string>();
 let sourceTrigger:HTMLElement|null=null;
 function showSource(open:boolean,focus=false){setInspectorOpen(source,$(".workspace"),open);if(focus){if(open)source.querySelector<HTMLButtonElement>(".close-source")?.focus();else (sourceTrigger?.isConnected?sourceTrigger:main).focus();}}
 let indexGeneration = 0, noteGeneration = 0, sourceGeneration = 0, searchTimer: ReturnType<typeof setTimeout>, toastTimer: ReturnType<typeof setTimeout>;
@@ -52,15 +57,15 @@ class ApiError extends Error {
     constructor(readonly code: string, message: string, readonly details?: unknown) { super(errorLabels[code] ?? message); }
 }
 async function api(command: string, args: Record<string, unknown> = {}): Promise<any> {
-    let response: Response;
+    let result: any;
     try {
-        response = await fetch("/api", { method: "POST", headers: { "content-type": "application/json", "x-rd-token": token }, body: JSON.stringify({ command, args }) });
+        result = await session(command, args);
     }
-    catch {
-        connection("本地服务连接中断，已读内容仍保留。恢复连接后可重新读取。", true);
-        throw Error("无法连接本地知识服务");
+    catch (error) {
+        const message = error instanceof TypeError ? "无法连接本地知识服务，已读内容与草稿仍保留。" : (error as Error).message;
+        connection(message, true);
+        throw Error(message);
     }
-    const result = await response.json();
     if (!result.ok)
         throw new ApiError(result.error.code, result.error.message, result.error.details);
     return result.data;
@@ -107,6 +112,11 @@ async function loadIndex(append = false) {
         return;
     }
     const data = await api("boards", { ...(state.query ? {query:state.query,includeNotes:true}:{}), ...(isRole(state.view)?{role:state.view}:state.view==="overview"&&!state.query?{role:"case"}:state.view==="inbox"?{role:"unclassified"}:{}),limit:100,offset:state.offset });
+    if(!state.query&&directoryRevision!==data.revision){
+        const pages=await Promise.all(KNOWLEDGE_ROLES.map(role=>api("boards",{role,limit:6,offset:0}).then(page=>({role,page}))));
+        if(generation!==indexGeneration)return;
+        directoryRows=Object.fromEntries(pages.map(({role,page})=>[role,page.items]));directoryRevision=data.revision;
+    }
     for(const role of KNOWLEDGE_ROLES){const tab=document.querySelector<HTMLElement>(`[data-view="${role}"]`);if(tab)tab.title=`${ROLE_LABELS[role]} · ${data.counts[role]} 则`;}
     if (generation !== indexGeneration)
         return;
@@ -121,14 +131,17 @@ function recordState(r: any) { if (r.transaction)
     return ({ committed: "已应用", rolled_back: "已恢复", execution_uncertain: "需要恢复", prepared: "准备写入", applying: "写入中" } as Record<string, string>)[r.transaction.status] ?? r.transaction.status; return r.decision?.decision === "approved" ? "已批准 · 待应用" : r.decision?.decision === "rejected" ? "已拒绝" : "待审阅"; }
 function renderIndex() {
     navigation();
+    $("#shell-location").textContent=state.note?.title??({overview:"Home",library:"全部资产",investigate:"关系推演",inbox:"待整理材料",proposals:"Agent 提案",history:"修订历史",...ROLE_LABELS}[state.view]);
     if (state.view === "proposals" || state.view === "history") {
         index.innerHTML = state.proposals.length ? state.proposals.map(r => `<button class="index-row ${state.proposalId === r.proposal.id ? "selected" : ""}" data-proposal="${esc(r.proposal.id)}"><span class="row-meta">${esc(recordState(r))}</span><strong>${esc(r.proposal.reason)}</strong><span class="mono">${esc(r.proposal.actor)}</span></button>`).join("")+(state.recordMore?button("继续加载记录","more","load-more"):"") : `<p class="muted small">尚无提案或修订记录。直接编辑笔记也会留下变更历史。</p>`;
         return;
     }
-    if(["case","overview"].includes(state.view)&&!state.query){
-        const oldGroups=[...index.querySelectorAll<HTMLDetailsElement>("[data-case-group]")];
-        const expanded=oldGroups.length?new Set(oldGroups.filter(g=>g.open).map(g=>g.dataset.caseGroup!)):undefined;
-        index.innerHTML=caseIndexMarkup(state.rows,state.caseFacets,state.path,esc,expanded)+(state.rows.length<state.total?button("继续加载案例","more","load-more"):"");
+    if((isRole(state.view)||state.view==="overview")&&!state.query){
+        const open=new Map([...index.querySelectorAll<HTMLDetailsElement>("[data-directory-role]")].map(d=>[d.dataset.directoryRole,d.open]));
+        const rows={...directoryRows};if(isRole(state.view)){rows[state.view]=state.rows;}
+        index.innerHTML=roleDirectory(rows,state.counts,state.view,state.path,esc)+(isRole(state.view)&&state.rows.length<state.total?button("继续加载当前板块","more","load-more"):"");
+        for(const d of index.querySelectorAll<HTMLDetailsElement>("[data-directory-role]"))if(open.has(d.dataset.directoryRole))d.open=open.get(d.dataset.directoryRole)!;
+        $("#index-title").textContent="知识目录";$("#index-count").textContent="C / E / H / L";
         return;
     }
     index.innerHTML = state.rows.map(row => `<button class="index-row ${row.path === state.path ? "selected" : ""}" data-path="${esc(row.path)}" ${row.path===state.path?'aria-current="true"':""} title="${esc(row.title)}"><strong>${esc(row.title)}</strong><span class="row-meta">${esc(assetLabel(row))}${row.status&&["superseded","archived","refuted"].includes(row.status)?` · ${esc(status(row.status))}`:""}</span>${row.excerpt && state.query ? `<span class="excerpt">${esc(row.excerpt)}</span>` : ""}</button>`).join("") + (state.rows.length < state.total ? button("继续加载", "more", "load-more") : "") + (state.rows.length ? `<p class="muted small index-caption">${state.query ? "按检索相关性排列" : "按标题排列"} · ${state.total} 则</p>` : `<p class="muted small">${state.query ? "没有找到匹配内容。试试标题中的关键词、ID 或清除筛选。" : "还没有笔记。可以先收集一份材料。"}</p>`);
@@ -161,6 +174,7 @@ async function openNote(path: string, push = true,tab?:string) {
         if (generation !== noteGeneration)
             return;
         state.relations = relations;
+        if(note.id){try{const context=await api("context",{id:note.id,depth:1,maxObjects:32,budget:48000});if(generation!==noteGeneration)return;linkedTitles=new Map(context.objects.map((n:any)=>[n.path,n.title]));}catch{linkedTitles=new Map();}}else linkedTitles=new Map();
         remember(push);
         renderIndex();
         await renderNote();
@@ -172,7 +186,7 @@ async function openNote(path: string, push = true,tab?:string) {
             return;
         main.innerHTML = `<div class="empty"><h1>暂时无法打开来源</h1><p>${esc((error as Error).message)}</p><p class="mono">${esc(path)}</p>${button("重新读取", "refresh")}</div>`;
         state.note = null;
-        renderSource();
+        state.source = null; renderSource(null); showSource(false);
     }
 }
 function markdown(text: string, outline=false) {
@@ -208,7 +222,7 @@ function markdown(text: string, outline=false) {
 function heading(note: Note) {
     const viewLabel=isRole(state.view)?ROLE_LABELS[state.view]+"板块":state.view==="investigate"?"推演":"全部资产";
     const chips=(note.roles.length?note.roles.map(r=>`<span class="role-chip">${ROLE_LABELS[r]}</span>`).join(""):'<span class="role-chip muted">未分类材料</span>')+(typeof note.frontmatter.rd_material_type==="string"?`<span class="kind-label">${esc(note.frontmatter.rd_material_type)}</span>`:"");
-    return `<div class="page-heading"><span class="eyebrow">${viewLabel} / ${esc(assetLabel(note))}</span><h1>${esc(note.title)}</h1><div class="knowledge-labels">${chips}${note.status?`<span class="kind-label">${esc(status(note.status))}</span>`:""}</div><div class="heading-actions">${button("核对来源", "show-source", "source-toggle",`aria-controls="source" aria-expanded="${!source.hidden}"`)}${button(`${icon("pencil-simple")} 编辑原文`, "edit", "quiet")}${!note.id?button("整理知识","kb-organize", "quiet"):""}<details class="note-tools"><summary>更多操作</summary><div>${note.id?button("调整角色","kb-roles")+button("建立关系","kb-link"):""}${button(`${icon("copy")} 复制引用`, "copy")}${note.id?button("比较解释", "investigate"):""}</div></details></div></div><nav class="reading-tabs" aria-label="内容视角"><button data-action="read-content" aria-pressed="${state.noteTab==="content"}">正文</button><button data-action="related-content" aria-pressed="${state.noteTab==="related"}">关联知识 <span>${state.relations.length}</span></button></nav>`;
+    return `<div class="document-tabs"><button data-view="overview">${icon("books")} Home</button><span aria-current="page">${icon("file-text")} ${esc(note.title)}</span></div><div class="page-heading"><span class="eyebrow">${viewLabel} / ${esc(assetLabel(note))}</span><h1>${esc(note.title)}</h1><div class="knowledge-labels">${chips}${note.status?`<span class="kind-label">${esc(status(note.status))}</span>`:""}</div><div class="heading-actions">${button("核对来源", "show-source", "source-toggle",`aria-controls="source" aria-expanded="${!source.hidden}"`)}${button(`${icon("pencil-simple")} 编辑原文`, "edit", "quiet")}${!note.id?button("整理知识","kb-organize", "quiet"):""}<details class="note-tools"><summary>更多操作</summary><div>${note.id?button("调整角色","kb-roles")+button("建立关系","kb-link"):""}${button(`${icon("copy")} 复制引用`, "copy")}${note.id?button("比较解释", "investigate"):""}</div></details></div><div class="record-strip"><div><small>STATUS</small><strong>${esc(status(note.status))}</strong></div><div><small>SOURCES</small><strong>${note.citations.length} 条来源</strong></div><div><small>RELATIONS</small><strong>${state.relations.length} 条声明</strong></div><div><small>OPEN QUESTIONS</small><strong>${(note as any).relationCandidates?.length??0} 条候选</strong></div></div></div><nav class="reading-tabs" aria-label="内容视角"><button data-action="read-content" aria-pressed="${state.noteTab==="content"}">正文</button><button data-action="related-content" aria-pressed="${state.noteTab==="related"}">关联知识 <span>${state.relations.length}</span></button></nav>`;
 }
 function neighbor(r: any) { return r.direction === "incoming" ? r.source : r.target; }
 function relationLabel(r: any) { const word = predicate(r.predicate); if (r.predicate === "supports" || r.predicate === "contradicts")
@@ -231,10 +245,15 @@ async function renderNote() {
     }
     main.insertAdjacentHTML("beforeend",workbench.candidates(note));
     state.source = note;
-    renderSource();enter(main);
+    renderSource();if(window.matchMedia("(min-width:1121px)").matches)showSource(true);enter(main);
 }
 function renderSource(note = state.source, edge?: any, line?: number) {
+    const tabs=`<div class="inspector-tabs" role="tablist" aria-label="知识侧栏"><button role="tab" data-inspector="properties" aria-selected="${inspectorTab==="properties"}">属性</button><button role="tab" data-inspector="relations" aria-selected="${inspectorTab==="relations"}">关联</button><button role="tab" data-inspector="sources" aria-selected="${inspectorTab==="sources"}">来源</button><button class="icon-button close-source" data-action="close-source" aria-label="关闭来源面板">${icon("x")}</button></div>`;
+    if(note&&!edge&&!line&&inspectorTab!=="sources"){
+        source.innerHTML=tabs+(inspectorTab==="properties"?propertyPanel(note,state.relations,linkedTitles,esc,v=>status(v)): `<section class="inspector-section"><h3>正式关系 · ${state.relations.length}</h3>${relationRows(state.relations)||'<p class="small muted">还没有正式声明。</p>'}</section>`+workbench.candidates(note));return;
+    }
     source.innerHTML = `<button class="icon-button close-source" data-action="close-source" aria-label="关闭来源面板">${icon("x")}</button><h2>来源核对</h2>`;
+    if(note)source.innerHTML=tabs+'<h2>来源核对</h2>';
     if (!note) {
         source.innerHTML += '<p class="muted">选择一则笔记或证据，查看出处与原文。</p>';
         return;
@@ -245,8 +264,10 @@ function renderSource(note = state.source, edge?: any, line?: number) {
     source.innerHTML += `<span class="eyebrow">${esc(kind(note.kind))} · ${esc(status(note.status))}</span><h3>${esc(note.title)}</h3>${preview}<dl><dt>文件路径</dt><dd class="mono">${esc(note.path)}</dd><dt>${line ? "定位行" : "正文起始行"}</dt><dd class="mono">L${line ?? note.bodyStartLine}</dd><dt>文件版本</dt><dd class="mono">${esc(note.revision.slice(0, 16))}…</dd>${declared ? `<dt>关系声明出处</dt><dd class="mono">${esc(declared.path)} · ${esc(declared.field ?? "正文")}${declared.line ? ` · L${declared.line}` : ""}</dd>` : ""}</dl>${button(`${icon("arrow-square-out")} 打开原文`, "open-source", "primary")}${declared ? button("定位关系声明", "open-declaration", "quiet", `data-path="${esc(declared.path)}" data-line="${declared.line ?? 1}"`) : ""}<p class="small muted section">关系由笔记声明；来源可用不等于内容已被验证。</p>`;
     if(declared?.basis?.length)source.insertAdjacentHTML("beforeend",`<section class="section"><h3>这条关系的原文依据</h3>${declared.basis.map((b:any)=>`<p class="small">${esc(b.reason)}</p>${b.scope?`<p class="small muted">适用边界：${esc(b.scope)}</p>`:""}${workbench.citations({citations:b.evidence??[]})}`).join("")}</section>`);
     source.insertAdjacentHTML("beforeend",workbench.citations(note));
+    source.insertAdjacentHTML("beforeend",sourceOrigin(note,esc));
 }
 async function inspect(path: string, edgeIndex?: number, line?: number,declaredEdge?:any) {
+    inspectorTab="sources";
     const generation = ++sourceGeneration;
     if (!path) {
         const edge = state.relations[edgeIndex ?? -1];
@@ -398,6 +419,7 @@ document.addEventListener("click", e => {
         }
         if (target.dataset.path !== undefined && !target.dataset.action) {
             state.proposalId = "";
+            if(target.dataset.directoryView&&isRole(target.dataset.directoryView)&&state.view!==target.dataset.directoryView){state.path=target.dataset.path;state.query="";search.value="";await go(target.dataset.directoryView);return;}
             if (state.view === "proposals" || state.view === "history")
                 state.view = "library";
             navigation();
@@ -417,12 +439,16 @@ document.addEventListener("click", e => {
             return;
         }
         const action = target.dataset.action;
+        if(target.dataset.inspector){inspectorTab=target.dataset.inspector as typeof inspectorTab;state.source=state.note;renderSource();source.querySelector<HTMLButtonElement>(`[data-inspector="${inspectorTab}"]`)?.focus({preventScroll:true});return;}
         if((action?.startsWith("kb-")||action?.startsWith("atlas-"))){if(action==="atlas-inspect")sourceTrigger=target;if(await workbench.action(action,target))return;}
         switch (action) {
             case "history":
                 $<HTMLDialogElement>("#workspace-dialog").close();
                 await go("history");
                 break;
+            case "agent-intake":
+                $("#intake-command").textContent=`node dist-agent/rd.mjs intake --root ${shellArgument(state.status?.root??"./knowledge")} --manifest ./scope.json --dsh-entry /path/to/dsh/lib/bin.js --serve`;
+                $<HTMLDialogElement>("#intake-dialog").showModal();break;
             case "new-note":
                 openEditor(true);
                 break;
@@ -445,7 +471,7 @@ document.addEventListener("click", e => {
                 main.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)?.focus();
                 break;
             case "show-source":
-                sourceTrigger=target;showSource(source.hidden,true);
+                inspectorTab="sources";state.source=state.note;renderSource();sourceTrigger=target;showSource(true,true);
                 break;
             case "close-source":
                 showSource(false,true);
@@ -508,6 +534,10 @@ $("#new-note").onclick = () => openEditor(true);
 $("#refresh").onclick = () => { void refresh().then(() => notify("已重新读取本地文件。")).catch(e => notify(e.message)); };
 $("#settings").onclick = () => { void settings().catch(e => notify(e.message)); };
 $("#close-settings").onclick = () => $<HTMLDialogElement>("#workspace-dialog").close();
+$("#close-intake").onclick=()=>$<HTMLDialogElement>("#intake-dialog").close();
+source.addEventListener("keydown",event=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)||(event.target as HTMLElement).getAttribute("role")!=="tab")return;const tabs=[...source.querySelectorAll<HTMLButtonElement>('[role="tab"]')],at=tabs.indexOf(event.target as HTMLButtonElement),next=event.key==="Home"?0:event.key==="End"?tabs.length-1:(at+(event.key==="ArrowRight"?1:-1)+tabs.length)%tabs.length;event.preventDefault();tabs[next].click();source.querySelector<HTMLButtonElement>(`[data-inspector="${tabs[next].dataset.inspector}"]`)?.focus();});
+window.matchMedia("(min-width:1121px)").addEventListener?.("change",event=>{if(state.note)showSource(event.matches);});
+$("#intake-form").addEventListener("submit",event=>{event.preventDefault();const paths=$<HTMLTextAreaElement>("#intake-paths").value.split(/\r?\n/).map(p=>p.trim()).filter(Boolean),repo=$<HTMLInputElement>("#intake-repo").value.trim(),refs=$<HTMLInputElement>("#intake-refs").value.split(",").map(r=>r.trim()).filter(Boolean);if(!paths.length&&!repo){$("#intake-message").textContent="请至少指定一个本地路径或 GitHub 公共仓库。";return;}if(repo&&!/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repo)){$("#intake-message").textContent="仓库格式为 owner/repository。";return;}const manifest={schema:"rd-intake/1",name:$<HTMLInputElement>("#intake-name").value,purpose:$<HTMLTextAreaElement>("#intake-purpose").value,sources:[...paths.map(path=>({type:"local",path})),...(repo?[{type:"github",repository:repo,include:["README*","docs/**/*.md"],historyRefs:refs,releases:true}]:[])]};const url=URL.createObjectURL(new Blob([JSON.stringify(manifest,null,2)+"\n"],{type:"application/json"})),a=document.createElement("a");a.href=url;a.download="scope.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);$("#intake-message").textContent="范围文件已生成。把 scope.json 和下列命令交给 Agent 即可开始；材料会由所选 Agent/模型按其配置处理。";});
 $("#toggle-index").onclick = () => {const open=$(".index").classList.toggle("open");$("#toggle-index").setAttribute("aria-expanded",String(open));};
 search.addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.query = search.value.trim(); if(state.view==="overview")state.view="library";remember(false); void loadIndex().then(()=>{if(!state.path)welcome();}).catch(e => notify(e.message)); }, 220); });
 document.addEventListener("keydown", e => { if (!editor.open && !workbench.isBusy() && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -519,7 +549,14 @@ document.addEventListener("keydown", e => { if (!editor.open && !workbench.isBus
     $(".index").classList.remove("open");
     $("#toggle-index").setAttribute("aria-expanded","false");
 } });
-async function restoreHash() { const p = new URLSearchParams(location.hash.slice(1)); state.view = ["overview", "inbox", "library", "investigate", "proposals", "history", ...KNOWLEDGE_ROLES].includes(p.get("view") ?? "") ? p.get("view") as View : "overview"; state.path = p.get("path") ?? ""; state.query = p.get("q") ?? ""; state.proposalId = p.get("proposal") ?? ""; search.value = state.query; await go(state.view, false,["content","related"].includes(p.get("tab")??"")?p.get("tab")!:undefined); }
+async function restoreHash() {
+    const p=new URLSearchParams(location.hash.slice(1));
+    state.view=["overview","inbox","library","investigate","proposals","history",...KNOWLEDGE_ROLES].includes(p.get("view")??"")?p.get("view") as View:"overview";
+    state.path=p.get("path")??"";state.query=p.get("q")??"";state.proposalId=p.get("proposal")??"";search.value=state.query;
+    // A copied source URL must open that source, even when its old board no longer matches.
+    if(isRole(state.view)&&state.path){try{const note=await api("get",{path:state.path});if(!note.roles.includes(state.view))state.view=note.roles[0]??"library";}catch{state.view="library";}}
+    await go(state.view,false,["content","related"].includes(p.get("tab")??"")?p.get("tab")!:undefined);
+}
 window.addEventListener("popstate", () => { void restoreHash().catch(e => notify(e.message)); });
 async function start() {
     const initialStatus=await api("status");storageKey="rd:last-view:"+initialStatus.root;

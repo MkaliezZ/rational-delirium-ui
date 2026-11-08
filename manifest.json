@@ -1,7 +1,7 @@
 {
   "id": "rational-delirium",
   "name": "Rational Delirium",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "minAppVersion": "1.13.7",
   "description": "Local Markdown knowledge workspace: live object index, declared relations, provenance and human-reviewed contributions.",
   "isDesktopOnly": true,
