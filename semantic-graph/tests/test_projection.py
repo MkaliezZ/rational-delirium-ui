@@ -89,7 +89,8 @@ def write(tmp, name, content):
 class SemanticGraphProjectionTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.tmp = self._tmp.name
+        # Windows may return an 8.3 temp path; projection emits canonical paths.
+        self.tmp = str(Path(self._tmp.name).resolve())
         self.addCleanup(self._tmp.cleanup)
 
     def project(self, *names):
